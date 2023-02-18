@@ -27,7 +27,7 @@ import Collapsible from '../../components/Collapsible/Collapsible'
 import SvgSlackLogo from '../../components/icons/SlackLogo'
 import LeadAlignLayout from '../../components/layout/LeadAlignLayout'
 import layoutStyles from '../../components/layout/LeadAlignLayout.module.scss'
-import { ReactComponent as CheckIcon } from '../../static/verify-check-icon.svg'
+// import { ReactComponent as CheckIcon } from '../../static/verify-check-icon.svg'
 import { AngularSetup } from './Angular/AngularSetup'
 import { CodeBlock } from './CodeBlock/CodeBlock'
 import { GatsbySetup } from './Gatsby/GatsbySetup'
@@ -177,11 +177,12 @@ const SetupPage = ({ integrated }: { integrated: boolean }) => {
 													/>
 												</div>
 											) : (
-												<CheckIcon
-													className={clsx(
-														styles.checkIcon,
-													)}
-												/>
+												<></>
+												// <CheckIcon
+												// 	className={clsx(
+												// 		styles.checkIcon,
+												// 	)}
+												// />
 											)}
 										</div>{' '}
 										{s.displayName}

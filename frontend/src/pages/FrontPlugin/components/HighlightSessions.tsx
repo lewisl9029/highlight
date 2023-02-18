@@ -15,7 +15,7 @@ import { getUnprocessedSessionsQuery } from '@pages/Sessions/SessionsFeedV2/comp
 import SessionsQueryBuilder from '@pages/Sessions/SessionsFeedV2/components/SessionsQueryBuilder/SessionsQueryBuilder'
 import { useParams } from '@util/react-router/useParams'
 import { GetBaseURL } from '@util/window'
-import moment from 'moment/moment'
+import moment from 'moment'
 import React, { useEffect, useState } from 'react'
 
 function HighlightSessions() {

@@ -16,7 +16,7 @@ import { message } from 'antd'
 import clsx from 'clsx'
 import firebase from 'firebase/app'
 import { H } from 'highlight.run'
-import { omit } from 'lodash'
+import omit from 'lodash/omit'
 import React, {
 	FormEvent,
 	ReactNode,
@@ -31,7 +31,7 @@ import { BooleanParam, StringParam, useQueryParam } from 'use-query-params'
 
 import commonStyles from '../../Common.module.scss'
 import Button from '../../components/Button/Button/Button'
-import { ReactComponent as GoogleLogo } from '../../static/google.svg'
+// import { ReactComponent as GoogleLogo } from '../../static/google.svg'
 import heroBugLeft from '../../static/hero-bug-left.gif'
 import heroBugRight from '../../static/hero-bug-right.gif'
 import lorilynMcCueAvatar from '../../static/lorilyn-mccue-avatar.jpeg'
@@ -263,7 +263,7 @@ export default function LoginForm() {
 			return 'Reset your password'
 		}
 		if (formState === LoginFormState.SignIn) {
-			return 'Welcome back to Highlight.'
+			return 'Welcome back to Highlight. It works!!!'
 		}
 		return 'Welcome to Highlight.'
 	}
@@ -447,9 +447,9 @@ export default function LoginForm() {
 								}}
 								loading={isLoadingFirebase}
 							>
-								<GoogleLogo
+								{/* <GoogleLogo
 									className={styles.googleLogoStyle}
-								/>
+								/> */}
 								<span className={styles.googleText}>
 									Google Sign{' '}
 									{formState === LoginFormState.SignIn

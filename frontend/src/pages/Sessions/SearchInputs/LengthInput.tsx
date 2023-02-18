@@ -1,7 +1,7 @@
 import 'antd/dist/antd.css'
 
 import { Slider } from 'antd'
-import { debounce } from 'lodash'
+import debounce from 'lodash/debounce'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useToggle } from 'react-use'
 

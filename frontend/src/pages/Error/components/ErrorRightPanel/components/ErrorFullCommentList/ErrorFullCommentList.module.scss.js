@@ -1,0 +1,1 @@
+var t=new CSSStyleSheet;t.replaceSync("._timestamp_k1k6v_1{color:var(--color-gray-500);margin:0 !important}");document.adoptedStyleSheets=document.adoptedStyleSheets.concat(t);var e="_timestamp_k1k6v_1",o={timestamp:e};export{o as default,e as timestamp};

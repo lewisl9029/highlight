@@ -1,8 +1,9 @@
 import 'antd/dist/antd.css'
 import '@highlight-run/rrweb/dist/rrweb.min.css'
-import '@fontsource/poppins'
-import './index.scss'
 import './style/tailwind.css'
+// TODO: figure out fonts support, probably generate stylesheet dynamically from url import
+// import '@fontsource/poppins'
+import './index.css'
 
 import { ApolloError, ApolloProvider, QueryLazyOptions } from '@apollo/client'
 import {
@@ -43,13 +44,14 @@ import { showIntercom } from '@util/window'
 import { H, HighlightOptions } from 'highlight.run'
 import { parse, stringify } from 'query-string'
 import React, { useEffect, useState } from 'react'
-import ReactDOM from 'react-dom'
+import * as ReactDOM from 'react-dom/client'
 import { Helmet } from 'react-helmet'
 import { SkeletonTheme } from 'react-loading-skeleton'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryParamProvider } from 'use-query-params'
 import { ReactRouter6Adapter } from 'use-query-params/adapters/react-router-6'
 
+console.log('blah12')
 analytics.initialize()
 const dev = import.meta.env.DEV
 const options: HighlightOptions = {
@@ -87,7 +89,8 @@ const options: HighlightOptions = {
 	inlineStylesheet: true,
 	inlineImages: true,
 	sessionShortcut: 'alt+1,command+`,alt+esc',
-	version: import.meta.env.REACT_APP_COMMIT_SHA || undefined,
+	// version: import.meta.env.REACT_APP_COMMIT_SHA || undefined,
+	version: undefined,
 }
 const favicon = document.querySelector("link[rel~='icon']") as any
 if (dev) {
@@ -113,22 +116,26 @@ if (dev) {
 	window.document.title = `📸 ${window.document.title}`
 	options.environment = 'Pull Request Preview'
 }
-H.init(import.meta.env.REACT_APP_FRONTEND_ORG ?? 1, options)
+// H.init(import.meta.env.REACT_APP_FRONTEND_ORG ?? 1, options)
+H.init(1, options)
 if (!isOnPrem) {
 	H.start()
 
 	showIntercom({ hideMessage: true })
 	if (!dev) {
 		datadogLogs.init({
-			clientToken: import.meta.env.DD_CLIENT_TOKEN,
+			// clientToken: import.meta.env.DD_CLIENT_TOKEN,
+			clientToken: '',
 			site: 'datadoghq.com',
 			forwardErrorsToLogs: true,
 			sampleRate: 100,
 			service: 'frontend',
 		})
 		datadogRum.init({
-			applicationId: import.meta.env.DD_RUM_APPLICATION_ID,
-			clientToken: import.meta.env.DD_CLIENT_TOKEN,
+			// applicationId: import.meta.env.DD_RUM_APPLICATION_ID,
+			applicationId: '',
+			// clientToken: import.meta.env.DD_CLIENT_TOKEN,
+			clientToken: '',
 			site: 'datadoghq.com',
 			service: 'frontend',
 			env: options.environment,
@@ -409,9 +416,8 @@ const AuthenticationRoleRouter = () => {
 	)
 }
 
-ReactDOM.render(
+ReactDOM.createRoot(document.getElementById('root') as any).render(
 	<React.StrictMode>
 		<App />
 	</React.StrictMode>,
-	document.getElementById('root'),
 )

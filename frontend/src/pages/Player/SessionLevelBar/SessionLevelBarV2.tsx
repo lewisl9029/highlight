@@ -28,7 +28,7 @@ import { defaultSessionsQuery } from '@pages/Sessions/SessionsFeedV2/components/
 import analytics from '@util/analytics'
 import { useParams } from '@util/react-router/useParams'
 import { message } from 'antd'
-import { delay } from 'lodash'
+import delay from 'lodash/delay'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useNavigate } from 'react-router-dom'

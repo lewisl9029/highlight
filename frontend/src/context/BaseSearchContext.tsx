@@ -1,6 +1,9 @@
 import { DateHistogramBucketSize } from '@graph/schemas'
-import { identity, omitBy, pickBy } from 'lodash'
+import _ from 'lodash'
 import moment from 'moment'
+
+console.log('test')
+const { identity, omitBy, pickBy } = _
 
 export type BackendSearchQuery =
 	| undefined

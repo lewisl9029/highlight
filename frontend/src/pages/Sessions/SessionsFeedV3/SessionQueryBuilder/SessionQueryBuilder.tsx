@@ -22,7 +22,7 @@ import QueryBuilder, {
 	serializeRules,
 } from '@pages/Sessions/SessionsFeedV3/SessionQueryBuilder/components/QueryBuilder/QueryBuilder'
 import { useParams } from '@util/react-router/useParams'
-import { isEqual } from 'lodash'
+import isEqual from 'lodash/isEqual'
 import moment from 'moment'
 import React, { useEffect } from 'react'
 import {

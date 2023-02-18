@@ -17,7 +17,7 @@ import { IndexedDBLink } from '@util/db'
 import { isOnPrem } from '@util/onPrem/onPremUtils'
 
 const uri =
-	import.meta.env.REACT_APP_PRIVATE_GRAPH_URI ??
+	// import.meta.env.REACT_APP_PRIVATE_GRAPH_URI ??
 	window.location.origin + '/private'
 const highlightGraph = new IndexedDBLink(
 	createHttpLink({
@@ -118,7 +118,7 @@ export const client = new ApolloClient({
 		(operation) => {
 			// Don't query GraphCDN for localhost.
 			// GraphCDN only caches production data.
-			if (import.meta.env.NODE_ENV === 'development') {
+			if (import.meta.env.DEV) {
 				return false
 			}
 

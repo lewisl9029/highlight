@@ -1,0 +1,1 @@
+var e=new CSSStyleSheet;e.replaceSync("._card_1yqll_1{align-self:center;height:fit-content;justify-self:center;margin-left:100px;margin-right:100px;position:absolute;z-index:100}._card_1yqll_1 p{margin-bottom:30px !important}");document.adoptedStyleSheets=document.adoptedStyleSheets.concat(e);var t="_card_1yqll_1",n={card:t};export{t as card,n as default};

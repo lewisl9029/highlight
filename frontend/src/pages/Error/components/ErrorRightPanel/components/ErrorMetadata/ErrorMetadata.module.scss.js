@@ -1,0 +1,1 @@
+var e=new CSSStyleSheet;e.replaceSync("._metadataContainer_1mtt2_1{display:flex;flex-direction:column;gap:var(--size-small);height:100%}");document.adoptedStyleSheets=document.adoptedStyleSheets.concat(e);var t="_metadataContainer_1mtt2_1",a={metadataContainer:t};export{a as default,t as metadataContainer};

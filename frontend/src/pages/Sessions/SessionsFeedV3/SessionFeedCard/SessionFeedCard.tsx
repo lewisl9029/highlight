@@ -24,7 +24,7 @@ import {
 } from '@pages/Sessions/SessionsFeedV2/components/MinimalSessionCard/utils/utils'
 import { formatDatetime } from '@pages/Sessions/SessionsFeedV2/components/SessionFeedConfiguration/SessionFeedConfiguration'
 import { SessionFeedConfigurationContext } from '@pages/Sessions/SessionsFeedV2/context/SessionFeedConfigurationContext'
-import moment from 'moment/moment'
+import moment from 'moment'
 import React, { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 

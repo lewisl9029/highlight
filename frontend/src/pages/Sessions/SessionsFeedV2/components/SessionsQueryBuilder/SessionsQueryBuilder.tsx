@@ -23,7 +23,7 @@ import QueryBuilder, {
 } from '@pages/Sessions/SessionsFeedV2/components/QueryBuilder/QueryBuilder'
 import { useParams } from '@util/react-router/useParams'
 import { FieldArrayParam, QueryBuilderStateParam } from '@util/url/params'
-import { isEqual } from 'lodash'
+import isEqual from 'lodash/isEqual'
 import moment from 'moment'
 import React, { useEffect } from 'react'
 import {

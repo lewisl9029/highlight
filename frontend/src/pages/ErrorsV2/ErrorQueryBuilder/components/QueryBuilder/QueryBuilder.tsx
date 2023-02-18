@@ -62,7 +62,7 @@ import { roundDateToMinute, serializeAbsoluteTimeRange } from '@util/time'
 import { QueryBuilderStateParam } from '@util/url/params'
 import { Checkbox, message } from 'antd'
 import clsx, { ClassValue } from 'clsx'
-import { capitalize, isEqual, remove } from 'lodash'
+import _ from 'lodash'
 import moment, { unitOfTime } from 'moment'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { components } from 'react-select'
@@ -75,6 +75,8 @@ import { JsonParam, useQueryParam, useQueryParams } from 'use-query-params'
 
 import * as newStyle from './QueryBuilder.css'
 import styles from './QueryBuilder.module.scss'
+
+const { capitalize, isEqual, remove } = _
 export interface RuleProps {
 	field: SelectOption | undefined
 	op: Operator | undefined
