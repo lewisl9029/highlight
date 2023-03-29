@@ -1,0 +1,1 @@
+import{a}from"../../chunk-LMWHBVI4.js";var t="_14bi7ra5",r="_14bi7ra6",i=a({defaultClassName:"_14bi7ra2 mt0ih2jk mt0ih2lg mt0ih2fg mt0ih2hc mt0ih278 mt0ih28",variantClassNames:{selected:{true:"_14bi7ra3",false:"_14bi7ra4"}},defaultVariants:{selected:!1},compoundVariants:[]}),m="_14bi7ra0";export{t as menuDivider,r as menuHeading,i as menuItemVariants,m as menuList};
