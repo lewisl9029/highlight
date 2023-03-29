@@ -1,14 +1,18 @@
 import clsx from 'clsx'
 import React, { useMemo } from 'react'
-import ReactNiceAvatar, { genConfig } from 'react-nice-avatar'
+import * as reactNiceAvatar from 'react-nice-avatar'
 
 import { generateRandomColor } from '../../util/color'
-import {
-	userAvatar,
-	userAvatarBorder,
-	userAvatarText,
-	userAvatarWrapper,
-} from './Avatar.module.scss'
+import styles from './Avatar.module.scss'
+
+const { userAvatar, userAvatarBorder, userAvatarText, userAvatarWrapper } =
+	styles
+
+// FIXME: workaround for react-nice-avatar having nested default from esbuild bundle
+const ReactNiceAvatar =
+	reactNiceAvatar.default?.default ?? reactNiceAvatar.default
+const genConfig =
+	reactNiceAvatar.default?.genConfig ?? reactNiceAvatar.genConfig
 
 const BACKGROUND_COLORS = [
 	'--color-purple-300',

@@ -19,11 +19,13 @@
 		"noFallthroughCasesInSwitch": true,
 		"baseUrl": "src",
 		"paths": {
+			"@/*": ["./*"],
 			"@components/*": ["./components/*"],
 			"@icons/*": ["./static/*"],
 			"@util/*": ["./util/*"],
 			"@hooks/*": ["./hooks/*"],
 			"@pages/*": ["./pages/*"],
+			"@style/*": ["./style/*"],
 			"@routers/*": ["./routers/*"],
 			"@graph/*": ["./graph/generated/*"],
 			"@authentication/*": ["./authentication/*"],

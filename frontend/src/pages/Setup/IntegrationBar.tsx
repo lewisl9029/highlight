@@ -11,7 +11,7 @@ import {
 } from '@highlight-run/ui'
 import { useProjectId } from '@hooks/useProjectId'
 import { useParams } from '@util/react-router/useParams'
-import { snakeCase } from 'lodash'
+import { snakeCase } from 'lodash-es'
 import React from 'react'
 
 import * as styles from './IntegrationBar.css'
