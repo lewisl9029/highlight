@@ -5,9 +5,7 @@ import {
 } from './integrations/amplitude'
 import { MixpanelAPI, setupMixpanelIntegration } from './integrations/mixpanel'
 import { initializeFetchListener } from './listeners/fetch'
-// FIXME: this was using relative urls to prevent from referring to @highlight-run/client
-// in bundles: https://www.highlight.io/blog/publishing-private-pnpm-monorepo
-// Can probably reconfigure rollup to treat @highlight-run/client as internal bundled module?
+// We treat @highlight-run/client as an internal module in rollup.config.js
 import { getPreviousSessionData } from '@highlight-run/client/src/utils/sessionStorage/highlightSession'
 import { FirstLoadListeners } from '@highlight-run/client/src/listeners/first-load-listeners'
 import { GenerateSecureID } from '@highlight-run/client/src/utils/secure-id'
