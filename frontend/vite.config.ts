@@ -61,7 +61,7 @@ export default defineConfig(({ mode }) => {
 					},
 					// TODO: enable this later to reduce bundle size
 					// {
-					// 	libName: 'lodash',
+					// 	libName: 'lodash-es',
 					// 	libDirectory: '',
 					// 	camel2DashComponentName: false,
 					// },

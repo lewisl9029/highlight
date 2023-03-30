@@ -1,5 +1,5 @@
 import { ErrorGroup, Maybe, Project } from '@graph/schemas'
-import { cloneDeep } from 'lodash'
+import { cloneDeep } from 'lodash-es'
 import moment from 'moment/moment'
 
 export const getProjectPrefix = (project?: Maybe<Pick<Project, 'name'>>) =>
