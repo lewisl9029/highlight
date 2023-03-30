@@ -1,8 +1,6 @@
 import { Metadata } from '@highlight-run/client'
 import { H } from 'highlight.run'
-import rudderanalytics from 'rudder-sdk-js'
-
-console.log({ rudderanalytics })
+import * as rudderanalytics from 'rudder-sdk-js'
 
 let rudderstackInitialized = false
 
