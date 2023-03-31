@@ -5,6 +5,9 @@ import * as fs from 'node:fs'
 import * as path_ from 'node:path'
 import tailwindcss from 'tailwindcss'
 
+const args = process.argv.slice(2)
+const watch = args.includes('--watch') || args.includes('-w')
+
 const rootDirectory = process.cwd()
 const workingDirectory = path_.join(rootDirectory, './src')
 const outputDirectory = path_.join(workingDirectory, '__generated/')
@@ -21,6 +24,9 @@ const ignorePlugin = {
 const resultPlugin = {
 	name: 'result-plugin',
 	setup(build) {
+		build.onStart(() => {
+			console.log(new Date(), 'building css bundle')
+		})
 		build.onEnd(async (result) => {
 			const cssOutput = result.outputFiles.find(({ path }) =>
 				path.endsWith('index.css'),
@@ -30,7 +36,7 @@ const resultPlugin = {
 				path_.join(outputDirectory, 'index.css'),
 				cssOutput.contents,
 			)
-			console.log('built', cssOutput.path)
+			console.log(new Date(), 'built css bundle', cssOutput.path)
 		})
 	},
 }
@@ -67,4 +73,11 @@ const context = await esbuild.context({
 	logLevel: 'error',
 })
 
-await context.watch()
+if (watch) {
+	// esbuild watch is actually polling based, some unnecessary latency that
+	// could be optimized away with a custom watcher
+	// https://esbuild.github.io/api/#watch
+	await context.watch()
+} else {
+	await context.rebuild()
+}
