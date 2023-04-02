@@ -7,7 +7,7 @@ import {
 	Tag,
 	Text,
 } from '@highlight-run/ui'
-import { upperFirst } from 'lodash-es'
+import { upperFirst } from 'lodash'
 import React from 'react'
 import { useMatch, useNavigate } from 'react-router-dom'
 

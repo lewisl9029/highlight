@@ -74,7 +74,7 @@ const context = await esbuild.context({
 })
 
 if (watch) {
-	// esbuild watch is actually polling based, some unnecessary latency that
+	// esbuild watch is actually polling based, some latency
 	// could be optimized away with a custom watcher
 	// https://esbuild.github.io/api/#watch
 	await context.watch()

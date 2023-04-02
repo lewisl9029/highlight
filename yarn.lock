@@ -11428,7 +11428,6 @@ __metadata:
     "@types/jest": ^27.0.1
     "@types/js-cookie": ^3.0.2
     "@types/lodash": ^4.14.168
-    "@types/lodash-es": ^4.17.7
     "@types/node": ^18.11.15
     "@types/randomcolor": ^0.5.5
     "@types/react": ^18.0.25
@@ -11475,7 +11474,6 @@ __metadata:
     intro.js-react: ^0.6.0
     js-cookie: ^3.0.1
     less: ^4.1.3
-    lodash-es: ^4.17.21
     lottie-react: ^2.1.0
     moment: 2.29.4
     npm-run-all: ^4.1.5
@@ -20251,15 +20249,6 @@ __metadata:
   version: 3.0.2
   resolution: "@types/linkify-it@npm:3.0.2"
   checksum: dff8f10fafb885422474e456596f12d518ec4cdd6c33cca7a08e7c86b912d301ed91cf5a7613e148c45a12600dc9ab3d85ad16d5b48dc1aaeda151a68f16b536
-  languageName: node
-  linkType: hard
-
-"@types/lodash-es@npm:^4.17.7":
-  version: 4.17.7
-  resolution: "@types/lodash-es@npm:4.17.7"
-  dependencies:
-    "@types/lodash": "*"
-  checksum: 4b1f39fd1d921311c37a846c0e0df9d1fa23e27448a6ad1efd7574e703abd2b2fa5e8f3b5037146000f167ba231d0d01e52747d902654151b4ceeff9f2a9b380
   languageName: node
   linkType: hard
 
@@ -40120,13 +40109,6 @@ __metadata:
   dependencies:
     p-locate: ^5.0.0
   checksum: 72eb661788a0368c099a184c59d2fee760b3831c9c1c33955e8a19ae4a21b4116e53fa736dc086cdeb9fce9f7cc508f2f92d2d3aae516f133e16a2bb59a39f5a
-  languageName: node
-  linkType: hard
-
-"lodash-es@npm:^4.17.21":
-  version: 4.17.21
-  resolution: "lodash-es@npm:4.17.21"
-  checksum: 05cbffad6e2adbb331a4e16fbd826e7faee403a1a04873b82b42c0f22090f280839f85b95393f487c1303c8a3d2a010048bf06151a6cbe03eee4d388fb0a12d2
   languageName: node
   linkType: hard
 

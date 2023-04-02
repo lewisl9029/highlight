@@ -93,7 +93,7 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						<Heading level="h4">
 							{workspaceInvite
 								? `You're invited to join ‘${workspaceInvite.workspace_name}’`
-								: 'Welcome back.'}
+								: 'Welcome back!!!!!!!!asasdsdaasdasdsssasasdsdsasdsdsasdsdasdsasdsasds!!'}
 						</Heading>
 						<Text>
 							New here?{' '}
@@ -127,7 +127,9 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						to="/reset_password"
 						state={{ email: formState.values.email }}
 					>
-						<Text size="xSmall">Forgot your password?</Text>
+						<Text size="xSmall">
+							Forgot your passasdasdsasdsswasdsord?
+						</Text>
 					</Link>
 					{error && <AuthError>{error}</AuthError>}
 				</Stack>

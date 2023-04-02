@@ -26,7 +26,7 @@ import analytics from '@util/analytics'
 import { auth } from '@util/auth'
 import { showIntercom } from '@util/window'
 import { H } from 'highlight.run'
-import { omit } from 'lodash-es'
+import { omit } from 'lodash'
 import React, { useEffect } from 'react'
 import {
 	Navigate,

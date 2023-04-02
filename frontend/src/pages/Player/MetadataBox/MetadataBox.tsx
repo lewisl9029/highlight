@@ -25,7 +25,7 @@ import { copyToClipboard, validateEmail } from '@util/string'
 import { buildQueryStateString } from '@util/url/params'
 import { message } from 'antd'
 import clsx from 'clsx'
-import { capitalize } from 'lodash-es'
+import { capitalize } from 'lodash'
 import React, { useCallback, useEffect, useMemo } from 'react'
 import {
 	FaExternalLinkSquareAlt,
