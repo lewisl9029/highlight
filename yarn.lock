@@ -5937,7 +5937,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.12.13, @babel/runtime@npm:^7.14.3, @babel/runtime@npm:^7.16.7":
+"@babel/runtime@npm:^7.12.13, @babel/runtime@npm:^7.16.7":
   version: 7.21.0
   resolution: "@babel/runtime@npm:7.21.0"
   dependencies:
@@ -11411,7 +11411,6 @@ __metadata:
     "@highlight-run/rrweb": "workspace:*"
     "@highlight-run/rrweb-types": "workspace:*"
     "@highlight-run/ui": "workspace:*"
-    "@reflame/react-nice-avatar": ^1.3.1-1
     "@rehooks/local-storage": ^2.4.0
     "@sentry/react": ^7.38.0
     "@sentry/tracing": ^7.38.0
@@ -16577,19 +16576,6 @@ __metadata:
   peerDependencies:
     react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0
   checksum: 74deee5bb5e4ea0f371e6eac76ac3301db105c2f81b0f7b92b73af70033e65b8e6694cf9a2ce13f30f2e4d700de99cbaeaa5d01d92f061f6e74ce24ab91aeb8f
-  languageName: node
-  linkType: hard
-
-"@reflame/react-nice-avatar@npm:^1.3.1-1":
-  version: 1.3.1-1
-  resolution: "@reflame/react-nice-avatar@npm:1.3.1-1"
-  dependencies:
-    "@babel/runtime": ^7.14.3
-    chroma-js: ^2.1.2
-    prop-types: ^15.7.2
-  peerDependencies:
-    react: ">=16.0.0"
-  checksum: c4c66db978511539795608714279e6f3c8e3651603ebb0a90e57626b3211ec613ba387a8d640c080fc9d6223046773b9871e4d38afda5403dd842751a5db78ed
   languageName: node
   linkType: hard
 

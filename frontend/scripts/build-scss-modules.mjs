@@ -1,9 +1,9 @@
 import chokidar from 'chokidar'
 import esbuild from 'esbuild'
-import readdirp from 'readdirp'
 import stylePlugin from 'esbuild-style-plugin'
 import * as fs from 'node:fs'
 import * as path_ from 'node:path'
+import readdirp from 'readdirp'
 
 const args = process.argv.slice(2)
 const watch = args.includes('--watch') || args.includes('-w')

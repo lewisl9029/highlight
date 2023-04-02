@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import React, { useMemo } from 'react'
 // Forked with the contents in this PR: https://github.com/dapi-labs/react-nice-avatar/pull/46
 // TODO: move back once merged
-import ReactNiceAvatar, { genConfig } from '@reflame/react-nice-avatar'
+import ReactNiceAvatar, { genConfig } from 'react-nice-avatar'
 
 import { generateRandomColor } from '../../util/color'
 import styles from './Avatar.module.scss'
