@@ -3,8 +3,8 @@
 	// It's basically JSON, with the addition of comments, and looser syntax
 	// (trailing commas!).
 	// Reflame uses this to identify your app.
-	"appId": "01GSXZYQT1W0TZDJAG94P9S4BZ", // prod
-	// "appId": "01GR550WASJY2G2NSYZ4P54JJV", // dev
+	// "appId": "01GSXZYQT1W0TZDJAG94P9S4BZ", // prod
+	"appId": "01GR550WASJY2G2NSYZ4P54JJV", // dev
 	// This is what shows up in the browser's tab bar.
 	"title": "Reflame App",
 	// This is the description that shows up in Google search.
@@ -18,7 +18,7 @@
 		"version": 1
 	},
 	"themeColor": "#5629c6",
-	"filesIgnored": ["**.css.ts", "**.scss", "**.d.ts"],
+	"filesIgnored": ["**/**.css.ts", "**/**.scss"],
 	"scripts": [
 		"/intercom.js",
 		"/index",
@@ -150,6 +150,7 @@
 				"omitModuleExtension": true,
 				"mapIndexToDirectory": true
 			},
+			"filesIgnored": ["**/**.css.ts"],
 			"specifierTransforms": {
 				"^/__generated/ve/(.*).css.js$": "/$1.css"
 			}
@@ -166,6 +167,22 @@
 				// "clsx": "^1.2.1",
 				// "lodash": "^4.17.21",
 			}
+		},
+		"highlight.io": {
+			"sourceDirectory": "highlight.io",
+			"entryPoint": "/index.ts",
+			"nodejsCompatibility": {
+				"omitModuleExtension": true,
+				"mapIndexToDirectory": true
+			},
+			"filesIgnored": [
+				"**/**",
+				"!components/**/**",
+				"!content/**/**",
+				"!styles/**/**",
+				"!utils/**/**",
+				"!index.ts"
+			]
 		},
 		"@highlight-run/client": {
 			"sourceDirectory": "sdk/client/src",
@@ -268,7 +285,7 @@
 			"entryPoints": ["/", "/introjs.css"]
 		},
 		"intro.js-react": {
-			"version": "^0.6.0",
+			"version": "^0.7.1",
 			"entryPoints": ["/src/index.js"]
 		},
 		"js-cookie": "^3.0.0",
