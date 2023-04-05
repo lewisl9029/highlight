@@ -108,6 +108,7 @@
 		"build:reflame:ve": "node scripts/build-vanilla-extract.mjs",
 		"build:reflame:rrweb": "node scripts/build-rrweb.mjs",
 		"build:reflame:svgr": "node scripts/build-svgr.mjs",
+		"reflame-build": "run-p --print-label --race 'build:reflame:*'",
 		"lint": "eslint ./src",
 		"lint:fix": "eslint ./src --fix",
 		"sourcemaps": "npx --yes @highlight-run/sourcemap-uploader upload --apiKey \"${HIGHLIGHT_API_KEY}\" --appVersion \"${APP_VERSION}\" --path ./build",

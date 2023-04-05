@@ -39,6 +39,7 @@
 		"dev:components": "yarn turbo run dev --filter @highlight-run/component-preview...",
 		"dev:frontend": "doppler run -- yarn turbo run dev --filter frontend... --filter=!@highlight-run/rrweb...",
 		"reflame": "yarn turbo run reflame --filter frontend... --filter=!@highlight-run/rrweb...",
+		"reflame-build": "yarn turbo run reflame-build --filter frontend... --filter=!@highlight-run/rrweb...",
 		"dev:ui": "yarn turbo run dev --filter @highlight-run/ui...",
 		"dev:redis": "redis-server",
 		"docker:frontend": "yarn turbo run dev --filter frontend...",
