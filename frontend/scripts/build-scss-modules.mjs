@@ -21,32 +21,40 @@ const watchedFiles = ['**/**.scss']
 // Luckily that seems to be the only usage of scss imports
 const build = async (path) => {
 	console.log(new Date(), 'building scss module', path)
-	const result = await esbuild.build({
-		entryPoints: [path],
-		outExtension: { '.js': '.scss.js' },
-		absWorkingDir: workingDirectory,
-		bundle: true,
-		// TODO: support user supplied sourcemaps
-		// sourcemap: true,
-		format: 'esm',
-		allowOverwrite: true,
-		platform: 'browser',
-		outdir: outputDirectory,
-		outbase: workingDirectory,
-		minify: true,
-		splitting: false,
-		target: 'esnext',
-		plugins: [
-			stylePlugin({
-				cssModulesOptions: {
-					localsConvention: 'camelCaseOnly',
-				},
-			}),
-		],
-		external: [],
-		write: false,
-		logLevel: 'warning',
-	})
+	const result = await esbuild
+		.build({
+			entryPoints: [path],
+			outExtension: { '.js': '.scss.js' },
+			absWorkingDir: workingDirectory,
+			bundle: true,
+			// TODO: support user supplied sourcemaps
+			// sourcemap: true,
+			format: 'esm',
+			allowOverwrite: true,
+			platform: 'browser',
+			outdir: outputDirectory,
+			outbase: workingDirectory,
+			minify: true,
+			splitting: false,
+			target: 'esnext',
+			plugins: [
+				stylePlugin({
+					cssModulesOptions: {
+						localsConvention: 'camelCaseOnly',
+					},
+				}),
+			],
+			external: [],
+			write: false,
+			logLevel: 'warning',
+		})
+		.catch((error) => {
+			console.error(error)
+			return
+		})
+	if (!result) {
+		return
+	}
 	const jsOutput = result.outputFiles.find(({ path }) => path.endsWith('.js'))
 	const outputPath = jsOutput.path
 	await fs.promises.mkdir(path_.dirname(outputPath), { recursive: true })
