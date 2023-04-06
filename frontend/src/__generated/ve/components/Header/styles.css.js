@@ -1,1 +1,1 @@
-var a="bsyaa20";export{a as linkStyle};
+var e="bsyaa20";export{e as linkStyle};

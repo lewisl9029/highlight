@@ -1,1 +1,1 @@
-var e=void 0,o="_1t72qig1",r="_1t72qig0";export{e as code,o as codeBlock,r as sectionToggle};
+var xo=void 0,lo="_1t72qig1",qo="_1t72qig0";export{xo as code,lo as codeBlock,qo as sectionToggle};

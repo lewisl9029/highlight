@@ -1,11 +1,14 @@
 import { vanillaExtractPlugin } from '@vanilla-extract/esbuild-plugin'
 import chokidar from 'chokidar'
 import esbuild from 'esbuild'
+import * as fs from 'node:fs'
 import * as path_ from 'node:path'
 import readdirp from 'readdirp'
 
 const args = process.argv.slice(2)
 const watch = args.includes('--watch') || args.includes('-w')
+
+const packageJson = JSON.parse(await fs.promises.readFile('../package.json'))
 
 // We actually need to watch all .ts/.tsx files and rebuild everything
 // since .css.ts can technically import from anywhere
@@ -30,10 +33,54 @@ let entryPoints = Object.fromEntries(
 	).map(({ path }) => [path, path_.join(workingDirectory, path)]),
 )
 
+const ignorePlugin = {
+	name: 'ignore-imports',
+	setup(build) {
+		build.onLoad({ filter: /\.(svg|png|gif|jpeg|scss|css)$/ }, () => ({
+			contents: '',
+		}))
+	},
+}
+
+const resultPlugin = {
+	name: 'result-plugin',
+	setup(build) {
+		build.onEnd(async (result) => {
+			const cssBundleOutput = result.outputFiles.find(({ path }) =>
+				path.endsWith('index.css'),
+			)
+
+			const jsEntryPointsOutputs = result.outputFiles.filter(({ path }) =>
+				path.endsWith('.css.js'),
+			)
+
+			await Promise.all([
+				fs.promises.mkdir(outputDirectory, { recursive: true }),
+				...jsEntryPointsOutputs.map(({ path }) =>
+					fs.promises.mkdir(path_.dirname(path), { recursive: true }),
+				),
+			])
+			await Promise.all([
+				fs.promises.writeFile(
+					path_.join(outputDirectory, 'index.css'),
+					cssBundleOutput.contents,
+				),
+				...jsEntryPointsOutputs.map(({ path, contents }) =>
+					fs.promises.writeFile(path, contents),
+				),
+			])
+		})
+	},
+}
+
 const build = async (path) => {
-	console.log(new Date(), 'building vanilla extract entry points', path)
+	console.log(
+		new Date(),
+		'building vanilla extract entry points & bundle',
+		path,
+	)
 	await esbuild.build({
-		entryPoints: Object.values(entryPoints),
+		entryPoints: ['index.tsx', ...Object.values(entryPoints)],
 		bundle: true,
 		// TODO: support user supplied sourcemaps
 		// sourcemap: true,
@@ -42,7 +89,7 @@ const build = async (path) => {
 		outdir: outputDirectory,
 		outbase: workingDirectory,
 		minify: true,
-		splitting: true,
+		splitting: false,
 		target: 'esnext',
 		// Working directory apparently affects vanilla extract's hashes?
 		// Using rootDirectory to stay consistent with vite setup
@@ -50,14 +97,23 @@ const build = async (path) => {
 		plugins: [
 			vanillaExtractPlugin({
 				// We don't output css here, only the js modules for each stylesheet entrypoint
-				outputCss: false,
+				// outputCss: false,
 				identifiers: 'short',
 			}),
+			ignorePlugin,
+			resultPlugin,
 		],
-		external: [],
-		logLevel: 'warning',
+		external: [
+			'__generated/*',
+			...Object.entries(packageJson.dependencies).flatMap(
+				([name, spec]) =>
+					!spec.startsWith('workspace:') ? [name] : [],
+			),
+		],
+		write: false,
+		logLevel: 'error',
 	})
-	console.log(new Date(), 'built vanilla extract entry points')
+	console.log(new Date(), 'built vanilla extract entry points & bundle')
 	return
 }
 

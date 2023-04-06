@@ -1,4 +1,4 @@
-import { vanillaExtractPlugin } from '@vanilla-extract/esbuild-plugin'
+// import { vanillaExtractPlugin } from '@vanilla-extract/esbuild-plugin'
 import esbuild from 'esbuild'
 import stylePlugin from 'esbuild-style-plugin'
 import * as fs from 'node:fs'
@@ -24,8 +24,8 @@ const ignorePlugin = {
 const resultPlugin = {
 	name: 'result-plugin',
 	setup(build) {
-		build.onStart(() => {
-			console.log(new Date(), 'building css bundle')
+		build.onStart((...args) => {
+			console.log(new Date(), 'building css bundle', ...args)
 		})
 		build.onEnd(async (result) => {
 			const cssOutput = result.outputFiles.find(({ path }) =>
@@ -65,10 +65,10 @@ const context = await esbuild.context({
 			},
 		}),
 		ignorePlugin,
-		vanillaExtractPlugin({ identifiers: 'short' }),
+		// vanillaExtractPlugin({ identifiers: 'short' }),
 		resultPlugin,
 	],
-	external: ['consts:publicGraphURI'],
+	external: ['consts:publicGraphURI', '__generated/*'],
 	write: false,
 	logLevel: 'error',
 })

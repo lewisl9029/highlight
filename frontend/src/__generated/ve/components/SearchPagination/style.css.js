@@ -1,1 +1,1 @@
-var r="_1ukfp2a1",e="_1ukfp2a2",p="_1ukfp2a0";export{r as rightBorder,e as selected,p as simple};
+var i="_1ukfp2a1",f="_1ukfp2a2",k="_1ukfp2a0";export{i as rightBorder,f as selected,k as simple};
