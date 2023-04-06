@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // noinspection JSUnusedLocalSymbols
 
-import 'firebase/auth'
+import 'firebase/compat/auth'
 
-import Firebase from 'firebase/app'
+import Firebase from 'firebase/compat/app'
+
+import * as env from '@/env'
 
 interface User {
 	email: string | null
@@ -77,15 +79,14 @@ class SimpleAuth {
 }
 
 export let auth: SimpleAuth
-if (import.meta.env.REACT_APP_AUTH_MODE === 'simple') {
+if (env.REACT_APP_AUTH_MODE === 'simple') {
 	auth = new SimpleAuth()
 } else {
 	let firebaseConfig: any
 	let firebaseConfigString: string
 
-	if (import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT) {
-		firebaseConfigString =
-			import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT ?? ''
+	if (env.REACT_APP_FIREBASE_CONFIG_OBJECT) {
+		firebaseConfigString = env.REACT_APP_FIREBASE_CONFIG_OBJECT ?? ''
 	} else {
 		firebaseConfigString = window._highlightFirebaseConfigString
 	}

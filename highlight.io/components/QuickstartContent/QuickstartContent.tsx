@@ -107,7 +107,7 @@ export const quickStartContent = {
 		js: {
 			title: 'Select your client framework',
 			subtitle:
-				'Select a client SDK to install session replay, error monitoring, and logging for your frontend application.',
+				'Select a client SDK to install sessasdsasdioasdasdasdsn replay, error monitoring, and logging for your frontend application.',
 			logoUrl: siteUrl('/images/quickstart/javascript.svg'),
 			[QuickStartType.React]: ReactContent,
 			[QuickStartType.Angular]: AngularContent,

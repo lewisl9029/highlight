@@ -16,8 +16,8 @@ import React, { useEffect, useState } from 'react'
 import Linkify from 'react-linkify'
 
 import newCommentFormStyles from '../NewCommentForm.module.scss'
-import commentTextBodyClassNames from './CommentTextBody.module.css'
-import styles from './CommentTextBody.module.scss'
+import commentTextBodyClassNames from './CommentTextBody.module.scss'
+import styles from './styles.module.scss'
 
 interface Props {
 	commentText: string

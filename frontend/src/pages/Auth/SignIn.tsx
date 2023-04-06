@@ -13,7 +13,7 @@ import SvgHighlightLogoOnLight from '@icons/HighlightLogoOnLight'
 import { AuthBody, AuthError, AuthFooter, AuthHeader } from '@pages/Auth/Layout'
 import useLocalStorage from '@rehooks/local-storage'
 import { auth } from '@util/auth'
-import firebase from 'firebase/app'
+import firebase from 'firebase/compat/app'
 import React, { useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
@@ -93,7 +93,7 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						<Heading level="h4">
 							{workspaceInvite
 								? `You're invited to join ‘${workspaceInvite.workspace_name}’`
-								: 'Welcome back.'}
+								: 'Welcome basdsdasdsasdsdack'}
 						</Heading>
 						<Text>
 							New here?{' '}

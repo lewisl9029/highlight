@@ -1,10 +1,11 @@
 import 'antd/dist/antd.css'
 import '@highlight-run/rrweb/dist/rrweb.min.css'
 import '@highlight-run/react/dist/index.css'
-import '@fontsource/poppins'
 import './index.scss'
 import './style/tailwind.css'
 
+// TODO: figure out fonts support, probably generate stylesheet dynamically from url import
+// import '@fontsource/poppins'
 import { ApolloError, ApolloProvider } from '@apollo/client'
 import {
 	AuthContextProvider,
@@ -51,10 +52,14 @@ import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryParamProvider } from 'use-query-params'
 import { ReactRouter6Adapter } from 'use-query-params/adapters/react-router-6'
 
+import * as env from '@/env'
+
+document.body.className = 'highlight-light-theme'
+
 analytics.initialize()
 const dev =
 	import.meta.env.DEV ||
-	import.meta.env.REACT_APP_FRONTEND_URI?.indexOf('localhost') !== -1
+	env.REACT_APP_FRONTEND_URI?.indexOf('localhost') !== -1
 const options: HighlightOptions = {
 	debug: { clientInteractions: true, domRecording: true },
 	manualStart: true,
@@ -91,12 +96,12 @@ const options: HighlightOptions = {
 	inlineStylesheet: true,
 	inlineImages: true,
 	sessionShortcut: 'alt+1,command+`,alt+esc',
-	version: import.meta.env.REACT_APP_COMMIT_SHA || undefined,
+	version: env.REACT_APP_COMMIT_SHA || undefined,
 }
 const favicon = document.querySelector("link[rel~='icon']") as any
 if (dev) {
 	options.scriptUrl = 'http://localhost:8080/dist/index.js'
-	options.backendUrl = import.meta.env.REACT_APP_PUBLIC_GRAPH_URI
+	options.backendUrl = env.REACT_APP_PUBLIC_GRAPH_URI
 
 	options.integrations = undefined
 
@@ -117,7 +122,7 @@ if (dev) {
 	window.document.title = `📸 ${window.document.title}`
 	options.environment = 'Pull Request Preview'
 }
-H.init(import.meta.env.REACT_APP_FRONTEND_ORG ?? 1, options)
+H.init(env.REACT_APP_FRONTEND_ORG ?? 1, options)
 analytics.track('attribution', getAttributionData())
 if (!isOnPrem) {
 	H.start()

@@ -22,7 +22,16 @@ const basePlugins = [
 	consts({
 		publicGraphURI: process.env.PUBLIC_GRAPH_URI,
 	}),
-	resolve({ browser: true }),
+	resolve({
+		browser: true,
+		// @highlight-run/client is a private package not published to npm, so
+		// listing it in package.json would break end users.
+		// Instead, we add root node_modules as a resolution path so it gets
+		// included directly in the bundle.
+		modulePaths: ['../../node_modules'],
+		// Need to override this to add .ts and .tsx as valid resolution exts.
+		extensions: ['.mjs', '.js', '.json', '.node', '.ts', '.tsx'],
+	}),
 	webWorkerLoader({
 		targetPlatform: 'browser',
 		inline: true,

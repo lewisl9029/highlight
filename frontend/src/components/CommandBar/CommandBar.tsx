@@ -36,7 +36,7 @@ import { useHTMLElementEvent } from '@hooks/useHTMLElementEvent'
 import { useGlobalContext } from '@routers/ProjectRouter/context/GlobalContext'
 import { isInsideElement } from '@util/dom'
 import { Dialog } from 'ariakit/dialog'
-import isEqual from 'lodash/isEqual'
+import { isEqual } from 'lodash'
 import React, { useRef } from 'react'
 
 import * as styles from './style.css'
