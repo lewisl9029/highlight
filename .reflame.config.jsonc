@@ -9,7 +9,7 @@
 	// This is what shows up in the browser's tab bar.
 	"title": "Reflame App",
 	// This is the description that shows up in Google search.
-	"description": "A new Reflame app.!145678",
+	"description": "A new Reflame app.!1456789",
 	// Reflame will watch this directory for your React source code and ship changes
 	// instantly.
 	"sourceDirectory": "frontend/src",
