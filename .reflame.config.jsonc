@@ -356,6 +356,7 @@
 		"react-dom": "18.2.0",
 		"graphql": "16.6.0",
 		"react-transition-group": "4.4.1",
-		"lodash": "npm:lodash-es"
+		"lodash": "npm:lodash-es",
+		"@lewisl9029/es-module-shims": "1.7.2-4"
 	}
 }
