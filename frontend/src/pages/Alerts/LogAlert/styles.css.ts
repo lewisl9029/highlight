@@ -88,6 +88,6 @@ globalStyle(`${selectContainer} .ant-select-selector:hover`, {
 })
 
 globalStyle(`${selectContainer} .ant-select-selection-item`, {
-	display: 'flex',
+	display: 'grid',
 	alignItems: 'center',
 })
