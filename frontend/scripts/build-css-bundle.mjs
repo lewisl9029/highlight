@@ -1,9 +1,7 @@
 import { vanillaExtractPlugin } from '@vanilla-extract/esbuild-plugin'
 import esbuild from 'esbuild'
-import stylePlugin from 'esbuild-style-plugin'
 import * as fs from 'node:fs'
 import * as path_ from 'node:path'
-import tailwindcss from 'tailwindcss'
 
 export const run = async ({ rootDirectory }) => {
 	const args = process.argv.slice(2)
@@ -19,7 +17,7 @@ export const run = async ({ rootDirectory }) => {
 	const ignorePlugin = {
 		name: 'ignore-imports',
 		setup(build) {
-			build.onLoad({ filter: /\.(svg|png|gif|jpeg)$/ }, () => ({
+			build.onLoad({ filter: /\.(svg|png|gif|jpeg|css)$/ }, () => ({
 				contents: '',
 			}))
 		},
@@ -69,41 +67,38 @@ export const run = async ({ rootDirectory }) => {
 			ignorePlugin,
 			// Style plugin doesn't respect esbuild externals
 			// FIXME: follow https://github.com/g45t345rt/esbuild-style-plugin/pull/18
-			{
-				name: 'styleIgnorePlugin',
-				setup: ({ onResolve, onLoad }) => {
-					Object.keys(packageJson.dependencies).forEach((pkg) => {
-						onResolve(
-							{
-								filter: new RegExp(`^${pkg}/.*$`),
-								namespace: 'file',
-							},
-							() => ({
-								external: true,
-								sideEffects: false,
-							}),
-						)
-					})
+			// {
+			// 	name: 'styleIgnorePlugin',
+			// 	setup: ({ onResolve, onLoad }) => {
+			// 		Object.keys(packageJson.dependencies).forEach((pkg) => {
+			// 			onResolve(
+			// 				{
+			// 					filter: new RegExp(`^${pkg}/.*$`),
+			// 					namespace: 'file',
+			// 				},
+			// 				() => ({
+			// 					external: true,
+			// 					sideEffects: false,
+			// 				}),
+			// 			)
+			// 		})
 
-					// We don't need css handled by stylePlugin now that
-					// Reflame has native css modules support
-					// Just need it to handle tailwind for now.
-					onLoad(
-						{ filter: /\.(css)$/, namespace: 'stylePlugin' },
-						({ path }) =>
-							path.endsWith('/tailwind.css')
-								? undefined
-								: {
-										contents: '',
-								  },
-					)
-				},
-			},
-			stylePlugin({
-				postcss: {
-					plugins: [tailwindcss()],
-				},
-			}),
+			// 		// We don't need css handled by stylePlugin now that
+			// 		// Reflame has native css modules support
+			// 		// Just need it to handle tailwind for now.
+			// 		onLoad(
+			// 			{ filter: /\.(css)$/, namespace: 'stylePlugin' },
+			// 			({ path }) => ({
+			// 				contents: '',
+			// 			}),
+			// 		)
+			// 	},
+			// },
+			// stylePlugin({
+			// 	postcss: {
+			// 		plugins: [tailwindcss()],
+			// 	},
+			// }),
 			vanillaExtractPlugin({ identifiers: 'short' }),
 			resultPlugin,
 		],

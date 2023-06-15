@@ -7,9 +7,9 @@
 	// "appId": "01GSXZYQT1W0TZDJAG94P9S4BZ", // prod fork
 	// "appId": "01GR550WASJY2G2NSYZ4P54JJV", // dev
 	// This is what shows up in the browser's tab bar.
-	"title": "Reflame App",
+	"title": "highlight.io",
 	// This is the description that shows up in Google search.
-	"description": "A new Reflame app.",
+	"description": "Highlight gives your team full transparency into the errors, interactions, and performance metrics of your client-side application.",
 	// Reflame will watch this directory for your React source code and ship changes
 	// instantly.
 	"sourceDirectory": "frontend/src",
@@ -76,6 +76,7 @@
 	},
 	"environment": "production",
 	"scripts": [
+		"https://cdn.jsdelivr.net/npm/@unocss/runtime",
 		"/intercom.js",
 		"/index",
 		"/canny.js",
