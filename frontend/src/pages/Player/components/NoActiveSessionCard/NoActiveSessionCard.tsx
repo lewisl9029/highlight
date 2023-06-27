@@ -15,7 +15,7 @@ const NoActiveSessionCard = () => {
 				<Box mb="6">
 					<Text color="moderate">
 						View a recent session or find a asdasdsads identifier,
-						URL, or segment.asdasdsd
+						URL, or segment.asdasdsdasd as das dsa
 					</Text>
 				</Box>
 			</Callout>
