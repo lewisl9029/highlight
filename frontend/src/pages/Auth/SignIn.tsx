@@ -124,7 +124,7 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						<Heading level="h4">
 							{workspaceInvite
 								? `You're invited to join ‘${workspaceInvite.workspace_name}’`
-								: 'Welcome bac!!!asd!!!asddasdsdasdasdasdad!!!saddsd!!!!k.'}
+								: 'Welcome back.'}
 						</Heading>
 						<Text>
 							New here?{' '}
