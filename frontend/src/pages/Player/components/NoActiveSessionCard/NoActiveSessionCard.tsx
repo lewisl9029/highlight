@@ -14,8 +14,8 @@ const NoActiveSessionCard = () => {
 			<Callout title="Ready to see your app?">
 				<Box mb="6">
 					<Text color="moderate">
-						View a recent session or find a specific identifier,
-						URL, or segment.
+						View a recent session or find a asdasdsads identifier,
+						URL, or segment.asdasdsdasd as das dsa
 					</Text>
 				</Box>
 			</Callout>
