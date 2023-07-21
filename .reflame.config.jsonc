@@ -180,7 +180,28 @@
 				"/src/css/sprinkles.css": "/css/sprinkles.css",
 				"/src/css/theme.css": "/css/theme.css",
 			},
-			"npmPackages": {
+      "npmPackages": {
+        "@vanilla-extract/sprinkles": {
+          "entryPoints": [
+            "/createRuntimeSprinkles",
+            "/"
+          ]
+        },
+        "@vanilla-extract/recipes": {
+          "entryPoints": [
+            "/createRuntimeFn",
+            "/"
+          ]
+        },
+        "ariakit": {
+          "entryPoints": [
+            "/checkbox",
+            "/form",
+            "/combobox",
+            "/button",
+            "/"
+          ]
+        }
 				// "ariakit": {
 				// 	"entryPoints": [
 				// 		"/",
