@@ -180,7 +180,28 @@
 				"/src/css/sprinkles.css": "/css/sprinkles.css",
 				"/src/css/theme.css": "/css/theme.css",
 			},
-			"npmPackages": {
+      "npmPackages": {
+        "@vanilla-extract/sprinkles": {
+          "entryPoints": [
+            "/createRuntimeSprinkles",
+            "/"
+          ]
+        },
+        "@vanilla-extract/recipes": {
+          "entryPoints": [
+            "/createRuntimeFn",
+            "/"
+          ]
+        },
+        "ariakit": {
+          "entryPoints": [
+            "/checkbox",
+            "/form",
+            "/combobox",
+            "/button",
+            "/"
+          ]
+        }
 				// "@vanilla-extract/sprinkles": {
 				//   "entryPoints": [
 				//     "/createRuntimeSprinkles",
@@ -322,7 +343,11 @@
 			"entryPoints": ["/css/styles.css"],
 		},
 		"react-awesome-query-builder": {
-			"entryPoints": [
+      "entryPoints": [
+        "/lib/config/antd",
+        "/",
+        "/lib/css/compact_styles.css",
+        "/lib/css/styles.css"
 				// "/",
 				// "/lib/config/antd",
 				// "/lib/css/compact_styles.css",
@@ -338,7 +363,12 @@
 		"react-loading-skeleton": {
 			"entryPoints": ["/", "/dist/skeleton.css"],
 		},
-		"react-select": {
+    "react-select": {
+      "entryPoints": [
+        "/creatable",
+        "/async",
+        "/"
+      ]
 			// "entryPoints": ["/", "/async", "/async-creatable", "/creatable"],
 		},
 		"react-spinners": {
