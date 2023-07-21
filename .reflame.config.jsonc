@@ -180,28 +180,28 @@
 				"/src/css/sprinkles.css": "/css/sprinkles.css",
 				"/src/css/theme.css": "/css/theme.css",
 			},
-      "npmPackages": {
-        "@vanilla-extract/sprinkles": {
-          "entryPoints": [
-            "/createRuntimeSprinkles",
-            "/"
-          ]
-        },
-        "@vanilla-extract/recipes": {
-          "entryPoints": [
-            "/createRuntimeFn",
-            "/"
-          ]
-        },
-        "ariakit": {
-          "entryPoints": [
-            "/checkbox",
-            "/form",
-            "/combobox",
-            "/button",
-            "/"
-          ]
-        }
+			"npmPackages": {
+				// "@vanilla-extract/sprinkles": {
+				//   "entryPoints": [
+				//     "/createRuntimeSprinkles",
+				//     "/"
+				//   ]
+				// },
+				// "@vanilla-extract/recipes": {
+				//   "entryPoints": [
+				//     "/createRuntimeFn",
+				//     "/"
+				//   ]
+				// },
+				// "ariakit": {
+				//   "entryPoints": [
+				//     "/checkbox",
+				//     "/form",
+				//     "/combobox",
+				//     "/button",
+				//     "/"
+				//   ]
+				// }
 				// "ariakit": {
 				// 	"entryPoints": [
 				// 		"/",
@@ -297,11 +297,11 @@
 			"entryPoints": [
 				"/",
 				"/es/menu",
-				"/es/checkbox",
-				"/es/tooltip",
-				"/es/table",
-				"/es/input",
-				"/es/dropdown",
+				// "/es/checkbox",
+				// "/es/tooltip",
+				// "/es/table",
+				// "/es/input",
+				// "/es/dropdown",
 				"/es/message",
 				"/dist/antd.css",
 			],
@@ -323,10 +323,10 @@
 		},
 		"react-awesome-query-builder": {
 			"entryPoints": [
-				"/",
-				"/lib/config/antd",
-				"/lib/css/compact_styles.css",
-				"/lib/css/styles.css",
+				// "/",
+				// "/lib/config/antd",
+				// "/lib/css/compact_styles.css",
+				// "/lib/css/styles.css",
 			],
 		},
 		"react-grid-layout": {
@@ -339,7 +339,7 @@
 			"entryPoints": ["/", "/dist/skeleton.css"],
 		},
 		"react-select": {
-			"entryPoints": ["/", "/async", "/async-creatable", "/creatable"],
+			// "entryPoints": ["/", "/async", "/async-creatable", "/creatable"],
 		},
 		"react-spinners": {
 			"entryPoints": ["/BarLoader"],
@@ -357,8 +357,8 @@
 		"react-use": {
 			"entryPoints": [
 				"/",
-				"/esm/useSessionStorage",
-				"/esm/useLocalStorage",
+				// "/esm/useSessionStorage",
+				// "/esm/useLocalStorage",
 			],
 		},
 		"use-query-params": {
