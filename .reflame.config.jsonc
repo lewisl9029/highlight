@@ -4,8 +4,8 @@
 	// (trailing commas!).
 	// Reflame uses this to identify your app.
 	// "appId": "01GVH35S71FJP26W72V3K7CB2N", // prod
-	// "appId": "01GSXZYQT1W0TZDJAG94P9S4BZ", // prod fork
-	"appId": "01GR550WASJY2G2NSYZ4P54JJV", // dev
+	"appId": "01GSXZYQT1W0TZDJAG94P9S4BZ", // prod fork
+	// "appId": "01GR550WASJY2G2NSYZ4P54JJV", // dev
 	// This is what shows up in the browser's tab bar.
 	"title": "Reflame App",
 	// This is the description that shows up in Google search.
@@ -180,28 +180,22 @@
 				"/src/css/sprinkles.css": "/css/sprinkles.css",
 				"/src/css/theme.css": "/css/theme.css",
 			},
-      "npmPackages": {
-        "@vanilla-extract/sprinkles": {
-          "entryPoints": [
-            "/createRuntimeSprinkles",
-            "/"
-          ]
-        },
-        "@vanilla-extract/recipes": {
-          "entryPoints": [
-            "/createRuntimeFn",
-            "/"
-          ]
-        },
-        "ariakit": {
-          "entryPoints": [
-            "/checkbox",
-            "/form",
-            "/combobox",
-            "/button",
-            "/"
-          ]
-        }
+			"npmPackages": {
+				"@vanilla-extract/sprinkles": {
+					// "entryPoints": ["/createRuntimeSprinkles", "/"],
+				},
+				"@vanilla-extract/recipes": {
+					// "entryPoints": ["/createRuntimeFn", "/"],
+				},
+				"ariakit": {
+					"entryPoints": [
+						"/checkbox",
+						// "/form",
+						// "/combobox",
+						"/button",
+						"/",
+					],
+				},
 				// "@vanilla-extract/sprinkles": {
 				//   "entryPoints": [
 				//     "/createRuntimeSprinkles",
@@ -327,72 +321,68 @@
 				"/dist/antd.css",
 			],
 		},
-		"firebase": {
-			"entryPoints": ["/compat/auth", "/compat/app"],
-		},
-		"lodash": {
-			"entryPoints": ["/", "/isEqual"],
-		},
-		"moment": {
-			"entryPoints": ["/", "/moment"],
-		},
-		"rc-slider": {
-			"entryPoints": ["/", "/assets/index.css"],
-		},
-		"react-resizable": {
-			"entryPoints": ["/css/styles.css"],
-		},
-		"react-awesome-query-builder": {
-      "entryPoints": [
-        "/lib/config/antd",
-        "/",
-        "/lib/css/compact_styles.css",
-        "/lib/css/styles.css"
-				// "/",
-				// "/lib/config/antd",
-				// "/lib/css/compact_styles.css",
-				// "/lib/css/styles.css",
-			],
-		},
-		"react-grid-layout": {
-			"entryPoints": ["/", "/css/styles.css"],
-		},
-		"react-icons": {
-			"entryPoints": ["/fa", "/fi", "/ri", "/vsc"],
-		},
-		"react-loading-skeleton": {
-			"entryPoints": ["/", "/dist/skeleton.css"],
-		},
-    "react-select": {
-      "entryPoints": [
-        "/creatable",
-        "/async",
-        "/"
-      ]
-			// "entryPoints": ["/", "/async", "/async-creatable", "/creatable"],
-		},
-		"react-spinners": {
-			"entryPoints": ["/BarLoader"],
-		},
-		"react-syntax-highlighter": {
-			"entryPoints": [
-				// FIXME: Seems to create ~1000 chunks with esbuild
-				// https://github.com/evanw/esbuild/issues/1836
-				// "/",
-				"/dist/esm/prism",
-				"/dist/esm/light",
-				"/dist/esm/styles/prism",
-			],
-		},
-		"react-use": {
-			"entryPoints": [
-				"/",
-				// "/esm/useSessionStorage",
-				// "/esm/useLocalStorage",
-			],
-		},
-		"use-query-params": {
-			"entryPoints": ["/", "/adapters/react-router-6"],
-		},
+		// "firebase": {
+		// 	"entryPoints": ["/compat/auth", "/compat/app"],
+		// },
+		// "lodash": {
+		// 	"entryPoints": ["/", "/isEqual"],
+		// },
+		// "moment": {
+		// 	"entryPoints": ["/", "/moment"],
+		// },
+		// "rc-slider": {
+		// 	"entryPoints": ["/", "/assets/index.css"],
+		// },
+		// "react-resizable": {
+		// 	"entryPoints": ["/css/styles.css"],
+		// },
+		// "react-awesome-query-builder": {
+		// 	"entryPoints": [
+		// 		"/lib/config/antd",
+		// 		"/",
+		// 		"/lib/css/compact_styles.css",
+		// 		"/lib/css/styles.css",
+		// 		// "/",
+		// 		// "/lib/config/antd",
+		// 		// "/lib/css/compact_styles.css",
+		// 		// "/lib/css/styles.css",
+		// 	],
+		// },
+		// "react-grid-layout": {
+		// 	"entryPoints": ["/", "/css/styles.css"],
+		// },
+		// "react-icons": {
+		// 	"entryPoints": ["/fa", "/fi", "/ri", "/vsc"],
+		// },
+		// "react-loading-skeleton": {
+		// 	"entryPoints": ["/", "/dist/skeleton.css"],
+		// },
+		// "react-select": {
+		// 	"entryPoints": ["/creatable", "/async", "/"],
+		// 	// "entryPoints": ["/", "/async", "/async-creatable", "/creatable"],
+		// },
+		// "react-spinners": {
+		// 	"entryPoints": ["/BarLoader"],
+		// },
+		// "react-syntax-highlighter": {
+		// 	"entryPoints": [
+		// 		// FIXME: Seems to create ~1000 chunks with esbuild
+		// 		// https://github.com/evanw/esbuild/issues/1836
+		// 		// "/",
+		// 		"/dist/esm/prism",
+		// 		"/dist/esm/light",
+		// 		"/dist/esm/styles/prism",
+		// 	],
+		// },
+		// "react-use": {
+		// 	"entryPoints": [
+		// 		"/",
+		// 		// "/esm/useSessionStorage",
+		// 		// "/esm/useLocalStorage",
+		// 	],
+		// },
+		// "use-query-params": {
+		// 	"entryPoints": ["/", "/adapters/react-router-6"],
+		// },
 	},
 }
