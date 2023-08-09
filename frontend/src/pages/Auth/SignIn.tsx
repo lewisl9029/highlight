@@ -23,6 +23,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuthContext } from '@/authentication/AuthContext'
 import { SIGN_UP_ROUTE } from '@/pages/Auth/AuthRouter'
+import { ReactComponent as Icon } from '@/static/Solid/cog.svg'
 import analytics from '@/util/analytics'
 
 type Props = {
@@ -154,6 +155,8 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						type="password"
 						autoComplete="current-password"
 					/>
+					<Icon />
+
 					<Link
 						to="/reset_password"
 						state={{ email: formState.values.email }}
