@@ -28,11 +28,8 @@ export const Themes = () => {
 	return (
 		<>
 			<Badge variant="green" label="Green" />
-			<br />
 			<Badge variant="white" label="White" />
-			<br />
 			<Badge variant="outlineGray" label="Outline Gray" />
-			<br />
 			<Badge variant="gray" label="Gray" />
 		</>
 	)
