@@ -222,5 +222,3 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 		</Form>
 	)
 }
-
-export const SignIn_test = <SignIn />
