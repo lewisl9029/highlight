@@ -2,9 +2,7 @@ name: Monorepo
 
 on:
     push:
-        branches: ['main']
-    pull_request:
-        types: [opened, synchronize]
+        branches: '*'
     merge_group:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -12,7 +10,7 @@ jobs:
     yarn-monorepo:
         name: Build Yarn Turborepo
         timeout-minutes: 30
-        runs-on: buildjet-4vcpu-ubuntu-2204
+        runs-on: ubuntu-latest
         # configures turborepo Remote Caching
         env:
             TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
