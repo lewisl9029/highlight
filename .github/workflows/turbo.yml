@@ -3,8 +3,6 @@ name: Monorepo
 on:
     push:
         branches: '*'
-    pull_request:
-        types: [opened, synchronize]
     merge_group:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
