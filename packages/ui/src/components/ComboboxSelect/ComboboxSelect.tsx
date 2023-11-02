@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
 	useComboboxStore,
 	useSelectStore,
@@ -182,5 +182,26 @@ export const ComboboxSelect = <T extends string | string[]>({
 				</ComboboxList>
 			</SelectPopover>
 		</div>
+	)
+}
+
+export const ComboboxSelect_test = () => {
+	const [value, setValue] = useState('')
+	const options = [
+		{ key: 'red', render: 'Red' },
+		{ key: 'blue', render: 'Blue' },
+		{ key: 'green', render: 'Green' },
+	]
+	return (
+		<ComboboxSelect
+			label="Label"
+			value={value}
+			valueRender={value}
+			options={options}
+			onChange={(valueNext: string) => {
+				setValue(valueNext)
+			}}
+			queryPlaceholder="Filter..."
+		/>
 	)
 }
