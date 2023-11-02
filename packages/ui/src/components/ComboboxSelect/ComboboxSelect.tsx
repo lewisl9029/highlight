@@ -213,13 +213,13 @@ ComboboxSelect_test.run = async ({ user, screen, captureScreenshot }) => {
 	const combobox = await screen.findByRole('combobox')
 	await captureScreenshot(combobox, { name: 'initial' })
 
-	user.click(combobox)
+	await user.click(combobox)
 	const filterInput = await screen.findByPlaceholderText('Filter...')
 	await captureScreenshot({ name: 'filter opened' })
 
-	user.type(filterInput, 're')
+	await user.type(filterInput, 're')
 	await captureScreenshot({ name: 'filter entered' })
 
 	const redOption = await screen.findByText('Red')
-	user.click(redOption)
+	await user.click(redOption)
 }
