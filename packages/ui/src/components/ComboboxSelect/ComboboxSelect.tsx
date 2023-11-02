@@ -192,16 +192,34 @@ export const ComboboxSelect_test = () => {
 		{ key: 'blue', render: 'Blue' },
 		{ key: 'green', render: 'Green' },
 	]
+	const label = 'Select a color'
 	return (
 		<ComboboxSelect
-			label="Label"
+			label={label}
 			value={value}
-			valueRender={value || 'Select a color'}
-			options={options}
+			valueRender={value || label}
+			options={options.filter((option) =>
+				option.render.toLowerCase().includes(value.toLowerCase()),
+			)}
 			onChange={(valueNext: string) => {
 				setValue(valueNext)
 			}}
 			queryPlaceholder="Filter..."
 		/>
 	)
+}
+
+ComboboxSelect_test.run = async ({ user, screen, captureScreenshot }) => {
+	const combobox = await screen.findByLabel('Select a color')
+	await captureScreenshot(combobox, { name: 'initial' })
+
+	user.click(combobox)
+	const filterInput = await screen.findByPlaceholder('Filter...')
+	await captureScreenshot({ name: 'filter opened' })
+
+	user.type(filterInput, 're')
+	await captureScreenshot({ name: 'filter entered' })
+
+	const redOption = await screen.findByText('Red')
+	user.click(redOption)
 }
