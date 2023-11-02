@@ -198,9 +198,7 @@ export const ComboboxSelect_test = () => {
 			label={label}
 			value={value}
 			valueRender={value || label}
-			options={options.filter((option) =>
-				option.render.toLowerCase().includes(value.toLowerCase()),
-			)}
+			options={options}
 			onChange={(valueNext: string) => {
 				setValue(valueNext)
 			}}
