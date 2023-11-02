@@ -196,7 +196,7 @@ export const ComboboxSelect_test = () => {
 		<ComboboxSelect
 			label="Label"
 			value={value}
-			valueRender={value}
+			valueRender={value || 'Select a color'}
 			options={options}
 			onChange={(valueNext: string) => {
 				setValue(valueNext)
