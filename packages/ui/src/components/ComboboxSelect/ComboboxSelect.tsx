@@ -210,7 +210,7 @@ export const ComboboxSelect_test = () => {
 }
 
 ComboboxSelect_test.run = async ({ user, screen, captureScreenshot }) => {
-	const combobox = await screen.findByLabelText('Select a color')
+	const combobox = await screen.findByRole('combobox')
 	await captureScreenshot(combobox, { name: 'initial' })
 
 	user.click(combobox)
