@@ -16,6 +16,7 @@ export const ButtonVariants = () => {
 
 	return (
 		<Box display="flex" gap="12" flexDirection="column">
+			HI
 			{kind.map(($kind, idx) => (
 				<Box key={idx} display="flex" gap="6" flexDirection="column">
 					{emphasis.map(($emphasis, jdx) => (
