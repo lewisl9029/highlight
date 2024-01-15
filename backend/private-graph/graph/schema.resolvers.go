@@ -229,8 +229,8 @@ func (r *errorObjectResolver) Session(ctx context.Context, obj *model.ErrorObjec
 }
 
 // Params is the resolver for the params field.
-func (r *errorSegmentResolver) Params(ctx context.Context, obj *model.ErrorSegment) (*model.ErrorSearchParams, error) {
-	params := &model.ErrorSearchParams{}
+func (r *errorSegmentResolver) Params(ctx context.Context, obj *model.ErrorSegment) (*model.SearchParams, error) {
+	params := &model.SearchParams{}
 	if obj.Params == nil {
 		return params, nil
 	}
@@ -1189,6 +1189,82 @@ func (r *mutationResolver) DeleteErrorSegment(ctx context.Context, segmentID int
 	return &model.T, nil
 }
 
+// CreateSavedSegment is the resolver for the createSavedSegment field.
+func (r *mutationResolver) CreateSavedSegment(ctx context.Context, projectID int, name string, entityType modelInputs.SavedSegmentEntityType, query string) (*model.SavedSegment, error) {
+	if _, err := r.isAdminInProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	modelParams := SavedSegmentQueryToParams(query)
+	// Convert to json to store in the db.
+	paramBytes, err := json.Marshal(modelParams)
+	if err != nil {
+		return nil, err
+	}
+	paramString := string(paramBytes)
+
+	// check if such a segment exists
+	var count int64
+	if err := r.DB.WithContext(ctx).Model(&model.SavedSegment{}).Where("project_id = ? AND name = ? AND entity_type = ?", projectID, name, entityType).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, e.New("saved segment with this name already exists")
+	}
+
+	savedSegment := &model.SavedSegment{
+		ProjectID:  projectID,
+		Name:       name,
+		EntityType: entityType,
+		Params:     paramString,
+	}
+	if err := r.DB.WithContext(ctx).Create(savedSegment).Error; err != nil {
+		return nil, err
+	}
+	return savedSegment, nil
+}
+
+// EditSavedSegment is the resolver for the editSavedSegment field.
+func (r *mutationResolver) EditSavedSegment(ctx context.Context, id int, projectID int, name string, entityType modelInputs.SavedSegmentEntityType, query string) (*bool, error) {
+	if _, err := r.isAdminInProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	modelParams := SavedSegmentQueryToParams(query)
+	// Convert to json to store in the db.
+	paramBytes, err := json.Marshal(modelParams)
+	if err != nil {
+		return nil, err
+	}
+	paramString := string(paramBytes)
+
+	var count int64
+	if err := r.DB.WithContext(ctx).Model(&model.SavedSegment{}).Where("project_id = ? AND name = ? AND entity_type = ? AND id <> ?", projectID, name, entityType, id).Count(&count).Error; err != nil {
+		return nil, err
+	}
+	if count > 0 {
+		return nil, e.New("saved segment with this name already exists")
+	}
+
+	if err := r.DB.WithContext(ctx).Model(&model.SavedSegment{}).Where("id = ?", id).Updates(&model.SavedSegment{
+		Params: paramString,
+		Name:   name,
+	}).Error; err != nil {
+		return nil, err
+	}
+	return &model.T, nil
+}
+
+// DeleteSavedSegment is the resolver for the deleteSavedSegment field.
+func (r *mutationResolver) DeleteSavedSegment(ctx context.Context, segmentID int) (*bool, error) {
+	_, err := r.isAdminSavedSegmentOwner(ctx, segmentID)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.DB.Where("id = ?", segmentID).Delete(&model.SavedSegment{}).Error; err != nil {
+		return nil, err
+	}
+	return &model.T, nil
+}
+
 // CreateOrUpdateStripeSubscription is the resolver for the createOrUpdateStripeSubscription field.
 func (r *mutationResolver) CreateOrUpdateStripeSubscription(ctx context.Context, workspaceID int) (*string, error) {
 	workspace, err := r.isAdminInWorkspace(ctx, workspaceID)
@@ -1336,7 +1412,7 @@ func (r *mutationResolver) SaveBillingPlan(ctx context.Context, workspaceID int,
 
 	columns := []interface{}{"errors_retention_period", "retention_period"}
 	if settings.EnableBillingLimits {
-		columns = append(columns, "sessions_max_cents", "errors_max_cents", "logs_max_cents")
+		columns = append(columns, "sessions_max_cents", "errors_max_cents", "logs_max_cents", "traces_max_cents")
 	}
 	if err := r.DB.WithContext(ctx).Model(&workspace).
 		Select(columns[0], columns[1:]...).
@@ -4688,28 +4764,18 @@ func (r *queryResolver) Resources(ctx context.Context, sessionSecureID string) (
 
 // WebVitals is the resolver for the web_vitals field.
 func (r *queryResolver) WebVitals(ctx context.Context, sessionSecureID string) ([]*model.Metric, error) {
+	s, err := r.canAdminViewSession(ctx, sessionSecureID)
+	if err != nil {
+		return nil, nil
+	}
+
 	webVitalNames := []string{
 		"CLS", "FCP", "FID", "LCP", "TTFB",
 	}
-	webVitals := []*model.Metric{}
-	s, err := r.canAdminViewSession(ctx, sessionSecureID)
-	if err != nil {
-		return webVitals, nil
-	}
 
-	if err := r.DB.WithContext(ctx).Raw(`
-	WITH filtered_group_ids AS (
-		SELECT id
-		FROM metric_groups
-		WHERE session_id = ?
-		LIMIT 100000
-	  )
-	  SELECT metrics.*
-	  FROM metrics
-	  WHERE metrics.name in ?
-	  AND metric_group_id in (SELECT * FROM filtered_group_ids)`, s.ID, webVitalNames).Find(&webVitals).Error; err != nil {
-		log.WithContext(ctx).Error(err)
-		return webVitals, nil
+	webVitals, err := r.ClickhouseClient.QuerySessionCustomMetrics(ctx, s.ProjectID, sessionSecureID, webVitalNames)
+	if err != nil {
+		return nil, err
 	}
 
 	return webVitals, nil
@@ -6945,6 +7011,19 @@ func (r *queryResolver) ErrorSegments(ctx context.Context, projectID int) ([]*mo
 	return segments, nil
 }
 
+// SavedSegments is the resolver for the saved_segments field.
+func (r *queryResolver) SavedSegments(ctx context.Context, projectID int, entityType modelInputs.SavedSegmentEntityType) ([]*model.SavedSegment, error) {
+	if _, err := r.isAdminInProjectOrDemoProject(ctx, projectID); err != nil {
+		return nil, err
+	}
+	// list of maps, where each map represents a field query.
+	segments := []*model.SavedSegment{}
+	if err := r.DB.WithContext(ctx).Model(model.SavedSegment{}).Where("project_id = ? AND entity_type = ?", projectID, entityType).Find(&segments).Error; err != nil {
+		log.WithContext(ctx).Errorf("error querying saved segments from project: %v", err)
+	}
+	return segments, nil
+}
+
 // APIKeyToOrgID is the resolver for the api_key_to_org_id field.
 func (r *queryResolver) APIKeyToOrgID(ctx context.Context, apiKey string) (*int, error) {
 	var projectId int
@@ -7795,6 +7874,15 @@ func (r *queryResolver) SessionsMetrics(ctx context.Context, projectID int, para
 }
 
 // Params is the resolver for the params field.
+func (r *savedSegmentResolver) Params(ctx context.Context, obj *model.SavedSegment) (*model.SearchParams, error) {
+	params := &model.SearchParams{}
+	if err := json.Unmarshal([]byte(obj.Params), params); err != nil {
+		return nil, e.Wrapf(err, "error unmarshaling saved segment params")
+	}
+	return params, nil
+}
+
+// Params is the resolver for the params field.
 func (r *segmentResolver) Params(ctx context.Context, obj *model.Segment) (*model.SearchParams, error) {
 	params := &model.SearchParams{}
 	if obj.Params == nil {
@@ -7878,31 +7966,19 @@ func (r *sessionResolver) TimelineIndicatorsURL(ctx context.Context, obj *model.
 
 // DeviceMemory is the resolver for the deviceMemory field.
 func (r *sessionResolver) DeviceMemory(ctx context.Context, obj *model.Session) (*int, error) {
-	var deviceMemory *int
-	metric := &model.Metric{}
-
-	if err := r.DB.WithContext(ctx).Raw(`
-	WITH filtered_group_ids AS (
-		SELECT id
-		FROM metric_groups
-		WHERE session_id = ?
-		LIMIT 100000
-	  )
-	  SELECT metrics.*
-	  FROM metrics
-	  WHERE metrics.name = ?
-	  AND metric_group_id in (SELECT * FROM filtered_group_ids)`, obj.ID, "DeviceMemory").Take(&metric).Error; err != nil {
-		if !e.Is(err, gorm.ErrRecordNotFound) {
-			log.WithContext(ctx).Error(err)
-		}
+	metrics, err := r.ClickhouseClient.QuerySessionCustomMetrics(ctx, obj.ProjectID, obj.SecureID, []string{
+		"DeviceMemory",
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	if metric != nil {
-		valueAsInt := int(metric.Value)
-		deviceMemory = &valueAsInt
+	if len(metrics) == 0 {
+		return nil, nil
 	}
 
-	return deviceMemory, nil
+	deviceMemory := int(metrics[0].Value)
+	return &deviceMemory, nil
 }
 
 // SessionFeedback is the resolver for the session_feedback field.
@@ -8150,6 +8226,9 @@ func (r *Resolver) Mutation() generated.MutationResolver { return &mutationResol
 // Query returns generated.QueryResolver implementation.
 func (r *Resolver) Query() generated.QueryResolver { return &queryResolver{r} }
 
+// SavedSegment returns generated.SavedSegmentResolver implementation.
+func (r *Resolver) SavedSegment() generated.SavedSegmentResolver { return &savedSegmentResolver{r} }
+
 // Segment returns generated.SegmentResolver implementation.
 func (r *Resolver) Segment() generated.SegmentResolver { return &segmentResolver{r} }
 
@@ -8186,6 +8265,7 @@ type matchedErrorObjectResolver struct{ *Resolver }
 type metricMonitorResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type savedSegmentResolver struct{ *Resolver }
 type segmentResolver struct{ *Resolver }
 type serviceResolver struct{ *Resolver }
 type sessionResolver struct{ *Resolver }
