@@ -8,7 +8,6 @@ import {
 	DFA,
 	Lexer,
 	LexerATNSimulator,
-	RuleContext,
 	PredictionContextCache,
 	Token,
 } from 'antlr4'
@@ -187,7 +186,7 @@ export default class SearchGrammarLexer extends Lexer {
 		0, 99, 101, 7, 12, 0, 0, 100, 99, 1, 0, 0, 0, 101, 102, 1, 0, 0, 0, 102,
 		100, 1, 0, 0, 0, 102, 103, 1, 0, 0, 0, 103, 104, 1, 0, 0, 0, 104, 105,
 		6, 17, 0, 0, 105, 36, 1, 0, 0, 0, 106, 107, 9, 0, 0, 0, 107, 38, 1, 0,
-		0, 0, 5, 0, 83, 89, 97, 102, 1, 6, 0, 0,
+		0, 0, 5, 0, 83, 89, 97, 102, 1, 0, 1, 0,
 	]
 
 	private static __ATN: ATN

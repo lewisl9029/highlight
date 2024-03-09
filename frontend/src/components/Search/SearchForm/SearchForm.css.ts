@@ -49,47 +49,45 @@ export const comboboxNotEmpty = style({
 	WebkitTextFillColor: 'transparent',
 })
 
-export const whitspaceTag = style({
-	letterSpacing: WORD_SPACING,
-})
-
 export const comboboxTagsContainer = style([
 	typographyStyles.family.body,
 	typographyStyles.size.small,
 	{
-		alignItems: 'center',
-		display: 'flex',
-		flexWrap: 'nowrap',
+		display: 'block',
 		fontWeight: '500 !important',
-		maxWidth: 'calc(100% - 26px)',
-		overflow: 'hidden',
-		paddingRight: 8,
+		maxWidth: 'calc(100% - 24px)',
+		paddingBottom: 12,
+		paddingRight: 6,
+		paddingTop: 12,
 		pointerEvents: 'none',
 		position: 'absolute',
-		whiteSpace: 'pre',
+		whiteSpace: 'pre-wrap',
 	},
 ])
 
 export const comboboxTag = style({
-	display: 'inline-flex',
+	boxShadow: `0 0 0 1px ${vars.theme.static.divider.weak}`,
+	borderRadius: vars.borderRadius[4],
+	display: 'inline',
 	fontFeatureSettings: '"tnum" off', // disable tabular numbers
 	position: 'relative',
-	textOverflow: 'ellipsis',
-	whiteSpace: 'pre',
+	whiteSpace: 'pre-wrap',
+	height: 20,
+})
+
+export const token = style({
+	height: 20,
+	letterSpacing: 0,
 	wordSpacing: WORD_SPACING,
 })
 
-export const comboboxTagBackground = style({
-	border: vars.border.secondary,
-	borderRadius: vars.borderRadius[4],
-	height: 20,
-	letterSpacing: 'normal',
-	position: 'absolute',
-	top: 7,
-	left: -2,
-	bottom: 0,
-	right: -2,
-	width: 'calc(100% + 4px)',
+export const whitespaceToken = style({
+	letterSpacing: WORD_SPACING,
+	wordSpacing: 0,
+})
+
+export const errorToken = style({
+	backgroundColor: 'rgba(255, 9, 87, 0.1)',
 })
 
 export const comboboxTagActive = style({})
@@ -104,7 +102,7 @@ export const comboboxTagClose = style({
 	pointerEvents: 'auto',
 	opacity: 0,
 	right: -8,
-	top: 1,
+	top: -8,
 	zIndex: 1,
 })
 
@@ -117,19 +115,16 @@ export const comboboxTagErrorIndicator = style({
 	position: 'absolute',
 	pointerEvents: 'auto',
 	right: -8,
-	top: 1,
+	top: -8,
 	zIndex: 1,
 })
 
-globalStyle(
-	`${comboboxTagActive} ${comboboxTagBackground}, ${comboboxTag}:hover ${comboboxTagBackground}`,
-	{
-		backgroundColor: `color-mix(in srgb, ${vars.theme.static.surface.elevated} 50%, transparent)`,
-	},
-)
+globalStyle(`${comboboxTagActive}${comboboxTag}`, {
+	backgroundColor: `color-mix(in srgb, ${vars.theme.static.surface.elevated} 50%, transparent)`,
+})
 
-globalStyle(`${comboboxTagError} ${comboboxTagBackground}`, {
-	border: `1px solid ${vars.theme.static.content.sentiment.bad}`,
+globalStyle(`${comboboxTagError}${comboboxTag}`, {
+	boxShadow: `0 0 0 1px  ${vars.theme.static.content.sentiment.bad}`,
 })
 
 globalStyle(`${comboboxTag}:hover ${comboboxTagClose}`, {
@@ -167,8 +162,8 @@ export const comboboxItem = style({
 	alignItems: 'center',
 	justifyContent: 'space-between',
 	flexDirection: 'row',
-	height: 30,
 	padding: '0 10px',
+	minHeight: 30,
 	selectors: {
 		'&:hover': {
 			backgroundColor: vars.theme.interactive.fill.secondary.hover,

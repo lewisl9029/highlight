@@ -13,14 +13,19 @@ from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.sdk._logs import LoggerProvider, LogRecord
+from opentelemetry.sdk._logs import (
+    LoggerProvider,
+    LogRecord,
+    LogRecordProcessor,
+    LogData,
+)
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider, Span, SpanProcessor
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.semconv.resource import ResourceAttributes
 from opentelemetry.semconv.trace import SpanAttributes
-from opentelemetry.trace import INVALID_SPAN
+from opentelemetry.trace import INVALID_SPAN, get_current_span
 
 from highlight_io.integrations import Integration
 from highlight_io.integrations.boto import BotoIntegration
@@ -366,6 +371,9 @@ class H(object):
     def log_hook(self, span: Span, record: logging.LogRecord):
         if span and span.is_recording():
             ctx = span.get_span_context()
+            session_id, request_id = H._instance.get_highlight_context(
+                span.context.trace_id
+            )
             # record.created is sec but timestamp should be ns
             ts = int(record.created * 1000.0 * 1000.0 * 1000.0)
             attributes = span.attributes.copy()
@@ -373,6 +381,8 @@ class H(object):
             attributes[SpanAttributes.CODE_NAMESPACE] = record.module
             attributes[SpanAttributes.CODE_FILEPATH] = record.pathname
             attributes[SpanAttributes.CODE_LINENO] = record.lineno
+            attributes["highlight.trace_id"] = request_id
+            attributes["highlight.session_id"] = session_id
             attributes.update(record.args or {})
 
             message = record.getMessage()

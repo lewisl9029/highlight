@@ -15,14 +15,12 @@ import {
 	SearchFormProps,
 } from '@/components/Search/SearchForm/SearchForm'
 import { DEFAULT_OPERATOR } from '@/components/Search/SearchForm/utils'
-import {
-	useGetLogsKeysLazyQuery,
-	useGetLogsKeyValuesLazyQuery,
-} from '@/graph/generated/hooks'
+import { ProductType } from '@/graph/generated/schemas'
 import { useProjectId } from '@/hooks/useProjectId'
 import { LogsTable } from '@/pages/LogsPage/LogsTable/LogsTable'
 import { useGetLogs } from '@/pages/LogsPage/useGetLogs'
 import { useTrace } from '@/pages/Traces/TraceProvider'
+import analytics from '@/util/analytics'
 
 const startDate = moment().subtract(30, 'days').toDate()
 const endDate = moment().toDate()
@@ -61,6 +59,7 @@ export const TraceLogs: React.FC = () => {
 
 	useEffect(() => {
 		setQuery(traceId ? `trace_id${DEFAULT_OPERATOR}${traceId}` : '')
+		analytics.track('trace_logs_view')
 	}, [traceId])
 
 	return (
@@ -92,8 +91,7 @@ export const TraceLogs: React.FC = () => {
 						actions={SearchFormActions}
 						hideDatePicker
 						hideCreateAlert
-						fetchKeysLazyQuery={useGetLogsKeysLazyQuery}
-						fetchValuesLazyQuery={useGetLogsKeyValuesLazyQuery}
+						productType={ProductType.Logs}
 					/>
 					<Box height="full" pt="4" px="12" pb="12">
 						{(!loading && logEdges.length === 0) || !traceId ? (

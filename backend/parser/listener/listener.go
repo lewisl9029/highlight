@@ -18,9 +18,8 @@ var OperatorEqual Operator = "="
 var OperatorNotEqual Operator = "!="
 var OperatorNot Operator = "NOT"
 var OperatorLike Operator = "LIKE"
-var OperatorNotLike Operator = "NOT LIKE"
 var OperatorILike Operator = "ILIKE"
-var OperatorNotILike Operator = "NOT ILIKE"
+var OperatorRegExp Operator = "REGEXP"
 var OperatorContains Operator = "hasTokenCaseInsensitive"
 var OperatorGreaterThan Operator = ">"
 var OperatorGreaterThanOrEqualTo Operator = ">="
@@ -186,7 +185,20 @@ func (s *searchListener[T]) ExitOr_search_expr(ctx *parser.Or_search_exprContext
 }
 
 func (s *searchListener[T]) EnterKey_val_search_expr(ctx *parser.Key_val_search_exprContext) {}
-func (s *searchListener[T]) ExitKey_val_search_expr(ctx *parser.Key_val_search_exprContext)  {}
+func (s *searchListener[T]) ExitKey_val_search_expr(ctx *parser.Key_val_search_exprContext) {
+	if s.currentOp == "!=" {
+		rule := s.rules[len(s.rules)-1]
+		s.rules = s.rules[:len(s.rules)-1]
+		s.rules = append(s.rules, fmt.Sprintf("NOT (%s)", rule))
+
+		op := s.ops[len(s.ops)-1]
+		s.ops = s.ops[:len(s.ops)-1]
+		s.ops = append(s.ops, &FilterOperation{
+			Operator: OperatorNot,
+			Filters:  Filters{op},
+		})
+	}
+}
 
 func (s *searchListener[T]) EnterParen_search_expr(ctx *parser.Paren_search_exprContext) {}
 func (s *searchListener[T]) ExitParen_search_expr(ctx *parser.Paren_search_exprContext)  {}
@@ -226,6 +238,19 @@ func (s *searchListener[T]) ExitExists_op(ctx *parser.Exists_opContext) {
 	}
 
 	s.appendRules("")
+
+	if s.currentOp == "!=" {
+		rule := s.rules[len(s.rules)-1]
+		s.rules = s.rules[:len(s.rules)-1]
+		s.rules = append(s.rules, fmt.Sprintf("NOT (%s)", rule))
+
+		op := s.ops[len(s.ops)-1]
+		s.ops = s.ops[:len(s.ops)-1]
+		s.ops = append(s.ops, &FilterOperation{
+			Operator: OperatorNot,
+			Filters:  Filters{op},
+		})
+	}
 }
 
 func (s *searchListener[T]) EnterSearch_value(ctx *parser.Search_valueContext) {
@@ -275,8 +300,26 @@ func (s *searchListener[T]) appendRules(value string) {
 		filterKey = fmt.Sprintf("toString(%s)", filterKey)
 	}
 
-	if s.currentOp == ":" || s.currentOp == "=" {
-		if strings.Contains(value, "*") {
+	if s.currentOp == ":" || s.currentOp == "=" || s.currentOp == "!=" {
+		if strings.HasPrefix(value, "/") && strings.HasSuffix(value, "/") {
+			value = strings.Trim(value, "/")
+			if traceAttributeKey {
+				s.rules = append(s.rules, s.sb.Var(sqlbuilder.Buildf(s.attributesColumn+"[%s] REGEXP %s", s.currentKey, value)))
+				s.ops = append(s.ops, &FilterOperation{
+					Key:      s.currentKey,
+					Column:   s.attributesColumn,
+					Operator: OperatorRegExp,
+					Values:   []string{value},
+				})
+			} else {
+				s.rules = append(s.rules, s.sb.Var(sqlbuilder.Buildf(filterKey+" REGEXP %s", value)))
+				s.ops = append(s.ops, &FilterOperation{
+					Key:      filterKey,
+					Operator: OperatorRegExp,
+					Values:   []string{value},
+				})
+			}
+		} else if strings.Contains(value, "*") {
 			value = wildcardValue(value)
 
 			if traceAttributeKey {
@@ -309,44 +352,6 @@ func (s *searchListener[T]) appendRules(value string) {
 				s.ops = append(s.ops, &FilterOperation{
 					Key:      filterKey,
 					Operator: OperatorEqual,
-					Values:   []string{value},
-				})
-			}
-		}
-	} else if s.currentOp == "!=" {
-		if strings.Contains(value, "*") {
-			value = wildcardValue(value)
-
-			if traceAttributeKey {
-				s.rules = append(s.rules, s.sb.Var(sqlbuilder.Buildf(s.attributesColumn+"[%s] NOT ILIKE %s", s.currentKey, value)))
-				s.ops = append(s.ops, &FilterOperation{
-					Key:      s.currentKey,
-					Column:   s.attributesColumn,
-					Operator: OperatorNotLike,
-					Values:   []string{value},
-				})
-			} else {
-				s.rules = append(s.rules, s.sb.Var(sqlbuilder.Buildf(filterKey+" NOT ILIKE %s", value)))
-				s.ops = append(s.ops, &FilterOperation{
-					Key:      filterKey,
-					Operator: OperatorNotILike,
-					Values:   []string{value},
-				})
-			}
-		} else {
-			if traceAttributeKey {
-				s.rules = append(s.rules, s.sb.Var(sqlbuilder.Buildf(s.attributesColumn+"[%s] <> %s", s.currentKey, value)))
-				s.ops = append(s.ops, &FilterOperation{
-					Key:      s.currentKey,
-					Column:   s.attributesColumn,
-					Operator: OperatorNotEqual,
-					Values:   []string{value},
-				})
-			} else {
-				s.rules = append(s.rules, s.sb.NotEqual(filterKey, value))
-				s.ops = append(s.ops, &FilterOperation{
-					Key:      filterKey,
-					Operator: OperatorNotEqual,
 					Values:   []string{value},
 				})
 			}

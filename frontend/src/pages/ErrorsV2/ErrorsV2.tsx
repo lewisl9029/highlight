@@ -40,7 +40,7 @@ import analytics from '@util/analytics'
 import { useParams } from '@util/react-router/useParams'
 import { message } from 'antd'
 import clsx from 'clsx'
-import React, { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Helmet } from 'react-helmet'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -129,7 +129,7 @@ export default function ErrorsV2() {
 			return
 		}
 
-		analytics.page({ is_guest: !isLoggedIn })
+		analytics.page('Errors', { is_guest: !isLoggedIn })
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [error_secure_id])
 

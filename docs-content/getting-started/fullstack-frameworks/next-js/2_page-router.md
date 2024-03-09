@@ -6,6 +6,11 @@ createdAt: 2023-10-03T00:00:00.000Z
 updatedAt: 2023-10-03T00:00:00.000Z
 ---
 
+<EmbeddedVideo 
+  src="https://www.youtube.com/embed/QJkjrIvJ-YI"
+  title="Page Route for Next.js"
+  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+/>
 
 ## Installation
 
@@ -247,6 +252,13 @@ export async function getStaticProps() {
 
 ## API route instrumentation
 
+
+<EmbeddedVideo 
+  src="https://www.youtube.com/embed/4xDCu5jSBxo"
+  title="Next.js API Endpoints"
+  allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+/>
+
 ```hint
 This section applies to Next.js Page Router routes only. Each Page Router route must be wrapped individually.
 ```
@@ -282,6 +294,21 @@ export default withPageRouterHighlight(function handler(req: NextApiRequest, res
 		res.send('Success: pages/api/nodejs-page-router-test.ts')
 	}
 })
+```
+
+3. Add `highlightMiddleware` to enable cookie-based session tracking
+
+```typescript
+// middleware.ts
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+import { highlightMiddleware } from '@highlight-run/next/server'
+
+export function middleware(request: NextRequest) {
+	highlightMiddleware(request)
+
+	return NextResponse.next()
+}
 ```
 
 ## Validation

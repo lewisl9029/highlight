@@ -24,9 +24,6 @@ import {
 	SwitchButton,
 	Tag,
 	Text,
-	useForm,
-	useFormStore,
-	useMenu,
 } from '@highlight-run/ui/components'
 import {
 	DEFAULT_FREQUENCY,
@@ -57,6 +54,7 @@ import {
 import { useAlertsContext } from '@/pages/Alerts/AlertsContext/AlertsContext'
 import AlertNotifyForm from '@/pages/Alerts/components/AlertNotifyForm/AlertNotifyForm'
 import AlertTitleField from '@/pages/Alerts/components/AlertTitleField/AlertTitleField'
+import analytics from '@/util/analytics'
 
 import * as styles from './styles.css'
 
@@ -107,7 +105,7 @@ export const SessionAlertPage = () => {
 		return ALERT_CONFIGURATIONS[alertType]
 	}, [alertType])
 
-	const formStore = useFormStore<SessionAlertFormItem>({
+	const formStore = Form.useStore<SessionAlertFormItem>({
 		defaultValues: {
 			...SessionAlertDefaultValues,
 			type: alertType,
@@ -173,6 +171,10 @@ export const SessionAlertPage = () => {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [alert])
+
+	useEffect(() => {
+		analytics.page('Session Alert', { isCreate })
+	}, [isCreate])
 
 	const [updateSessionAlertMutation] = useUpdateSessionAlertMutation({
 		refetchQueries: [namedOperations.Query.GetAlertsPagePayload],
@@ -328,7 +330,7 @@ export const SessionAlertPage = () => {
 						const thresholdErr =
 							configuration.canControlThreshold &&
 							(!input.count_threshold ||
-								input.count_threshold < 1)
+								input.count_threshold < 0)
 						if (nameErr || thresholdErr) {
 							const errs = []
 							if (nameErr) {
@@ -342,7 +344,7 @@ export const SessionAlertPage = () => {
 							if (thresholdErr) {
 								formStore.setError(
 									formStore.names.threshold,
-									'Threshold cannot be less than 1',
+									'Threshold cannot be less than 0',
 								)
 								errs.push('threshold')
 							}
@@ -528,7 +530,7 @@ const SessionAlertForm = ({
 	type: SessionAlertType
 	configuration: AlertConfiguration
 }) => {
-	const formStore = useForm() as FormState<SessionAlertFormItem>
+	const formStore = Form.useContext() as FormState<SessionAlertFormItem>
 	const errors = formStore.useState('errors')
 	const { project_id } = useParams<{
 		project_id: string
@@ -796,9 +798,9 @@ const SessionAlertForm = ({
 }
 
 const ThresholdTypeConfiguration = () => {
-	const formStore = useForm()
+	const formStore = Form.useContext()!
 	const belowThreshold = formStore.useValue('belowThreshold')
-	const menuStore = useMenu()
+	const menuStore = Menu.useContext()!
 	const menuState = menuStore.getState()
 	return (
 		<>

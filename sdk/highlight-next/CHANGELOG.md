@@ -1,5 +1,56 @@
 # @highlight-run/next
 
+## 7.4.1
+
+### Patch Changes
+
+-   b70fb1a42: Moving js-cookie from devDependencies to dependencies
+-   Updated dependencies [e2483b6c3]
+-   Updated dependencies [062001317]
+    -   highlight.run@8.7.0
+    -   @highlight-run/cloudflare@2.1.5
+    -   @highlight-run/node@3.8.0
+
+## 7.4.0
+
+### Minor Changes
+
+-   5fdb420c4: Adding highlightMiddleware and cookie tracking to Next.js. Minor cleanup for Remix and Node.
+
+### Patch Changes
+
+-   Updated dependencies [c4eb0a17f]
+-   Updated dependencies [ed3ff4752]
+-   Updated dependencies [58ad9560f]
+-   Updated dependencies [5fdb420c4]
+-   Updated dependencies [9796ef086]
+    -   @highlight-run/node@3.8.0
+    -   highlight.run@8.6.0
+
+## 7.3.8
+
+### Patch Changes
+
+-   Updated dependencies [102710b30]
+    -   highlight.run@8.5.0
+    -   @highlight-run/node@3.7.3
+
+## 7.3.7
+
+### Patch Changes
+
+-   9c0e08bf3: support backend url for sourcemap uploader for self-hosted deployments
+-   Updated dependencies [9c0e08bf3]
+    -   @highlight-run/sourcemap-uploader@0.6.1
+
+## 7.3.6
+
+### Patch Changes
+
+-   Updated dependencies [52b260556]
+    -   highlight.run@8.4.1
+    -   @highlight-run/node@3.7.3
+
 ## 7.3.5
 
 ### Patch Changes

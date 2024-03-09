@@ -9,7 +9,7 @@ import { vars } from '@highlight-run/ui/vars'
 import { useParams } from '@util/react-router/useParams'
 import _ from 'lodash'
 import moment from 'moment'
-import React, { useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { Helmet } from 'react-helmet'
 import { Outlet } from 'react-router-dom'
 import { useQueryParam } from 'use-query-params'
@@ -24,14 +24,11 @@ import {
 	QueryParam,
 	SearchForm,
 } from '@/components/Search/SearchForm/SearchForm'
-import {
-	useGetTracesKeysLazyQuery,
-	useGetTracesKeyValuesLazyQuery,
-	useGetTracesMetricsQuery,
-} from '@/graph/generated/hooks'
+import { useGetTracesMetricsQuery } from '@/graph/generated/hooks'
 import {
 	MetricAggregator,
 	MetricColumn,
+	ProductType,
 	Trace,
 } from '@/graph/generated/schemas'
 import { useProjectId } from '@/hooks/useProjectId'
@@ -52,6 +49,7 @@ export const TracesPage: React.FC = () => {
 	const { trace_cursor: traceCursor } = useParams<{
 		trace_cursor: string
 	}>()
+	const textAreaRef = useRef<HTMLTextAreaElement | null>(null)
 	const [query, setQuery] = useQueryParam('query', QueryParam)
 	const {
 		startDate,
@@ -173,7 +171,7 @@ export const TracesPage: React.FC = () => {
 		return traceEdges.map((edge) => edge.node)
 	}, [traceEdges])
 
-	useEffect(() => analytics.page(), [])
+	useEffect(() => analytics.page('Traces'), [])
 
 	return (
 		<>
@@ -210,9 +208,9 @@ export const TracesPage: React.FC = () => {
 						hideCreateAlert
 						onFormSubmit={setQuery}
 						onDatesChange={updateSearchTime}
-						fetchKeysLazyQuery={useGetTracesKeysLazyQuery}
-						fetchValuesLazyQuery={useGetTracesKeyValuesLazyQuery}
+						productType={ProductType.Traces}
 						savedSegmentType="Trace"
+						textAreaRef={textAreaRef}
 					/>
 					<Box
 						display="flex"
@@ -250,18 +248,18 @@ export const TracesPage: React.FC = () => {
 											{selectedPreset ? (
 												<>
 													{moment(startDate).format(
-														'M/D/YY H:MM:SS A',
+														'M/D/YY h:mm:ss A',
 													)}{' '}
 													to Now
 												</>
 											) : (
 												<>
 													{moment(startDate).format(
-														'M/D/YY H:MM:SS',
+														'M/D/YY h:mm:ss',
 													)}{' '}
 													to{' '}
 													{moment(endDate).format(
-														'H:MM:SS A',
+														'h:mm:ss A',
 													)}
 												</>
 											)}
@@ -319,6 +317,7 @@ export const TracesPage: React.FC = () => {
 						resetMoreTraces={clearMoreTraces}
 						fetchMoreWhenScrolled={fetchMoreWhenScrolled}
 						loadingAfter={loadingAfter}
+						textAreaRef={textAreaRef}
 					/>
 				</Box>
 			</Box>

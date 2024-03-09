@@ -28,18 +28,13 @@ import { useParams } from '@util/react-router/useParams'
 import { playerTimeToSessionAbsoluteTime } from '@util/session/utils'
 import { formatTime, MillisToMinutesAndSeconds } from '@util/time'
 import _ from 'lodash'
-import React, {
-	useCallback,
-	useEffect,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-} from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 
 import { ErrorObject } from '@/graph/generated/schemas'
 import { useActiveNetworkResourceId } from '@/hooks/useActiveNetworkResourceId'
 import { styledVerticalScrollbar } from '@/style/common.css'
+import analytics from '@/util/analytics'
 
 import TextHighlighter from '../../../../../components/TextHighlighter/TextHighlighter'
 import Tooltip from '../../../../../components/Tooltip/Tooltip'
@@ -198,6 +193,10 @@ export const NetworkPage = ({
 			scrollFunction(currentResourceIdx)
 		}
 	}, [autoScroll, currentResourceIdx, scrollFunction, state, time])
+
+	useEffect(() => {
+		analytics.track('session_view-network-requests')
+	}, [])
 
 	return (
 		<Box cssClass={styles.container}>

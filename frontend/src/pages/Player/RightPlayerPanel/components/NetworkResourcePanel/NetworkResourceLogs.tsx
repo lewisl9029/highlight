@@ -16,15 +16,13 @@ import {
 	SearchFormProps,
 } from '@/components/Search/SearchForm/SearchForm'
 import { DEFAULT_OPERATOR } from '@/components/Search/SearchForm/utils'
-import {
-	useGetLogsKeysLazyQuery,
-	useGetLogsKeyValuesLazyQuery,
-} from '@/graph/generated/hooks'
+import { ProductType } from '@/graph/generated/schemas'
 import { useProjectId } from '@/hooks/useProjectId'
 import { FullScreenContainer } from '@/pages/LogsPage/LogsTable/FullScreenContainer'
 import { LogsTable } from '@/pages/LogsPage/LogsTable/LogsTable'
 import { useGetLogs } from '@/pages/LogsPage/useGetLogs'
 import { NetworkResource } from '@/pages/Player/Toolbar/DevToolsWindowV2/utils'
+import analytics from '@/util/analytics'
 import { useParams } from '@/util/react-router/useParams'
 
 // The amount of time before and after the request started/ended we want to show
@@ -83,6 +81,7 @@ export const NetworkResourceLogs: React.FC<{
 
 	useEffect(() => {
 		setQuery(requestId ? `trace_id${DEFAULT_OPERATOR}${requestId}` : '')
+		analytics.track('session_network-resource-logs_view')
 	}, [requestId])
 
 	return (
@@ -116,8 +115,7 @@ export const NetworkResourceLogs: React.FC<{
 						actions={SearchFormActions}
 						hideDatePicker
 						hideCreateAlert
-						fetchKeysLazyQuery={useGetLogsKeysLazyQuery}
-						fetchValuesLazyQuery={useGetLogsKeyValuesLazyQuery}
+						productType={ProductType.Logs}
 					/>
 					<Box height="full" pt="4" px="12" pb="12">
 						{(!loading && logEdges.length === 0) || !requestId ? (

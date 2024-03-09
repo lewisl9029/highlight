@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/highlight-run/highlight/backend/parser/listener"
 	"time"
+
+	"github.com/highlight-run/highlight/backend/parser/listener"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/highlight-run/highlight/backend/model"
@@ -30,18 +31,20 @@ type ClickhouseErrorGroup struct {
 }
 
 type ClickhouseErrorObject struct {
-	ProjectID      int32
-	Timestamp      int64
-	ErrorGroupID   int64
-	HasSession     bool
-	ID             int64
-	Browser        string
-	Environment    string
-	OSName         string
-	ServiceName    string
-	ServiceVersion string
-	ClientID       string
-	VisitedURL     string
+	ProjectID       int32
+	Timestamp       int64
+	ErrorGroupID    int64
+	HasSession      bool
+	ID              int64
+	Browser         string
+	Environment     string
+	OSName          string
+	ServiceName     string
+	ServiceVersion  string
+	ClientID        string
+	VisitedURL      string
+	TraceID         string
+	SecureSessionID string
 }
 
 const ErrorGroupsTable = "error_groups"
@@ -105,27 +108,36 @@ func (client *Client) WriteErrorObjects(ctx context.Context, objects []*model.Er
 
 		hasSession := false
 		clientId := ""
+		secureSessionId := ""
 		if object.SessionID != nil {
 			relatedSession := sessionsById[*object.SessionID]
 			if relatedSession != nil {
 				clientId = relatedSession.ClientID
 				hasSession = !relatedSession.Excluded
+				secureSessionId = relatedSession.SecureID
 			}
 		}
 
+		traceId := ""
+		if object.TraceID != nil {
+			traceId = *object.TraceID
+		}
+
 		chEg := ClickhouseErrorObject{
-			ProjectID:      int32(object.ProjectID),
-			Timestamp:      object.Timestamp.UTC().UnixMicro(),
-			ErrorGroupID:   int64(object.ErrorGroupID),
-			HasSession:     hasSession,
-			ID:             int64(object.ID),
-			Browser:        object.Browser,
-			Environment:    object.Environment,
-			OSName:         object.OS,
-			ServiceName:    object.ServiceName,
-			ServiceVersion: object.ServiceVersion,
-			ClientID:       clientId,
-			VisitedURL:     object.URL,
+			ProjectID:       int32(object.ProjectID),
+			Timestamp:       object.Timestamp.UTC().UnixMicro(),
+			ErrorGroupID:    int64(object.ErrorGroupID),
+			HasSession:      hasSession,
+			ID:              int64(object.ID),
+			Browser:         object.Browser,
+			Environment:     object.Environment,
+			OSName:          object.OS,
+			ServiceName:     object.ServiceName,
+			ServiceVersion:  object.ServiceVersion,
+			ClientID:        clientId,
+			VisitedURL:      object.URL,
+			TraceID:         traceId,
+			SecureSessionID: secureSessionId,
 		}
 
 		chObjects = append(chObjects, &chEg)
@@ -141,7 +153,7 @@ func (client *Client) WriteErrorObjects(ctx context.Context, objects []*model.Er
 			NewStruct(new(ClickhouseErrorObject)).
 			InsertInto(ErrorObjectsTable, chObjects...).
 			BuildWithFlavor(sqlbuilder.ClickHouse)
-		sql, args = replaceTimestampInserts(sql, args, 12, map[int]bool{1: true}, MicroSeconds)
+		sql, args = replaceTimestampInserts(sql, args, 14, map[int]bool{1: true}, MicroSeconds)
 		return client.conn.Exec(chCtx, sql, args...)
 	}
 
@@ -540,47 +552,43 @@ func (client *Client) QueryErrorHistogram(ctx context.Context, projectId int, qu
 var ErrorObjectsTableConfig = model.TableConfig[modelInputs.ReservedErrorObjectKey]{
 	TableName: ErrorObjectsTable,
 	KeysToColumns: map[modelInputs.ReservedErrorObjectKey]string{
-		modelInputs.ReservedErrorObjectKeySessionSecureID: "SessionSecureID",
-		modelInputs.ReservedErrorObjectKeyRequestID:       "RequestID",
-		modelInputs.ReservedErrorObjectKeyTraceID:         "TraceID",
-		modelInputs.ReservedErrorObjectKeySpanID:          "SpanID",
-		modelInputs.ReservedErrorObjectKeyLogCursor:       "LogCursor",
-		modelInputs.ReservedErrorObjectKeyEvent:           "Event",
-		modelInputs.ReservedErrorObjectKeyType:            "Type",
-		modelInputs.ReservedErrorObjectKeyURL:             "URL",
-		modelInputs.ReservedErrorObjectKeySource:          "Source",
-		modelInputs.ReservedErrorObjectKeyStackTrace:      "StackTrace",
-		modelInputs.ReservedErrorObjectKeyTimestamp:       "Timestamp",
-		modelInputs.ReservedErrorObjectKeyPayload:         "Payload",
-		modelInputs.ReservedErrorObjectKeyServiceName:     "Service.Name",
-		modelInputs.ReservedErrorObjectKeyServiceVersion:  "Service.Version",
+		modelInputs.ReservedErrorObjectKeyBrowser:         "Browser",
+		modelInputs.ReservedErrorObjectKeyClientID:        "ClientID",
 		modelInputs.ReservedErrorObjectKeyEnvironment:     "Environment",
+		modelInputs.ReservedErrorObjectKeyHasSession:      "HasSession",
+		modelInputs.ReservedErrorObjectKeyOsName:          "OSName",
+		modelInputs.ReservedErrorObjectKeySecureSessionID: "SecureSessionID",
+		modelInputs.ReservedErrorObjectKeyServiceName:     "ServiceName",
+		modelInputs.ReservedErrorObjectKeyServiceVersion:  "ServiceVersion",
+		modelInputs.ReservedErrorObjectKeyTimestamp:       "Timestamp",
+		modelInputs.ReservedErrorObjectKeyTraceID:         "TraceID",
+		modelInputs.ReservedErrorObjectKeyVisitedURL:      "VisitedURL",
 	},
-	BodyColumn:   "Event",
 	ReservedKeys: modelInputs.AllReservedErrorObjectKey,
 }
 
-var errorsJoinedTableConfig = model.TableConfig[modelInputs.ReservedErrorObjectKey]{
+var errorsJoinedTableConfig = model.TableConfig[modelInputs.ReservedErrorsJoinedKey]{
 	TableName: "errors_joined_vw",
-	KeysToColumns: map[modelInputs.ReservedErrorObjectKey]string{
-		modelInputs.ReservedErrorObjectKeyBrowser:        "Browser",
-		modelInputs.ReservedErrorObjectKeyEnvironment:    "Environment",
-		modelInputs.ReservedErrorObjectKeyEvent:          "Event",
-		modelInputs.ReservedErrorObjectKeyHasSessions:    "HasSession",
-		modelInputs.ReservedErrorObjectKeyOs:             "OSName",
-		modelInputs.ReservedErrorObjectKeyServiceName:    "ServiceName",
-		modelInputs.ReservedErrorObjectKeyServiceVersion: "ServiceVersion",
-		modelInputs.ReservedErrorObjectKeyTag:            "ErrorTagTitle",
-		modelInputs.ReservedErrorObjectKeyType:           "Type",
-		modelInputs.ReservedErrorObjectKeyURL:            "VisitedURL",
-		modelInputs.ReservedErrorObjectKeyTimestamp:      "Timestamp",
-		modelInputs.ReservedErrorObjectKeyStatus:         "Status",
+	KeysToColumns: map[modelInputs.ReservedErrorsJoinedKey]string{
+		modelInputs.ReservedErrorsJoinedKeyBrowser:        "Browser",
+		modelInputs.ReservedErrorsJoinedKeyClientID:       "ClientID",
+		modelInputs.ReservedErrorsJoinedKeyEnvironment:    "Environment",
+		modelInputs.ReservedErrorsJoinedKeyEvent:          "Event",
+		modelInputs.ReservedErrorsJoinedKeyHasSession:     "HasSession",
+		modelInputs.ReservedErrorsJoinedKeyOsName:         "OSName",
+		modelInputs.ReservedErrorsJoinedKeyServiceName:    "ServiceName",
+		modelInputs.ReservedErrorsJoinedKeyServiceVersion: "ServiceVersion",
+		modelInputs.ReservedErrorsJoinedKeyTag:            "ErrorTagTitle",
+		modelInputs.ReservedErrorsJoinedKeyType:           "Type",
+		modelInputs.ReservedErrorsJoinedKeyVisitedURL:     "VisitedURL",
+		modelInputs.ReservedErrorsJoinedKeyTimestamp:      "Timestamp",
+		modelInputs.ReservedErrorsJoinedKeyStatus:         "Status",
 	},
 	BodyColumn:   "Event",
-	ReservedKeys: modelInputs.AllReservedErrorObjectKey,
+	ReservedKeys: modelInputs.AllReservedErrorsJoinedKey,
 }
 
-var errorsSampleableTableConfig = sampleableTableConfig[modelInputs.ReservedErrorObjectKey]{
+var errorsSampleableTableConfig = sampleableTableConfig[modelInputs.ReservedErrorsJoinedKey]{
 	tableConfig: errorsJoinedTableConfig,
 	useSampling: func(time.Duration) bool {
 		return false
@@ -588,9 +596,22 @@ var errorsSampleableTableConfig = sampleableTableConfig[modelInputs.ReservedErro
 }
 
 func ErrorMatchesQuery(errorObject *model2.BackendErrorObjectInput, filters listener.Filters) bool {
-	return matchesQuery(errorObject, ErrorObjectsTableConfig, filters)
+	return matchesQuery(errorObject, errorsJoinedTableConfig, filters)
 }
 
 func (client *Client) ReadErrorsMetrics(ctx context.Context, projectID int, params modelInputs.QueryInput, column string, metricTypes []modelInputs.MetricAggregator, groupBy []string, nBuckets *int, bucketBy string, limit *int, limitAggregator *modelInputs.MetricAggregator, limitColumn *string) (*modelInputs.MetricsBuckets, error) {
 	return readMetrics(ctx, client, errorsSampleableTableConfig, projectID, params, column, metricTypes, groupBy, nBuckets, bucketBy, limit, limitAggregator, limitColumn)
+}
+
+func (client *Client) ErrorsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time) ([]string, error) {
+	var tableName string
+	if ok := modelInputs.ReservedErrorGroupKey(keyName).IsValid(); ok {
+		tableName = ErrorGroupsTable
+	} else if ok := modelInputs.ReservedErrorObjectKey(keyName).IsValid(); ok {
+		tableName = ErrorObjectsTable
+	} else {
+		return nil, fmt.Errorf("unknown error key %s", keyName)
+	}
+
+	return client.QueryErrorFieldValues(ctx, projectID, 10, tableName, keyName, "", startDate, endDate)
 }

@@ -9,7 +9,6 @@ import {
 	IconSolidSwitchHorizontal,
 	Tabs,
 	Text,
-	useFormStore,
 } from '@highlight-run/ui/components'
 import { themeVars } from '@highlight-run/ui/theme'
 import { useProjectId } from '@hooks/useProjectId'
@@ -82,7 +81,7 @@ const DevToolsWindowV2: React.FC<
 		(level) => level !== LogLevelValue.All,
 	) as unknown as LogLevel[]
 
-	const formStore = useFormStore({
+	const formStore = Form.useStore({
 		defaultValues: {
 			search: '',
 		},
@@ -326,13 +325,12 @@ const DevToolsWindowV2: React.FC<
 													levels: relevantLevelsForRequest,
 													sources,
 												})}
-												target="_blank"
 												style={{ display: 'flex' }}
 											>
 												<Button
 													size="xSmall"
 													kind="secondary"
-													trackingId="showInLogViewer"
+													trackingId="session_show-in-log-viewer_click"
 													cssClass={styles.autoScroll}
 													iconLeft={
 														<IconSolidLogs

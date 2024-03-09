@@ -4,11 +4,11 @@ import {
 	useGetLogsRelatedResourcesQuery,
 } from '@graph/hooks'
 import { GetLogsQuery, GetLogsQueryVariables } from '@graph/operations'
-import { LogEdge, PageInfo } from '@graph/schemas'
 import * as Types from '@graph/schemas'
+import { LogEdge, PageInfo } from '@graph/schemas'
 import { usePollQuery } from '@util/search'
 import moment from 'moment'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { TIME_FORMAT } from '@/components/Search/SearchForm/constants'
 
@@ -78,6 +78,38 @@ export const useGetLogs = ({
 		fetchPolicy: 'network-only',
 	})
 
+	const logResultMetadata = useMemo(() => {
+		const logTraceIdSet = new Set()
+		const cursors = []
+		let latestLogTime, earliestLogTime
+
+		if (data?.logs.edges.length) {
+			cursors.push(data.logs.edges[0].cursor)
+
+			for (const edge of data.logs.edges) {
+				if (edge.node.traceID) {
+					logTraceIdSet.add(edge.node.traceID)
+				}
+
+				if (!latestLogTime || latestLogTime < edge.node.timestamp) {
+					latestLogTime = edge.node.timestamp
+				}
+
+				if (!earliestLogTime || earliestLogTime > edge.node.timestamp) {
+					earliestLogTime = edge.node.timestamp
+				}
+			}
+		}
+
+		return {
+			cursors,
+			traceIds: Array.from(logTraceIdSet) as string[],
+			endDate: latestLogTime || endDate,
+			startDate: earliestLogTime || startDate,
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [data?.logs.edges])
+
 	const { numMore, reset } = usePollQuery<
 		GetLogsQuery,
 		GetLogsQueryVariables
@@ -91,12 +123,14 @@ export const useGetLogs = ({
 				params: {
 					query,
 					date_range: {
-						start_date: moment(endDate).format(TIME_FORMAT),
+						start_date: moment(logResultMetadata.endDate).format(
+							TIME_FORMAT,
+						),
 						end_date: moment().format(TIME_FORMAT),
 					},
 				},
 			}),
-			[endDate, logCursor, project_id, query],
+			[logCursor, logResultMetadata.endDate, project_id, query],
 		),
 		moreDataQuery,
 		getResultCount: useCallback((result) => {
@@ -106,19 +140,19 @@ export const useGetLogs = ({
 		}, []),
 	})
 
-	const logTraceIds =
-		data?.logs.edges.reduce((acc, e) => {
-			if (e.node.traceID) {
-				acc.push(e.node.traceID)
-			}
-			return acc
-		}, [] as string[]) || []
-
 	const { data: logRelatedResources } = useGetLogsRelatedResourcesQuery({
 		variables: {
 			project_id: project_id!,
-			log_cursors: data?.logs.edges.map((e) => e.cursor) || [],
-			trace_ids: logTraceIds,
+			log_cursors: logResultMetadata.cursors,
+			trace_ids: logResultMetadata.traceIds,
+			date_range: {
+				start_date: moment(logResultMetadata.startDate)
+					.subtract(5, 'minutes')
+					.format(TIME_FORMAT),
+				end_date: moment(logResultMetadata.endDate)
+					.add(5, 'minutes')
+					.format(TIME_FORMAT),
+			},
 		},
 		skip: !data?.logs.edges.length,
 	})

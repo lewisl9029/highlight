@@ -23,9 +23,11 @@ import { useAlertsContext } from '@pages/Alerts/AlertsContext/AlertsContext'
 import MonitorConfiguration from '@pages/Alerts/MonitorConfiguration/MonitorConfiguration'
 import { useParams } from '@util/react-router/useParams'
 import { message } from 'antd'
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet'
 import { useNavigate } from 'react-router-dom'
+
+import analytics from '@/util/analytics'
 
 import layoutStyles from '../../components/layout/LeadAlignLayout.module.css'
 
@@ -148,6 +150,10 @@ const EditMonitorPage = ({
 			navigate(`/${project_id}/alerts`)
 		}
 	}, [alertsPayload, existingMonitor, loading, navigate, project_id])
+
+	useEffect(() => {
+		analytics.page('Edit Monitor')
+	}, [])
 
 	if (!metricToMonitorName) {
 		return null

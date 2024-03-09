@@ -10,17 +10,19 @@ import (
 
 	"github.com/highlight/highlight/sdk/highlight-go"
 
-	"github.com/highlight-run/highlight/backend/model"
 	"golang.org/x/exp/slices"
+
+	"github.com/highlight-run/highlight/backend/model"
 
 	"github.com/huandu/go-sqlbuilder"
 	e "github.com/pkg/errors"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/samber/lo"
+
 	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
 	"github.com/highlight-run/highlight/backend/util"
-	"github.com/samber/lo"
 )
 
 const TracesTable = "traces"
@@ -93,7 +95,7 @@ var TracesTableConfig = model.TableConfig[modelInputs.ReservedTraceKey]{
 	BodyColumn:       TracesTableNoDefaultConfig.BodyColumn,
 	AttributesColumn: TracesTableNoDefaultConfig.AttributesColumn,
 	SelectColumns:    TracesTableNoDefaultConfig.SelectColumns,
-	DefaultFilter:    fmt.Sprintf("%s!=%s", highlight.TraceTypeAttribute, highlight.TraceTypeHighlightInternal),
+	DefaultFilter:    fmt.Sprintf("%s!=%s %s!=%s", modelInputs.ReservedTraceKeySpanName, highlight.MetricSpanName, highlight.TraceTypeAttribute, highlight.TraceTypeHighlightInternal),
 }
 
 var tracesSamplingTableConfig = model.TableConfig[modelInputs.ReservedTraceKey]{
@@ -103,7 +105,7 @@ var tracesSamplingTableConfig = model.TableConfig[modelInputs.ReservedTraceKey]{
 	ReservedKeys:     modelInputs.AllReservedTraceKey,
 	AttributesColumn: "TraceAttributes",
 	SelectColumns:    traceColumns,
-	DefaultFilter:    fmt.Sprintf("%s!=%s", highlight.TraceTypeAttribute, highlight.TraceTypeHighlightInternal),
+	DefaultFilter:    fmt.Sprintf("%s!=%s %s!=%s", modelInputs.ReservedTraceKeySpanName, highlight.MetricSpanName, highlight.TraceTypeAttribute, highlight.TraceTypeHighlightInternal),
 }
 
 var tracesSampleableTableConfig = sampleableTableConfig[modelInputs.ReservedTraceKey]{
@@ -283,15 +285,17 @@ func (client *Client) ReadTraces(ctx context.Context, projectID int, params mode
 	}, nil
 }
 
-func (client *Client) ExistingTraceIds(ctx context.Context, projectID int, traceIDs []string) ([]string, error) {
+func (client *Client) ExistingTraceIds(ctx context.Context, projectID int, traceIDs []string, startDate time.Time, endDate time.Time) ([]string, error) {
 	sb := sqlbuilder.NewSelectBuilder()
 	var err error
 	var args []interface{}
 
-	sb.From(TracesByIdTable).
+	sb.From(TracesTable).
 		Select("DISTINCT TraceId").
 		Where(sb.Equal("ProjectId", projectID)).
-		Where(sb.In("TraceId", traceIDs))
+		Where(sb.In("TraceId", traceIDs)).
+		Where(sb.GreaterThan("Timestamp", startDate)).
+		Where(sb.LessThan("Timestamp", endDate))
 
 	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
 
@@ -318,26 +322,7 @@ func (client *Client) ExistingTraceIds(ctx context.Context, projectID int, trace
 	return existingTraceIds, rows.Err()
 }
 
-func (client *Client) ReadTrace(ctx context.Context, projectID int, traceID string) ([]*modelInputs.Trace, error) {
-	sb := sqlbuilder.NewSelectBuilder()
-	var err error
-	var args []interface{}
-
-	sb.From(TracesByIdTable).
-		Select("Timestamp, UUID, TraceId, SpanId, ParentSpanId, ProjectId, SecureSessionId, TraceState, SpanName, SpanKind, Duration, ServiceName, ServiceVersion, Environment, HasErrors, TraceAttributes, StatusCode, StatusMessage").
-		Where(sb.Equal("ProjectId", projectID)).
-		Where(sb.Equal("TraceId", traceID))
-
-	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
-
-	span, _ := util.StartSpanFromContext(ctx, "traces", util.ResourceName("ReadTrace"))
-
-	rows, err := client.conn.Query(ctx, sql, args...)
-	if err != nil {
-		span.Finish(err)
-		return nil, err
-	}
-
+func getTracesFromRows(rows driver.Rows) ([]*modelInputs.Trace, error) {
 	var seenUUIDs = map[string]struct{}{}
 	var traces []*modelInputs.Trace
 	for rows.Next() {
@@ -379,9 +364,70 @@ func (client *Client) ReadTrace(ctx context.Context, projectID int, traceID stri
 		return a.Timestamp.Before(b.Timestamp)
 	})
 
-	span.Finish(rows.Err())
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
 
-	return traces, rows.Err()
+	return traces, nil
+}
+
+func (client *Client) ReadTrace(ctx context.Context, projectID int, traceID string) ([]*modelInputs.Trace, error) {
+	sb := sqlbuilder.NewSelectBuilder()
+	var err error
+	var args []interface{}
+
+	sb.From(TracesByIdTable).
+		Select("Timestamp, UUID, TraceId, SpanId, ParentSpanId, ProjectId, SecureSessionId, TraceState, SpanName, SpanKind, Duration, ServiceName, ServiceVersion, Environment, HasErrors, TraceAttributes, StatusCode, StatusMessage").
+		Where(sb.Equal("ProjectId", projectID)).
+		Where(sb.Equal("TraceId", traceID))
+
+	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+
+	span, _ := util.StartSpanFromContext(ctx, "traces", util.ResourceName("ReadTrace"))
+
+	rows, err := client.conn.Query(ctx, sql, args...)
+	if err != nil {
+		span.Finish(err)
+		return nil, err
+	}
+
+	traces, err := getTracesFromRows(rows)
+	if err != nil {
+		span.Finish(err)
+		return nil, err
+	}
+
+	span.Finish()
+
+	if len(traces) > 0 {
+		return traces, nil
+	}
+
+	span, _ = util.StartSpanFromContext(ctx, "traces", util.ResourceName("ReadTraceFallback"))
+
+	sb.From(TracesTable).
+		Select("Timestamp, UUID, TraceId, SpanId, ParentSpanId, ProjectId, SecureSessionId, TraceState, SpanName, SpanKind, Duration, ServiceName, ServiceVersion, Environment, HasErrors, TraceAttributes, StatusCode, StatusMessage").
+		Where(sb.Equal("ProjectId", projectID)).
+		Where(sb.Equal("TraceId", traceID)).
+		Where(sb.GE("Timestamp", time.Now().Add(-5*time.Minute))).
+		Where(sb.LE("Timestamp", time.Now()))
+
+	sql, args = sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+
+	rows, err = client.conn.Query(ctx, sql, args...)
+	if err != nil {
+		span.Finish(err)
+		return nil, err
+	}
+
+	traces, err = getTracesFromRows(rows)
+	if err != nil {
+		span.Finish(err)
+		return nil, err
+	}
+
+	span.Finish()
+	return traces, nil
 }
 
 func (client *Client) ReadTracesMetrics(ctx context.Context, projectID int, params modelInputs.QueryInput, column string, metricTypes []modelInputs.MetricAggregator, groupBy []string, nBuckets *int, bucketBy string, limit *int, limitAggregator *modelInputs.MetricAggregator, limitColumn *string) (*modelInputs.MetricsBuckets, error) {

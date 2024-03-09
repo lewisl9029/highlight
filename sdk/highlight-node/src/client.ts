@@ -154,7 +154,7 @@ export class Highlight {
 		}
 
 		if (!options.disableConsoleRecording) {
-			hookConsole(options.consoleMethodsToRecord, (c) => {
+			hookConsole(options, (c) => {
 				this.log(
 					c.date,
 					c.message,
@@ -500,8 +500,4 @@ function extractIncomingHttpHeaders(
 	} else {
 		return { secureSessionId: undefined, requestId: undefined }
 	}
-}
-
-async function wait(ms: number) {
-	return new Promise((resolve) => setTimeout(resolve, ms))
 }

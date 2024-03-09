@@ -1,5 +1,34 @@
 # highlight.run
 
+## 8.7.0
+
+### Minor Changes
+
+-   e2483b6c3: inline stylesheets by default
+
+## 8.6.0
+
+### Minor Changes
+
+-   58ad9560f: support custom serialization for log attributes to display cleaner message bodies
+
+### Patch Changes
+
+-   ed3ff4752: filter network request recording for highlight.io traffic
+-   9796ef086: report browser performance events as metrics
+
+## 8.5.0
+
+### Minor Changes
+
+-   102710b30: Make improvements to `requestResponseSanitizer` method to pass function in a body converted to json instead of a string.
+
+## 8.4.1
+
+### Patch Changes
+
+-   52b260556: fix innerText attribute change obfuscation
+
 ## 8.4.0
 
 ### Minor Changes
