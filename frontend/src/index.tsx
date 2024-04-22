@@ -416,7 +416,7 @@ const AuthenticationRoleRouter = () => {
 			{adminError && user ? (
 				<ErrorState
 					message={
-						`Seems like we had an issue with your login 😢. ` +
+						`!!!!Seems like we had an issue with your login 😢. ` +
 						`Feel free to log out and try again, or otherwise, ` +
 						`get in contact with us!`
 					}
