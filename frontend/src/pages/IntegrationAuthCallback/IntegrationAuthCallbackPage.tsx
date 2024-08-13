@@ -1,5 +1,6 @@
 import { Button } from '@components/Button'
 import { useSlackBot } from '@components/Header/components/ConnectHighlightWithSlackButton/utils/utils'
+import { toast } from '@components/Toaster'
 import {
 	AppLoadingState,
 	useAppLoadingContext,
@@ -24,14 +25,15 @@ import { useVercelIntegration } from '@pages/IntegrationsPage/components/VercelI
 import { VercelIntegrationSettings } from '@pages/IntegrationsPage/components/VercelIntegration/VercelIntegrationConfig'
 import { Landing } from '@pages/Landing/Landing'
 import { ApplicationContextProvider } from '@routers/AppRouter/context/ApplicationContext'
+import log from '@util/log'
 import { useParams } from '@util/react-router/useParams'
-import { message } from 'antd'
 import { H } from 'highlight.run'
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { StringParam, useQueryParams } from 'use-query-params'
 
 import { useAuthContext } from '@/authentication/AuthContext'
+import { RetentionPeriod } from '@/graph/generated/schemas'
 import { SIGN_IN_ROUTE } from '@/pages/Auth/AuthRouter'
 import { authRedirect } from '@/pages/Auth/utils'
 import { useGitlabIntegration } from '@/pages/IntegrationsPage/components/GitlabIntegration/utils'
@@ -57,7 +59,7 @@ const WorkspaceIntegrations = new Set<string>([
 
 const logError = (e: any) => {
 	H.consumeError(e)
-	message
+	toast
 		.error('Failed to add integration to project. Please try again.')
 		?.then(console.error)
 }
@@ -151,7 +153,9 @@ const LinearIntegrationCallback = ({ code, projectId, next }: Props) => {
 				}
 
 				await addLinearIntegrationToProject(code, projectId)
-				message.success('Highlight is now synced with Linear!', 5)
+				toast.success('Highlight is now synced with Linear!', {
+					duration: 5000,
+				})
 			} catch (e: any) {
 				logError(e)
 			} finally {
@@ -180,11 +184,13 @@ const FrontIntegrationCallback = ({ code, projectId }: Props) => {
 		;(async () => {
 			try {
 				await addFrontIntegrationToProject(code, projectId)
-				message.success('Highlight is now synced with Front!', 5)
+				toast.success('Highlight is now synced with Front!', {
+					duration: 5000,
+				})
 			} catch (e: any) {
 				H.consumeError(e)
 				console.error(e)
-				message.error(
+				toast.error(
 					'Failed to add integration to project. Please try again.',
 				)
 			} finally {
@@ -234,7 +240,7 @@ const VercelIntegrationCallback = ({ code }: Props) => {
 	}
 
 	// If there are no projects, redirect to create one
-	if (data?.projects?.length === 0) {
+	if ((data?.projects?.length ?? 0) === 0) {
 		const callbackPath = `/callback/vercel${search}`
 
 		if (!isLoggedIn) {
@@ -257,6 +263,7 @@ const VercelIntegrationCallback = ({ code }: Props) => {
 				currentProject: undefined,
 				allProjects: data?.projects || [],
 				currentWorkspace: undefined,
+				joinableWorkspaces: [],
 				workspaces: [],
 			}}
 		>
@@ -304,11 +311,13 @@ const DiscordIntegrationCallback = ({ code, projectId, next }: Props) => {
 		;(async () => {
 			try {
 				await addDiscordIntegrationToProject(code, projectId)
-				message.success('Highlight is now synced with Discord!', 5)
+				toast.success('Highlight is now synced with Discord!', {
+					duration: 5000,
+				})
 			} catch (e: any) {
 				H.consumeError(e)
 				console.error(e)
-				message.error(
+				toast.error(
 					'Failed to add integration to project. Please try again.',
 				)
 			} finally {
@@ -344,29 +353,45 @@ const WorkspaceIntegrationCallback = ({
 	const navigate = useNavigate()
 	const { setLoadingState } = useAppLoadingContext()
 
-	useEffect(() => {
+	const add = useCallback(async () => {
+		log('IntegrationAuthCallback.tsx', 'add', {
+			setLoadingState,
+			code,
+			projectId,
+			addIntegration,
+			name,
+			type,
+			navigate,
+			next,
+		})
+
 		if (!addIntegration || !code) return
 		const usedCode = sessionStorage.getItem(codeSessionStorageKey) === code
 		if (!!code && usedCode) return
 
-		const redirectUrl = next || `/${projectId}/integrations/${type}`
-		;(async () => {
-			try {
-				sessionStorage.setItem(codeSessionStorageKey, code)
-				await addIntegration(code)
-				message.success(`Highlight is now synced with ${name}!`, 5)
-			} catch (e: any) {
-				H.consumeError(e)
-				console.error(e)
-				message.error(
-					'Failed to add integration to project. Please try again.',
-				)
-			} finally {
-				navigate(redirectUrl)
-				setLoadingState(AppLoadingState.LOADED)
-				sessionStorage.removeItem(codeSessionStorageKey)
-			}
-		})()
+		const redirectUrl =
+			next ||
+			(projectId
+				? `/${projectId}/integrations/${type}`
+				: `/integrations/${type}`)
+		try {
+			sessionStorage.setItem(codeSessionStorageKey, code)
+			log('IntegrationAuthCallback.tsx', 'calling addIntegration')
+			await addIntegration(code)
+			toast.success(`Highlight is now synced with ${name}!`, {
+				duration: 5000,
+			})
+		} catch (e: any) {
+			H.consumeError(e)
+			console.error(e)
+			toast.error(
+				'Failed to add integration to project. Please try again.',
+			)
+		} finally {
+			navigate(redirectUrl)
+			setLoadingState(AppLoadingState.LOADED)
+			sessionStorage.removeItem(codeSessionStorageKey)
+		}
 	}, [
 		setLoadingState,
 		code,
@@ -377,6 +402,11 @@ const WorkspaceIntegrationCallback = ({
 		navigate,
 		next,
 	])
+	useEffect(() => {
+		add().then(() =>
+			log('IntegrationAuthCallback.tsx', 'added integration'),
+		)
+	}, [add])
 
 	return null
 }
@@ -454,9 +484,9 @@ const AWSMPIntegrationCallback = ({ code }: { code: string }) => {
 					navigate(`/w/${workspaceId}/current-plan/success`)
 				})
 				.catch((e) => {
-					message.error(
+					toast.error(
 						`Error connecting AWS Marketplace Subscription: ${e.message}`,
-						5,
+						{ duration: 5000 },
 					)
 				})
 		}
@@ -610,6 +640,21 @@ const IntegrationAuthCallbackPage = () => {
 
 	const name = integrationName?.toLowerCase() || ''
 
+	const { data: workspacesData } = useGetWorkspacesQuery({
+		variables: {},
+		skip: !!workspaceId,
+	})
+	const currentWorkspaceId = workspacesData?.workspaces?.at(0)?.id ?? ''
+
+	if (name === 'vercel') {
+		return <VercelIntegrationCallback code={code} />
+	}
+
+	log('IntegrationAuthCallback.tsx', { workspaceId, currentWorkspaceId })
+	if (!workspaceId && !currentWorkspaceId) {
+		return null
+	}
+
 	if (WorkspaceIntegrations.has(name)) {
 		let cb = null
 		switch (name) {
@@ -665,10 +710,14 @@ const IntegrationAuthCallbackPage = () => {
 					loading: false,
 					currentProject: undefined,
 					allProjects: [],
-					currentWorkspace: workspaceId
-						? { id: workspaceId, name: '' }
-						: undefined,
+					currentWorkspace: {
+						id: workspaceId ?? currentWorkspaceId,
+						name: '',
+						retention_period: RetentionPeriod.SixMonths,
+						errors_retention_period: RetentionPeriod.SixMonths,
+					},
 					workspaces: [],
+					joinableWorkspaces: [],
 				}}
 			>
 				{' '}
@@ -706,8 +755,6 @@ const IntegrationAuthCallbackPage = () => {
 			return (
 				<FrontIntegrationCallback code={code} projectId={projectId} />
 			)
-		case 'vercel':
-			return <VercelIntegrationCallback code={code} />
 		case 'discord':
 			return (
 				<DiscordIntegrationCallback

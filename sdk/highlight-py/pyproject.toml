@@ -1,11 +1,12 @@
 [tool.poetry]
 name = "highlight-io"
-version = "0.6.16"
+version = "0.8.5"
 description = "Session replay and error monitoring: stop guessing why bugs happen!"
 license = "Apache-2.0"
 authors = [
     "Vadim Korolik <vadim@highlight.io>",
     "Jay Khatri <jay@highlight.io>",
+    "Spencer Amarantides <spencer@highlight.io>",
 ]
 readme = "README.md"
 homepage = "https://www.highlight.io"
@@ -25,51 +26,52 @@ classifiers = [
 packages = [{ include = "highlight_io" }]
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4"
-blinker = { version = ">=1", optional = true }
-django = { version = ">=3", optional = true }
-flask = { version = ">=2", optional = true }
-fastapi = { version = ">=0", optional = true }
-uvicorn = {version = ">=0", extras = ["standard"], optional = true }
-celery = { version = ">=5", optional = true }
-opentelemetry-instrumentation-celery = { version = "0.43b0", optional = true }
-redis = { version = ">=5", optional = true }
-opentelemetry-instrumentation-redis = { version = "0.43b0", optional = true }
-boto = { version = ">=2", optional = true }
-opentelemetry-instrumentation-boto = { version = "0.43b0", optional = true }
-boto3 = { version = ">=1", optional = true }
-opentelemetry-instrumentation-sqlalchemy = { version = "0.43b0", optional = true }
-sqlalchemy = { version = ">=2", optional = true }
-opentelemetry-instrumentation-boto3sqs = { version = "0.43b0", optional = true }
-opentelemetry-api = "1.22.0"
-opentelemetry-distro = { extras = ["otlp"], version = "0.43b0" }
-opentelemetry-exporter-otlp-proto-http = "1.22.0"
-opentelemetry-instrumentation = "0.43b0"
-opentelemetry-instrumentation-logging = "0.43b0"
-opentelemetry-proto = "1.22.0"
-opentelemetry-sdk = "1.22.0"
-opentelemetry-instrumentation-requests = "0.43b0"
+python = ">=3.9,<4"
+opentelemetry-api = "^1.25.0"
+opentelemetry-distro = "^0.46b0"
+opentelemetry-exporter-otlp-proto-http = "^1.25.0"
+opentelemetry-instrumentation = "^0.46b0"
+opentelemetry-proto = "^1.25.0"
+opentelemetry-sdk = "^1.25.0"
+opentelemetry-instrumentation-anthropic = "^0.25.3"
+opentelemetry-instrumentation-bedrock = "^0.25.3"
+opentelemetry-instrumentation-boto = "^0.46b0"
+opentelemetry-instrumentation-boto3sqs = "^0.46b0"
+opentelemetry-instrumentation-celery = "^0.46b0"
+opentelemetry-instrumentation-chromadb = "^0.25.3"
+opentelemetry-instrumentation-cohere = "^0.25.3"
+opentelemetry-instrumentation-haystack = "^0.25.3"
+opentelemetry-instrumentation-langchain = "^0.25.3"
+opentelemetry-instrumentation-llamaindex = "^0.25.3"
+opentelemetry-instrumentation-logging = "^0.46b0"
+opentelemetry-instrumentation-openai = "^0.25.3"
+opentelemetry-instrumentation-pinecone = "^0.25.3"
+opentelemetry-instrumentation-qdrant = "^0.25.3"
+opentelemetry-instrumentation-redis = "^0.46b0"
+opentelemetry-instrumentation-replicate = "^0.25.3"
+opentelemetry-instrumentation-requests = "^0.46b0"
+opentelemetry-instrumentation-sqlalchemy = "^0.46b0"
+opentelemetry-instrumentation-transformers = "^0.25.3"
+opentelemetry-instrumentation-vertexai = "^0.25.3"
+opentelemetry-instrumentation-watsonx = "^0.25.3"
+opentelemetry-instrumentation-weaviate = "^0.25.3"
+urllib3 = "^2.2.1"
+requests = "^2.31.0"
 
 [tool.poetry.group.dev.dependencies]
-azure-functions = ">=1"
-black = ">=22"
-functions-framework = ">=3"
-pytest = ">=7"
-pytest-mock = ">=3"
-pytest-cov = ">=4"
-pytest-asyncio = ">=0"
-loguru = ">=0"
-stripe = ">=6"
-
-[tool.poetry.extras]
-Boto = ["boto", "opentelemetry-instrumentation-boto"]
-Boto3SQS = ["boto3", "opentelemetry-instrumentation-boto3sqs"]
-Celery = ["celery", "opentelemetry-instrumentation-celery"]
-Django = ["django"]
-FastAPI = ["fastapi", "uvicorn"]
-Flask = ["blinker", "flask"]
-Redis = ["redis", "opentelemetry-instrumentation-redis"]
-SQLAlchemy = ["sqlalchemy", "opentelemetry-instrumentation-sqlalchemy"]
+azure-functions = "^1"
+black = "^24"
+blinker = "^1"
+django = "^4"
+fastapi = "^0"
+flask = "^3"
+functions-framework = "^3"
+loguru = "^0"
+orjson = "3.9.15"
+pytest = "^8"
+pytest-asyncio = "^0"
+pytest-cov = "^5"
+pytest-mock = "^3"
 
 [build-system]
 requires = ["poetry-core"]

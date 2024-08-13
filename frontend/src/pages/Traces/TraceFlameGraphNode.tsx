@@ -1,5 +1,6 @@
 import { memo } from 'react'
 
+import { Trace } from '@/graph/generated/schemas'
 import {
 	lineHeight,
 	outsidePadding,
@@ -82,7 +83,10 @@ export const TraceFlameGraphNode = memo<Props>(
 			setHoveredSpan,
 			setSelectedSpan,
 		} = useTrace()
-		const spanWidth = (span.duration / totalDuration) * width * zoom
+		const spanWidth = Math.max(
+			(span.duration / totalDuration) * width * zoom,
+			3,
+		)
 		const offsetX =
 			(span.startTime / totalDuration) * width * zoom + outsidePadding
 		const offsetY = span.depth
@@ -200,7 +204,7 @@ export const TraceFlameGraphNode = memo<Props>(
 	},
 )
 
-export const getSpanTheme = (span?: FlameGraphSpan) => {
+export const getSpanTheme = (span?: FlameGraphSpan | Trace) => {
 	if (!span) return spanThemes['purple']
 
 	const isDbSpan = !!span.traceAttributes?.db?.system

@@ -11,15 +11,6 @@ import {
 	SessionResults,
 	TimelineIndicatorEvent,
 } from '@graph/schemas'
-import { EventType, Replayer } from '@highlight-run/rrweb'
-import {
-	customEvent,
-	metaEvent,
-	playerMetaData,
-	SessionInterval,
-	viewportResizeDimension,
-} from '@highlight-run/rrweb-types'
-import { usefulEvent } from '@pages/Player/components/EventStreamV2/utils'
 import {
 	HighlightEvent,
 	HighlightJankPayload,
@@ -47,13 +38,21 @@ import {
 	getAllUrlEvents,
 	getBrowserExtensionScriptURLs,
 } from '@pages/Player/SessionLevelBar/utils/utils'
+import {
+	customEvent,
+	metaEvent,
+	playerMetaData,
+	SessionInterval,
+	viewportResizeDimension,
+} from '@rrweb/types'
 import analytics from '@util/analytics'
 import log from '@util/log'
 import { timedCall } from '@util/perf/instrument'
 import { H } from 'highlight.run'
 import { throttle } from 'lodash'
 import moment from 'moment/moment'
-import { MutableRefObject, SetStateAction } from 'react'
+import { MutableRefObject, RefObject, SetStateAction } from 'react'
+import { EventType, Replayer } from 'rrweb'
 
 const EMPTY_SESSION_METADATA = {
 	startTime: 0,
@@ -87,7 +86,6 @@ interface PlayerState {
 	chunkEventsRef: MutableRefObject<
 		Omit<Map<number, HighlightEvent[]>, 'clear' | 'set' | 'delete'>
 	>
-	currentEvent: string
 	currentUrl: string | undefined
 	errors: ErrorObject[]
 	eventsForTimelineIndicator: ParsedHighlightEvent[]
@@ -145,7 +143,6 @@ export enum PlayerActionType {
 	play,
 	reset,
 	seek,
-	setCurrentEvent,
 	setIsLiveMode,
 	setScale,
 	setSessionResults,
@@ -167,7 +164,6 @@ type PlayerAction =
 	| play
 	| reset
 	| seek
-	| setCurrentEvent
 	| setIsLiveMode
 	| setScale
 	| setSessionResults
@@ -242,6 +238,7 @@ interface onChunksLoad {
 	type: PlayerActionType.onChunksLoad
 	showPlayerMouseTail: boolean
 	time: number
+	playerRef: RefObject<HTMLDivElement>
 	action: ReplayerState
 }
 
@@ -272,16 +269,11 @@ interface setSessionResults {
 interface setIsLiveMode {
 	type: PlayerActionType.setIsLiveMode
 	isLiveMode: SetStateAction<boolean>
-}
-
-interface setCurrentEvent {
-	type: PlayerActionType.setCurrentEvent
-	currentEvent: SetStateAction<string>
+	playerRef: RefObject<HTMLDivElement>
 }
 
 export const PlayerInitialState = {
 	browserExtensionScriptURLs: [],
-	currentEvent: '',
 	currentUrl: undefined,
 	errors: [],
 	eventsDataLoaded: false,
@@ -298,7 +290,7 @@ export const PlayerInitialState = {
 	project_id: '',
 	rageClicks: [],
 	replayer: undefined,
-	replayerState: ReplayerState.Empty,
+	replayerState: ReplayerState.Loading,
 	scale: 1,
 	session: undefined,
 	sessionComments: [],
@@ -346,6 +338,10 @@ export const PlayerReducer = (
 			break
 		case PlayerActionType.setTime:
 			s.time = action.time
+			s.currentUrl = findLatestUrl(
+				getAllUrlEvents(events),
+				action.time + s.sessionMetadata.startTime,
+			)
 			if (
 				s.replayerState === ReplayerState.SessionEnded &&
 				s.time < state.sessionEndTime
@@ -363,7 +359,7 @@ export const PlayerReducer = (
 		case PlayerActionType.loadSession:
 			s.session_secure_id = action.data!.session?.secure_id ?? ''
 			if (action.data.session) {
-				s.session = action.data?.session as Session
+				s.session = action.data.session as Session
 				s.isLiveMode = false
 			}
 			if (!action.data.session || action.data.session.excluded) {
@@ -399,7 +395,6 @@ export const PlayerReducer = (
 		case PlayerActionType.reset:
 			s = {
 				...s,
-				currentEvent: '',
 				currentUrl: undefined,
 				errors: [],
 				eventsLoaded: false,
@@ -460,7 +455,12 @@ export const PlayerReducer = (
 				break
 			}
 			if (s.replayer === undefined) {
-				s = initReplayer(s, events, action.showPlayerMouseTail)
+				s = initReplayer(
+					s,
+					events,
+					action.showPlayerMouseTail,
+					action.playerRef,
+				)
 				if (s.onSessionPayloadLoadedPayload) {
 					s = processSessionMetadata(s, events)
 				}
@@ -481,10 +481,6 @@ export const PlayerReducer = (
 			break
 		case PlayerActionType.onEvent:
 			if (!s.replayer) break
-			s = updatePlayerTime(s)
-			if (usefulEvent(action.event)) {
-				s.currentEvent = action.event.identifier
-			}
 			if ((action.event as customEvent)?.data?.tag === 'Stop') {
 				s.replayerState = ReplayerState.SessionRecordingStopped
 			}
@@ -514,16 +510,15 @@ export const PlayerReducer = (
 			break
 		case PlayerActionType.setIsLiveMode:
 			s.isLiveMode = handleSetStateAction(s.isLiveMode, action.isLiveMode)
-			s = initReplayer(s, events, !!s.replayer?.config.mouseTail)
+			s = initReplayer(
+				s,
+				events,
+				!!s.replayer?.config.mouseTail,
+				action.playerRef,
+			)
 			analytics.track('Session live mode toggled', {
 				isLiveMode: s.isLiveMode,
 			})
-			break
-		case PlayerActionType.setCurrentEvent:
-			s.currentEvent = handleSetStateAction(
-				s.currentEvent,
-				action.currentEvent,
-			)
 			break
 		case PlayerActionType.setSessionResults:
 			s.sessionResults = handleSetStateAction(
@@ -532,24 +527,6 @@ export const PlayerReducer = (
 			)
 			break
 	}
-	log(
-		'PlayerState.ts',
-		new Set<PlayerActionType>([
-			PlayerActionType.onFrame,
-			PlayerActionType.onEvent,
-			PlayerActionType.updateCurrentUrl,
-		]).has(action.type)
-			? 'PlayerStateUpdate'
-			: 'PlayerStateTransition',
-		PlayerActionType[action.type],
-		s.time,
-		{
-			numEvents: events.length,
-			initialState: state,
-			finalState: s,
-			action,
-		},
-	)
 	return s
 }
 
@@ -565,9 +542,9 @@ const initReplayer = (
 	s: PlayerState,
 	events: HighlightEvent[],
 	showPlayerMouseTail: boolean,
+	playerRef: RefObject<HTMLDivElement>,
 ) => {
-	// Load the first chunk of events. The rest of the events will be loaded in requestAnimationFrame.
-	const playerMountingRoot = document.getElementById('player') as HTMLElement
+	const playerMountingRoot = playerRef.current
 	if (!playerMountingRoot) {
 		s.replayerState = ReplayerState.Empty
 		return s
@@ -732,9 +709,6 @@ const processSessionMetadata = (
 		return s
 	}
 
-	if (s.replayerState < ReplayerState.Playing) {
-		s.replayerState = ReplayerState.Paused
-	}
 	if (s.onSessionPayloadLoadedPayload.sessionPayload?.errors) {
 		s.errors = s.onSessionPayloadLoadedPayload.sessionPayload
 			.errors as ErrorObject[]

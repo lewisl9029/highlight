@@ -1,3 +1,4 @@
+import EnterpriseFeatureButton from '@components/Billing/EnterpriseFeatureButton'
 import { KeyboardShortcut } from '@components/KeyboardShortcut/KeyboardShortcut'
 import {
 	cmdKey,
@@ -5,13 +6,12 @@ import {
 	ShortcutTextGuide,
 	TimelineShortcut,
 } from '@components/KeyboardShortcutsEducation/KeyboardShortcutsEducation'
+import { LinkButton } from '@components/LinkButton'
 import Popover from '@components/Popover/Popover'
 import { Skeleton } from '@components/Skeleton/Skeleton'
 import Switch from '@components/Switch/Switch'
-import {
-	useExportSessionMutation,
-	useGetWorkspaceSettingsQuery,
-} from '@graph/hooks'
+import { toast } from '@components/Toaster'
+import { useExportSessionMutation } from '@graph/hooks'
 import { namedOperations } from '@graph/operations'
 import {
 	Badge,
@@ -62,11 +62,8 @@ import analytics from '@util/analytics'
 import { clamp } from '@util/numbers'
 import { playerTimeToSessionAbsoluteTime } from '@util/session/utils'
 import { MillisToMinutesAndSeconds } from '@util/time'
-import { showSupportMessage } from '@util/window'
-import { message } from 'antd'
 import clsx from 'clsx'
 import { useCallback, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 import timelinePopoverStyle from '../TimelineIndicators/TimelinePopover/TimelinePopover.module.css'
 import style from './ToolbarControlBar.module.css'
@@ -406,14 +403,9 @@ interface ControlSettingsProps {
 	setShowSettingsPopover: (shouldShow: boolean) => void
 }
 const ControlSettings = ({ setShowSettingsPopover }: ControlSettingsProps) => {
-	const navigate = useNavigate()
 	const { projectId } = useProjectId()
 	const [showSessionSettings, setShowSessionSettings] = useState(true)
 	const { currentWorkspace } = useApplicationContext()
-	const { data: workspaceSettingsData } = useGetWorkspaceSettingsQuery({
-		variables: { workspace_id: String(currentWorkspace?.id) },
-		skip: !currentWorkspace?.id,
-	})
 	const {
 		showHistogram,
 		setShowHistogram,
@@ -434,19 +426,6 @@ const ControlSettings = ({ setShowSettingsPopover }: ControlSettingsProps) => {
 	const [exportSessionMutation] = useExportSessionMutation()
 
 	const exportSession = useCallback(async () => {
-		if (!workspaceSettingsData?.workspaceSettings?.enable_session_export) {
-			analytics.track('Session Export Upgrade', {
-				sessionSecureId: session?.secure_id,
-				workspaceId: currentWorkspace?.id,
-			})
-			await message.warn(
-				'Downloading sessions is only available on enterprise plans.',
-			)
-			showSupportMessage(
-				'Hi! I would like to use the session export feature.',
-			)
-			return
-		}
 		if (session?.secure_id) {
 			analytics.track('Session Export Requested', {
 				sessionSecureId: session.secure_id,
@@ -459,46 +438,33 @@ const ControlSettings = ({ setShowSettingsPopover }: ControlSettingsProps) => {
 					},
 					refetchQueries: [namedOperations.Query.GetSessionExports],
 				})
-				message.open({
-					content: (
-						<Box
-							display="flex"
-							alignItems="center"
-							justifyContent="center"
-							gap="2"
-							cssClass={style.toast}
-						>
-							<Box
-								display="flex"
-								alignItems="center"
-								width="full"
-								height="full"
-								onClick={() =>
-									navigate(
-										`/${projectId}/settings/sessions#exports`,
-									)
-								}
+				await toast.info(
+					'You will receive an email once the session is ready.',
+					{
+						duration: 10000,
+						content: (
+							<LinkButton
+								to={`/${projectId}/settings/sessions#exports`}
+								kind="secondary"
+								emphasis="high"
+								trackingId="session-export-check-progress"
 							>
-								<Text color="white">
-									You will receive an email once the session
-									is ready. Click here to check progress.
-								</Text>
-							</Box>
-						</Box>
-					),
-					duration: 10,
-				})
+								Check progress
+							</LinkButton>
+						),
+					},
+				)
 			} catch (e) {
-				message.error(`An error occurred exporting the session: ${e}`)
+				await toast.error(
+					`An error occurred exporting the session: ${e}`,
+				)
 			}
 		}
 	}, [
 		currentWorkspace?.id,
 		exportSessionMutation,
-		navigate,
 		projectId,
 		session?.secure_id,
-		workspaceSettingsData?.workspaceSettings?.enable_session_export,
 	])
 
 	const { isLiveMode } = useReplayerContext()
@@ -619,9 +585,11 @@ const ControlSettings = ({ setShowSettingsPopover }: ControlSettingsProps) => {
 				<IconSolidCheveronRight className={style.moveRight} />
 			</button>
 
-			<button
+			<EnterpriseFeatureButton
+				setting="enable_session_export"
+				name="Session Download"
+				fn={exportSession}
 				className={clsx(style.settingsButton, style.downloadButton)}
-				onClick={exportSession}
 			>
 				<IconSolidDownload size={16} />
 				<Box
@@ -638,9 +606,9 @@ const ControlSettings = ({ setShowSettingsPopover }: ControlSettingsProps) => {
 					alignItems="center"
 					justifyContent="flex-end"
 				>
-					<Badge size="small" label="Annual" />
+					<Badge size="small" label="Business" />
 				</Box>
-			</button>
+			</EnterpriseFeatureButton>
 		</>
 	)
 

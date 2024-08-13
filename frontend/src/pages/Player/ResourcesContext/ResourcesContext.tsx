@@ -6,10 +6,11 @@ import { getGraphQLResolverName } from '@pages/Player/utils/utils'
 import { createContext } from '@util/context/context'
 import { indexedDBFetch } from '@util/db'
 import { checkResourceLimit } from '@util/preload'
-import { useParams } from '@util/react-router/useParams'
 import { H } from 'highlight.run'
 import { useCallback, useEffect, useState } from 'react'
 import { BooleanParam, useQueryParam } from 'use-query-params'
+
+import { useSessionParams } from '@/pages/Sessions/utils'
 
 export enum LoadingError {
 	NetworkResourcesTooLarge = 'payload too large.',
@@ -24,6 +25,8 @@ interface ResourcesContext {
 }
 
 interface NetworkResource extends PerformanceResourceTiming {
+	startTimeAbs: number
+	responseEndAbs: number
 	// http specific
 	requestResponsePairs?: RequestResponsePair
 	displayName?: string
@@ -62,25 +65,40 @@ const buildResources = (resources: NetworkResource[]) => {
 	})
 
 	return indexResources
-		.sort((a, b) => a.startTime - b.startTime)
+		.sort((a, b) => {
+			if (!!a.startTimeAbs && !!b.startTimeAbs) {
+				return a.startTimeAbs - b.startTimeAbs
+			} else {
+				// used in highlight.run <8.8.0 for websocket events and <7.5.4 for requests
+				return a.startTime - b.startTime
+			}
+		})
 		.map((resource: NetworkResourceWithID) => {
 			const resolverName = getGraphQLResolverName(resource)
 
+			const updatedResource = { ...resource }
+
 			if (resolverName) {
-				return {
-					...resource,
-					displayName: `${resolverName} (${resource.name})`,
-				}
+				updatedResource.displayName = `${resolverName} (${resource.name})`
 			}
 
-			return resource
+			if (resource.startTimeAbs && resource.responseEndAbs) {
+				updatedResource.duration =
+					resource.responseEndAbs - resource.startTimeAbs
+			} else if (resource.responseEnd && resource.startTime) {
+				// used in highlight.run <8.8.0 for websocket events and <7.5.4 for requests
+				updatedResource.duration =
+					resource.responseEnd - resource.startTime
+			}
+
+			return updatedResource
 		})
 }
 
 export const useResources = (
 	session: Session | undefined,
 ): ResourcesContext => {
-	const { session_secure_id } = useParams<{ session_secure_id: string }>()
+	const { sessionSecureId: session_secure_id } = useSessionParams()
 	const [sessionSecureId, setSessionSecureId] = useState<string>()
 	const [error, setError] = useState<LoadingError>()
 	const [downloadResources] = useQueryParam('downloadresources', BooleanParam)
@@ -95,15 +113,15 @@ export const useResources = (
 		variables: {
 			session_secure_id: sessionSecureId ?? '',
 		},
-		fetchPolicy: 'no-cache',
+		fetchPolicy: 'cache-and-network',
 		skip: skipQuery,
 	})
 
 	useEffect(() => {
 		if (!skipQuery) {
-			setResourcesLoading(queryLoading)
+			setResourcesLoading(queryLoading && data === undefined)
 		}
-	}, [queryLoading, skipQuery])
+	}, [data, queryLoading, skipQuery])
 
 	const [resources, setResources] = useState<NetworkResourceWithID[]>([])
 	useEffect(() => {

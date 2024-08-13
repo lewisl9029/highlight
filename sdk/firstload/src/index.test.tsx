@@ -1,5 +1,9 @@
 import { H } from '.'
 import { HighlightPublicInterface } from '../../client/src/types/types'
+import {
+	setSessionData,
+	setSessionSecureID,
+} from '@highlight-run/client/src/utils/sessionStorage/highlightSession'
 
 describe('should work outside of the browser in unit test', () => {
 	let highlight: HighlightPublicInterface
@@ -7,6 +11,15 @@ describe('should work outside of the browser in unit test', () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 		highlight = H
+
+		setSessionSecureID('foo')
+		setSessionData({
+			sessionSecureID: 'foo',
+			projectID: 1,
+			payloadID: 1,
+			lastPushTime: new Date().getTime(),
+			sessionStartTime: new Date().getTime(),
+		})
 	})
 
 	afterEach(() => {
@@ -14,7 +27,9 @@ describe('should work outside of the browser in unit test', () => {
 	})
 
 	it('should handle init', () => {
-		highlight.init('test')
+		highlight.init('1', {
+			debug: { clientInteractions: true, domRecording: true },
+		})
 	})
 
 	it('should handle consumeError', () => {
@@ -44,11 +59,16 @@ describe('should work outside of the browser in unit test', () => {
 		highlight.identify('123', {})
 	})
 
-	it('should handle getSessionURL', () => {
-		highlight.getSessionURL()
+	it('should handle getSessionURL', async () => {
+		expect(await highlight.getSessionURL()).toBe(
+			'https://app.highlight.io/1/sessions/foo',
+		)
 	})
 
-	it('should handle getSessionDetails', () => {
-		highlight.getSessionDetails()
+	it('should handle getSessionDetails', async () => {
+		expect(await highlight.getSessionDetails()).toEqual({
+			url: 'https://app.highlight.io/1/sessions/foo',
+			urlWithTimestamp: 'https://app.highlight.io/1/sessions/foo?ts=0',
+		})
 	})
 })

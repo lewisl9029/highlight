@@ -1,5 +1,4 @@
 import LoadingBox from '@components/LoadingBox'
-import { customEvent, EventType } from '@highlight-run/rrweb-types'
 import { Box, Text } from '@highlight-run/ui/components'
 import { useHTMLElementEvent } from '@hooks/useHTMLElementEvent'
 import { useWindowEvent } from '@hooks/useWindowEvent'
@@ -23,11 +22,11 @@ import {
 	useToolbarItemsContext,
 	ZoomAreaPercent,
 } from '@pages/Player/Toolbar/ToolbarItemsContext/ToolbarItemsContext'
+import { customEvent, EventType } from '@rrweb/types'
 import { isInsideElement } from '@util/dom'
 import { serializeErrorIdentifier } from '@util/error'
 import { getErrorBody } from '@util/errors/errorUtils'
 import { clamp } from '@util/numbers'
-import { useParams } from '@util/react-router/useParams'
 import { playerTimeToSessionAbsoluteTime } from '@util/session/utils'
 import { formatTimeAsAlphanum, formatTimeAsHMS } from '@util/time'
 import clsx from 'clsx'
@@ -40,6 +39,8 @@ import {
 	useState,
 } from 'react'
 import { NumberParam, useQueryParams } from 'use-query-params'
+
+import { useSessionParams } from '@/pages/Sessions/utils'
 
 import { ToolbarControlBar } from '../../ToolbarControlBar/ToolbarControlBar'
 import * as style from './style.css'
@@ -69,7 +70,7 @@ const TimelineIndicatorsBarGraph = ({
 	selectedTimelineAnnotationTypes,
 	width,
 }: Props) => {
-	const { session_secure_id } = useParams<{ session_secure_id: string }>()
+	const { sessionSecureId } = useSessionParams()
 
 	const { showPlayerAbsoluteTime, showHistogram: shouldShowHistogram } =
 		usePlayerConfiguration()
@@ -676,7 +677,7 @@ const TimelineIndicatorsBarGraph = ({
 		updateCameraFromZoomArea(zoomPercent)
 		// run once for session secure id
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [session_secure_id])
+	}, [sessionSecureId])
 
 	const isVisible = useCallback(
 		(...percents: number[]) => {

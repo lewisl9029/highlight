@@ -16,16 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-chi/chi"
-	"github.com/rs/cors"
-	"github.com/samber/lo"
-
-	"golang.org/x/sync/errgroup"
-
-	"github.com/google/uuid"
-	"github.com/openlyinc/pointy"
-	"github.com/redis/go-redis/v9"
-
 	"github.com/andybalholm/brotli"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -33,24 +23,32 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3Types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go/ptr"
-	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
-
+	"github.com/go-chi/chi"
+	"github.com/google/uuid"
+	"github.com/highlight-run/highlight/backend/env"
 	"github.com/highlight-run/highlight/backend/model"
 	"github.com/highlight-run/highlight/backend/payload"
 	privateModel "github.com/highlight-run/highlight/backend/private-graph/graph/model"
+	hredis "github.com/highlight-run/highlight/backend/redis"
 	"github.com/highlight-run/highlight/backend/util"
+	"github.com/openlyinc/pointy"
+	"github.com/pkg/errors"
+	"github.com/redis/go-redis/v9"
+	"github.com/rs/cors"
+	"github.com/samber/lo"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
-	S3SessionsPayloadBucketNameNew = os.Getenv("AWS_S3_BUCKET_NAME_NEW")
-	S3SessionsStagingBucketName    = os.Getenv("AWS_S3_STAGING_BUCKET_NAME")
-	S3SourceMapBucketNameNew       = os.Getenv("AWS_S3_SOURCE_MAP_BUCKET_NAME_NEW")
-	S3ResourcesBucketName          = os.Getenv("AWS_S3_RESOURCES_BUCKET")
-	S3GithubBucketName             = os.Getenv("AWS_S3_GITHUB_BUCKET_NAME")
-	CloudfrontDomain               = os.Getenv("AWS_CLOUDFRONT_DOMAIN")
-	CloudfrontPublicKeyID          = os.Getenv("AWS_CLOUDFRONT_PUBLIC_KEY_ID")
-	CloudfrontPrivateKey           = os.Getenv("AWS_CLOUDFRONT_PRIVATE_KEY")
+	S3SessionsPayloadBucketNameNew = env.Config.AwsS3BucketName
+	S3SessionsStagingBucketName    = env.Config.AwsS3StagingBucketName
+	S3SourceMapBucketNameNew       = env.Config.AwsS3SourceMapBucketName
+	S3ResourcesBucketName          = env.Config.AwsS3ResourcesBucketName
+	S3GithubBucketName             = env.Config.AwsS3GithubBucketName
+	CloudfrontDomain               = env.Config.AwsCloudfrontDomain
+	CloudfrontPublicKeyID          = env.Config.AwsCloudfrontPublicKeyID
+	CloudfrontPrivateKey           = env.Config.AwsCloudfrontPrivateKey
 )
 
 const (
@@ -93,16 +91,19 @@ type Client interface {
 	PushSourceMapFile(ctx context.Context, projectId int, version *string, fileName string, fileBytes []byte) (*int64, error)
 	ReadResources(ctx context.Context, sessionId int, projectId int) ([]interface{}, error)
 	ReadWebSocketEvents(ctx context.Context, sessionId int, projectId int) ([]interface{}, error)
-	ReadSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error)
+	readSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error)
+	ReadSourceMapFileCached(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error)
 	ReadTimelineIndicatorEvents(ctx context.Context, sessionId int, projectId int) ([]*model.TimelineIndicatorEvent, error)
 	UploadAsset(ctx context.Context, uuid string, contentType string, reader io.Reader, retentionPeriod privateModel.RetentionPeriod) error
 	ReadGitHubFile(ctx context.Context, repoPath string, fileName string, version string) ([]byte, error)
 	PushGitHubFile(ctx context.Context, repoPath string, fileName string, version string, fileBytes []byte) (*int64, error)
+	DeleteSessionData(ctx context.Context, projectId int, sessionId int) error
 }
 
 type FilesystemClient struct {
 	origin string
 	fsRoot string
+	redis  *hredis.Client
 }
 
 func (f *FilesystemClient) GetDirectDownloadURL(_ context.Context, projectId int, sessionId int, payloadType PayloadType, chunkId *int) (*string, error) {
@@ -249,6 +250,9 @@ func (f *FilesystemClient) PushRawEvents(ctx context.Context, sessionId, project
 }
 
 func (f *FilesystemClient) PushSourceMapFile(ctx context.Context, projectId int, version *string, fileName string, fileBytes []byte) (*int64, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "fs.PushSourceMapFile")
+	defer span.Finish()
+
 	buf := new(bytes.Buffer)
 	_, err := buf.Read(fileBytes)
 	if err != nil {
@@ -288,16 +292,40 @@ func (f *FilesystemClient) ReadWebSocketEvents(ctx context.Context, sessionId in
 	return webSocketEvents, nil
 }
 
-func (f *FilesystemClient) ReadSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+func (f *FilesystemClient) getSourceMapKey(projectId int, version *string, fileName string) string {
 	if version == nil {
 		unversioned := "unversioned"
 		version = &unversioned
 	}
-	if b, err := f.readFSBytes(ctx, fmt.Sprintf("%s/%d/%s/%s", f.fsRoot, projectId, *version, fileName)); err == nil {
+	return fmt.Sprintf("%s/%d/%s/%s", f.fsRoot, projectId, *version, fileName)
+}
+
+func (f *FilesystemClient) readSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "fs.ReadSourceMapFile")
+	defer span.Finish()
+	key := f.getSourceMapKey(projectId, version, fileName)
+	span.SetAttribute("key", key)
+	if b, err := f.readFSBytes(ctx, key); err == nil {
 		return b.Bytes(), nil
 	} else {
 		return nil, err
 	}
+}
+
+func (f *FilesystemClient) ReadSourceMapFileCached(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "fs.ReadSourceMapFileCached")
+	defer span.Finish()
+	key := f.getSourceMapKey(projectId, version, fileName)
+	span.SetAttribute("key", key)
+	b, err := hredis.CachedEval(ctx, f.redis, key, time.Second, time.Minute, func() (*[]byte, error) {
+		bt, err := f.readSourceMapFile(ctx, projectId, version, fileName)
+		return &bt, err
+	}, hredis.WithStoreNil(true), hredis.WithIgnoreError(true))
+
+	if b == nil || err != nil {
+		return nil, err
+	}
+	return *b, nil
 }
 
 func (f *FilesystemClient) GetAssetURL(_ context.Context, projectId string, hashVal string) (string, error) {
@@ -443,14 +471,61 @@ func (f *FilesystemClient) SetupHTTPSListener(r chi.Router) {
 	})
 }
 
+func (f *FilesystemClient) DeleteSessionData(ctx context.Context, projectId int, sessionId int) error {
+	if f.fsRoot == "" {
+		return errors.New("f.fsRoot cannot be empty")
+	}
+	if err := os.RemoveAll(fmt.Sprintf("%s/%d/%d", f.fsRoot, projectId, sessionId)); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(fmt.Sprintf("%s/raw-events/%d/%d", f.fsRoot, projectId, sessionId)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *S3Client) DeleteSessionData(ctx context.Context, projectId int, sessionId int) error {
+	client, bucket := s.getSessionClientAndBucket(sessionId)
+
+	versionPart := "v2/"
+	devStr := ""
+	if env.IsDevOrTestEnv() {
+		devStr = "dev/"
+	}
+
+	prefix := fmt.Sprintf("%s%s%d/%d/", versionPart, devStr, projectId, sessionId)
+	options := s3.ListObjectsV2Input{
+		Bucket: bucket,
+		Prefix: &prefix,
+	}
+	output, err := client.ListObjectsV2(ctx, &options)
+	if err != nil {
+		return errors.Wrap(err, "error listing objects in S3")
+	}
+
+	for _, object := range output.Contents {
+		options := s3.DeleteObjectInput{
+			Bucket: bucket,
+			Key:    object.Key,
+		}
+		_, err := client.DeleteObject(ctx, &options)
+		if err != nil {
+			return errors.Wrap(err, "error deleting objects from S3")
+		}
+	}
+
+	return nil
+}
+
 func NewFSClient(_ context.Context, origin, fsRoot string) (*FilesystemClient, error) {
-	return &FilesystemClient{origin: origin, fsRoot: fsRoot}, nil
+	return &FilesystemClient{origin: origin, fsRoot: fsRoot, redis: hredis.NewClient()}, nil
 }
 
 type S3Client struct {
 	S3ClientEast2   *s3.Client
 	S3PresignClient *s3.PresignClient
 	URLSigner       *sign.URLSigner
+	Redis           *hredis.Client
 }
 
 func NewS3Client(ctx context.Context) (*S3Client, error) {
@@ -469,6 +544,7 @@ func NewS3Client(ctx context.Context) (*S3Client, error) {
 		S3ClientEast2:   clientEast2,
 		S3PresignClient: s3.NewPresignClient(clientEast2),
 		URLSigner:       getURLSigner(ctx),
+		Redis:           hredis.NewClient(),
 	}, nil
 }
 
@@ -526,7 +602,7 @@ func (s *S3Client) pushFileToS3WithOptions(ctx context.Context, sessionId, proje
 		return nil, errors.New("error retrieving head object")
 	}
 
-	return &result.ContentLength, nil
+	return result.ContentLength, nil
 }
 
 // PushCompressedFile pushes a compressed file to S3, adding the relevant metadata
@@ -783,7 +859,7 @@ func bucketKey[T ~string](sessionId int, projectId int, key T) *string {
 	if UseNewSessionBucket(sessionId) {
 		versionPart = "v2/"
 	}
-	if util.IsDevEnv() {
+	if env.IsDevEnv() {
 		return pointy.String(fmt.Sprintf("%sdev/%v/%v/%v", versionPart, projectId, sessionId, key))
 	}
 	return pointy.String(fmt.Sprintf("%s%v/%v/%v", versionPart, projectId, sessionId, key))
@@ -791,7 +867,7 @@ func bucketKey[T ~string](sessionId int, projectId int, key T) *string {
 
 func (s *S3Client) sourceMapBucketKey(projectId int, version *string, fileName string) *string {
 	var key string
-	if util.IsDevEnv() {
+	if env.IsDevEnv() {
 		key = "dev/"
 	}
 	if version == nil {
@@ -818,15 +894,20 @@ func (s *S3Client) PushSourceMapFileReaderToS3(ctx context.Context, projectId in
 	if err != nil {
 		return nil, errors.New("error retrieving head object")
 	}
-	return &result.ContentLength, nil
+	return result.ContentLength, nil
 }
 
 func (s *S3Client) PushSourceMapFile(ctx context.Context, projectId int, version *string, fileName string, fileBytes []byte) (*int64, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "s3.PushSourceMapFile")
+	defer span.Finish()
+
 	body := bytes.NewReader(fileBytes)
 	return s.PushSourceMapFileReaderToS3(ctx, projectId, version, fileName, body)
 }
 
-func (s *S3Client) ReadSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+func (s *S3Client) readSourceMapFile(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "s3.ReadSourceMapFile")
+	defer span.Finish()
 	output, err := s.S3ClientEast2.GetObject(ctx, &s3.GetObjectInput{Bucket: pointy.String(S3SourceMapBucketNameNew),
 		Key: s.sourceMapBucketKey(projectId, version, fileName)})
 	if err != nil {
@@ -838,6 +919,22 @@ func (s *S3Client) ReadSourceMapFile(ctx context.Context, projectId int, version
 		return nil, errors.Wrap(err, "error reading from s3 buffer")
 	}
 	return buf.Bytes(), nil
+}
+
+func (s *S3Client) ReadSourceMapFileCached(ctx context.Context, projectId int, version *string, fileName string) ([]byte, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "s3.ReadSourceMapFileCached")
+	defer span.Finish()
+	key := s.sourceMapBucketKey(projectId, version, fileName)
+	span.SetAttribute("key", key)
+	b, err := hredis.CachedEval(ctx, s.Redis, *key, time.Second, time.Minute, func() (*[]byte, error) {
+		bt, err := s.readSourceMapFile(ctx, projectId, version, fileName)
+		return &bt, err
+	}, hredis.WithStoreNil(true), hredis.WithIgnoreError(true))
+
+	if b == nil || err != nil {
+		return nil, err
+	}
+	return *b, nil
 }
 
 func (s *S3Client) GetDirectDownloadURL(_ context.Context, projectId int, sessionId int, payloadType PayloadType, chunkId *int) (*string, error) {
@@ -943,7 +1040,7 @@ func (s *S3Client) GetSourcemapVersions(ctx context.Context, projectId int) ([]s
 
 func (s *S3Client) githubBucketKey(repoPath string, version string, fileName string) *string {
 	var key string
-	if util.IsDevEnv() {
+	if env.IsDevEnv() {
 		key = "dev/"
 	}
 	key += fmt.Sprintf("%s/%s/%s", repoPath, version, fileName)
@@ -980,7 +1077,7 @@ func (s *S3Client) PushGitHubFileReaderToS3(ctx context.Context, repoPath string
 	if err != nil {
 		return nil, errors.New("error retrieving head object")
 	}
-	return &result.ContentLength, nil
+	return result.ContentLength, nil
 }
 
 func (s *S3Client) PushGitHubFile(ctx context.Context, repoPath string, fileName string, version string, fileBytes []byte) (*int64, error) {

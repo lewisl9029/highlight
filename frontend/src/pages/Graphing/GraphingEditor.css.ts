@@ -1,8 +1,16 @@
 import { vars } from '@highlight-run/ui/vars'
-import { globalStyle, style } from '@vanilla-extract/css'
+import { style } from '@vanilla-extract/css'
 
 export const editGraphHeader = style({
 	height: 40,
+})
+
+export const editGraphPanel = style({
+	height: '100%',
+})
+
+export const previewWindow = style({
+	width: 'calc(100%)',
 })
 
 export const graphBackground = style({
@@ -17,15 +25,14 @@ export const editorLabel = style({
 	marginBottom: 4,
 })
 
-export const menuButton = style({
-	border: vars.border.divider,
-	width: '100%',
-})
-
 export const input = style({
 	height: 28,
 })
 
-globalStyle(`${menuButton} > div`, {
-	width: '100%',
+export const graphWrapper = style({
+	width: 860,
+	height: 540,
+	margin: 'auto',
+	zIndex: 1,
+	backgroundColor: vars.color.white,
 })

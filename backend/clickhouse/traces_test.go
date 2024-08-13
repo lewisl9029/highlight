@@ -2,9 +2,11 @@ package clickhouse
 
 import (
 	"context"
-	"github.com/highlight-run/highlight/backend/parser"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/highlight-run/highlight/backend/parser"
 
 	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
 
@@ -18,8 +20,8 @@ func TestBatchWriteTraceRows(t *testing.T) {
 
 	now := time.Now()
 
-	rows := []*TraceRow{
-		NewTraceRow(now, 1).WithServiceName("gqlgen"),
+	rows := []*ClickhouseTraceRow{
+		NewTraceRow(now, 1).WithServiceName("gqlgen").AsClickhouseTraceRow(),
 	}
 
 	assert.NoError(t, client.BatchWriteTraceRows(ctx, rows))
@@ -124,6 +126,33 @@ func Test_TraceMatchesQuery_v2(t *testing.T) {
 	filters = parser.Parse("fs statSync", TracesTableNoDefaultConfig)
 	matches = TraceMatchesQuery(&trace, filters)
 	assert.True(t, matches)
+
+	trace = TraceRow{
+		UUID:            "8a56048f-a3d4-43d3-a7d4-6baed7152efd",
+		TraceId:         "3365d26c9e8c0e6ffa63ab98943056b0",
+		SpanId:          "08703aa1c0b7dc9e",
+		ParentSpanId:    "",
+		ProjectId:       37774,
+		SpanName:        "GraphqlController#execute",
+		SpanKind:        "Server",
+		Duration:        413770,
+		ServiceName:     "data-whop-com",
+		ServiceVersion:  "",
+		TraceAttributes: map[string]string{"net.transport": "ip_tcp", "net.peer.port": "6432", "db.statement": ";", "process.runtime.version": "3.2.2", "net.peer.ip": "10.0.3.188", "process.pid": "1", "telemetry.sdk.name": "opentelemetry", "net.peer.name": "10.0.3.188", "db.user": "u4mcrnapd7u8bb", "telemetry.sdk.language": "ruby", "process.runtime.name": "ruby", "db.system": "postgresql", "process.command": "bin/rails", "telemetry.sdk.version": "1.4.1", "process.runtime.description": "ruby 3.2.2 (2023-03-30 revision e51014f9c0) +YJIT [x86_64-linux]", "db.name": "d6a6mot36t737s"},
+		Environment:     "production",
+		StatusCode:      "Unset",
+	}
+	filters = parser.Parse(`service_name=data-whop-com parent_span_id=""`, TracesTableNoDefaultConfig)
+	matches = TraceMatchesQuery(&trace, filters)
+	assert.True(t, matches)
+
+	filters = parser.Parse(`(service_name=data-whop-com AND parent_span_id!="")`, TracesTableNoDefaultConfig)
+	matches = TraceMatchesQuery(&trace, filters)
+	assert.False(t, matches)
+
+	trace.ParentSpanId = "08703aa1c0b7dc9e"
+	matches = TraceMatchesQuery(&trace, filters)
+	assert.True(t, matches)
 }
 
 func TestReadTracesWithEnvironmentFilter(t *testing.T) {
@@ -132,10 +161,10 @@ func TestReadTracesWithEnvironmentFilter(t *testing.T) {
 	defer teardown(t)
 
 	now := time.Now()
-	rows := []*TraceRow{
-		NewTraceRow(now, 1),
-		NewTraceRow(now, 1).WithEnvironment("production"),
-		NewTraceRow(now, 1).WithEnvironment("development"),
+	rows := []*ClickhouseTraceRow{
+		NewTraceRow(now, 1).AsClickhouseTraceRow(),
+		NewTraceRow(now, 1).WithEnvironment("production").AsClickhouseTraceRow(),
+		NewTraceRow(now, 1).WithEnvironment("development").AsClickhouseTraceRow(),
 	}
 
 	assert.NoError(t, client.BatchWriteTraceRows(ctx, rows))
@@ -162,4 +191,52 @@ func TestReadTracesWithEnvironmentFilter(t *testing.T) {
 	}, Pagination{})
 	assert.NoError(t, err)
 	assert.Len(t, payload.Edges, 2)
+}
+
+func TestReadTracesWithSorting(t *testing.T) {
+	ctx := context.Background()
+	client, teardown := setupTest(t)
+	defer teardown(t)
+
+	now := time.Now()
+	rows := []*ClickhouseTraceRow{
+		NewTraceRow(now, 1).WithSpanName("Span A").WithDuration(now, now.Add(100*time.Nanosecond)).WithTraceAttributes(map[string]string{"host.name": "b"}).AsClickhouseTraceRow(),
+		NewTraceRow(now, 1).WithSpanName("Span B").WithDuration(now, now.Add(300*time.Nanosecond)).WithTraceAttributes(map[string]string{"host.name": "c"}).AsClickhouseTraceRow(),
+		NewTraceRow(now, 1).WithSpanName("Span C").WithDuration(now, now.Add(200*time.Nanosecond)).WithTraceAttributes(map[string]string{"host.name": "a"}).AsClickhouseTraceRow(),
+	}
+
+	assert.NoError(t, client.BatchWriteTraceRows(ctx, rows))
+
+	payload, err := client.ReadTraces(ctx, 1, modelInputs.QueryInput{
+		DateRange: makeDateWithinRange(now),
+		Query:     "",
+		Sort: &modelInputs.SortInput{
+			Column:    "duration",
+			Direction: "DESC",
+		},
+	}, Pagination{})
+	assert.NoError(t, err)
+	assert.Len(t, payload.Edges, 3)
+
+	assert.Equal(t, "Span B", payload.Edges[0].Node.SpanName)
+	assert.Equal(t, "Span C", payload.Edges[1].Node.SpanName)
+	assert.Equal(t, "Span A", payload.Edges[2].Node.SpanName)
+
+	payload, err = client.ReadTraces(ctx, 1, modelInputs.QueryInput{
+		DateRange: makeDateWithinRange(now),
+		Query:     "",
+		Sort: &modelInputs.SortInput{
+			Column:    "host.name",
+			Direction: "DESC",
+		},
+	}, Pagination{})
+	assert.NoError(t, err)
+	assert.Len(t, payload.Edges, 3)
+
+	for i, edge := range payload.Edges {
+		fmt.Printf("Edge %d: %v\n", i, edge.Node)
+	}
+	assert.Equal(t, "Span B", payload.Edges[0].Node.SpanName)
+	assert.Equal(t, "Span A", payload.Edges[1].Node.SpanName)
+	assert.Equal(t, "Span C", payload.Edges[2].Node.SpanName)
 }

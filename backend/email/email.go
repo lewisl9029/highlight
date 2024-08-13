@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"os"
+	"github.com/highlight-run/highlight/backend/env"
 	"strconv"
 	"time"
 
@@ -27,7 +27,7 @@ var (
 	SendGridOutboundEmail                = "notifications@notify.highlight.io"
 	SessionCommentMentionsAsmId          = 20950
 	ErrorCommentMentionsAsmId            = 20994
-	frontendUri                          = os.Getenv("REACT_APP_FRONTEND_URI")
+	frontendUri                          = env.Config.FrontendUri
 )
 
 type EmailType string
@@ -39,14 +39,25 @@ const (
 	BillingStripeTrial3Days       EmailType = "BillingStripeTrial3Days"
 	BillingSessionUsage80Percent  EmailType = "BillingSessionUsage80Percent"
 	BillingSessionUsage100Percent EmailType = "BillingSessionUsage100Percent"
+	BillingSessionOverage         EmailType = "BillingSessionOverage"
 	BillingErrorsUsage80Percent   EmailType = "BillingErrorsUsage80Percent"
 	BillingErrorsUsage100Percent  EmailType = "BillingErrorsUsage100Percent"
+	BillingErrorsOverage          EmailType = "BillingErrorsOverage"
 	BillingLogsUsage80Percent     EmailType = "BillingLogsUsage80Percent"
 	BillingLogsUsage100Percent    EmailType = "BillingLogsUsage100Percent"
+	BillingLogsOverage            EmailType = "BillingLogsOverage"
 	BillingTracesUsage80Percent   EmailType = "BillingTracesUsage80Percent"
 	BillingTracesUsage100Percent  EmailType = "BillingTracesUsage100Percent"
+	BillingTracesOverage          EmailType = "BillingTracesOverage"
 	BillingInvalidPayment         EmailType = "BillingInvalidPayment"
 )
+
+var OneTimeBillingNotifications = []EmailType{
+	BillingSessionOverage,
+	BillingErrorsOverage,
+	BillingLogsOverage,
+	BillingTracesOverage,
+}
 
 func SendReactEmailAlert(ctx context.Context, MailClient *sendgrid.Client, email string, html string, subjectLine string) error {
 	to := &mail.Email{Address: email}
@@ -103,14 +114,14 @@ func GetOptOutToken(adminID int, previous bool) string {
 		now = now.AddDate(0, -1, 0)
 	}
 	h := sha256.New()
-	preHash := strconv.Itoa(adminID) + now.Format("2006-01") + os.Getenv("EMAIL_OPT_OUT_SALT")
+	preHash := strconv.Itoa(adminID) + now.Format("2006-01") + env.Config.EmailOptOutSalt
 	h.Write([]byte(preHash))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 func GetSubscriptionUrl(adminId int, previous bool) string {
 	token := GetOptOutToken(adminId, previous)
-	return fmt.Sprintf("%s/subscriptions?admin_id=%d&token=%s", os.Getenv("REACT_APP_FRONTEND_URI"), adminId, token)
+	return fmt.Sprintf("%s/subscriptions?admin_id=%d&token=%s", env.Config.FrontendUri, adminId, token)
 }
 
 func getApproachingLimitMessage(productType string, workspaceId int) string {
@@ -128,6 +139,13 @@ func getExceededLimitMessage(productType string, workspaceId int) string {
 		productType, productType, frontendUri, workspaceId)
 }
 
+func getOverageMessage(productType string, workspaceId int) string {
+	return fmt.Sprintf(`Your %s usage has exceeded the included amount - extra %s are now incurring a charge.<br>
+		If you'd like to check the exact charge for the month,
+		please visit the subscription details page <a href="%s/w/%d/current-plan">here</a>.`,
+		productType, productType, frontendUri, workspaceId)
+}
+
 func getBillingNotificationSubject(emailType EmailType) string {
 	switch emailType {
 	case BillingHighlightTrial7Days:
@@ -142,18 +160,26 @@ func getBillingNotificationSubject(emailType EmailType) string {
 		return "[Highlight] billing limits - 80% of your session usage"
 	case BillingSessionUsage100Percent:
 		return "[Highlight] billing limits - 100% of your session usage"
+	case BillingSessionOverage:
+		return "[Highlight] overages charges - sessions over your included amount"
 	case BillingErrorsUsage80Percent:
 		return "[Highlight] billing limits - 80% of your errors usage"
 	case BillingErrorsUsage100Percent:
 		return "[Highlight] billing limits - 100% of your errors usage"
+	case BillingErrorsOverage:
+		return "[Highlight] overages charges - errors over your included amount"
 	case BillingLogsUsage80Percent:
 		return "[Highlight] billing limits - 80% of your logs usage"
 	case BillingLogsUsage100Percent:
 		return "[Highlight] billing limits - 100% of your logs usage"
+	case BillingLogsOverage:
+		return "[Highlight] overages charges - logs over your included amount"
 	case BillingTracesUsage80Percent:
 		return "[Highlight] billing limits - 80% of your traces usage"
 	case BillingTracesUsage100Percent:
 		return "[Highlight] billing limits - 100% of your traces usage"
+	case BillingTracesOverage:
+		return "[Highlight] overages charges - traces over your included amount"
 	case BillingInvalidPayment:
 		return "[Highlight] invalid billing - issues with your payment method"
 	default:
@@ -192,18 +218,26 @@ func getBillingNotificationMessage(workspaceId int, emailType EmailType) string 
 		return getApproachingLimitMessage("sessions", workspaceId)
 	case BillingSessionUsage100Percent:
 		return getExceededLimitMessage("sessions", workspaceId)
+	case BillingSessionOverage:
+		return getOverageMessage("sessions", workspaceId)
 	case BillingErrorsUsage80Percent:
 		return getApproachingLimitMessage("errors", workspaceId)
 	case BillingErrorsUsage100Percent:
 		return getExceededLimitMessage("errors", workspaceId)
+	case BillingErrorsOverage:
+		return getOverageMessage("errors", workspaceId)
 	case BillingLogsUsage80Percent:
 		return getApproachingLimitMessage("logs", workspaceId)
 	case BillingLogsUsage100Percent:
 		return getExceededLimitMessage("logs", workspaceId)
+	case BillingLogsOverage:
+		return getOverageMessage("logs", workspaceId)
 	case BillingTracesUsage80Percent:
 		return getApproachingLimitMessage("traces", workspaceId)
 	case BillingTracesUsage100Percent:
 		return getExceededLimitMessage("traces", workspaceId)
+	case BillingTracesOverage:
+		return getOverageMessage("traces", workspaceId)
 	case BillingInvalidPayment:
 		return fmt.Sprintf(`
 			We're having issues validating your payment details!<br>

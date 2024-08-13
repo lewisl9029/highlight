@@ -1,20 +1,18 @@
+import EnterpriseFeatureButton from '@components/Billing/EnterpriseFeatureButton'
 import { Button } from '@components/Button'
-import {
-	BOOLEAN_OPERATORS,
-	Operator,
-} from '@components/QueryBuilder/QueryBuilder'
+import LoadingBox from '@components/LoadingBox'
 import { TIME_FORMAT } from '@components/Search/SearchForm/constants'
 import { SearchForm } from '@components/Search/SearchForm/SearchForm'
-import { useGetBaseSearchContext } from '@context/SearchState'
 import {
 	useEditProjectSettingsMutation,
 	useGetBillingDetailsForProjectQuery,
+	useGetMetricsQuery,
 	useGetProjectSettingsQuery,
-	useGetTracesMetricsQuery,
 	useGetWorkspaceSettingsQuery,
 } from '@graph/hooks'
 import { namedOperations } from '@graph/operations'
 import {
+	AllWorkspaceSettings,
 	MetricAggregator,
 	MetricColumn,
 	PlanType,
@@ -36,27 +34,18 @@ import {
 	Stack,
 	Tag,
 	Text,
-	Tooltip,
 } from '@highlight-run/ui/components'
+import { vars } from '@highlight-run/ui/vars'
 import { useProjectId } from '@hooks/useProjectId'
-import { ErrorSearchContextProvider } from '@pages/Errors/ErrorSearchContext/ErrorSearchContext'
-import ErrorQueryBuilder, {
-	CUSTOM_FIELDS as ERROR_CUSTOM_FIELDS,
-} from '@pages/ErrorsV2/ErrorQueryBuilder/ErrorQueryBuilder'
-import LogsHistogram from '@pages/LogsPage/LogsHistogram/LogsHistogram'
-import { SearchContextProvider } from '@pages/Sessions/SearchContext/SearchContext'
-import SessionQueryBuilder, {
-	CUSTOM_FIELDS,
-} from '@pages/Sessions/SessionsFeedV3/SessionQueryBuilder/SessionQueryBuilder'
+import { BarChart } from '@pages/Graphing/components/BarChart'
+import { TIMESTAMP_KEY } from '@pages/Graphing/components/Graph'
 import { useApplicationContext } from '@routers/AppRouter/context/ApplicationContext'
-import analytics from '@util/analytics'
-import { buildQueryStateString } from '@util/url/params'
-import { showSupportMessage } from '@util/window'
-import { message } from 'antd'
-import _, { upperFirst } from 'lodash'
+import { groupBy, upperFirst } from 'lodash'
 import moment from 'moment'
-import React, { useState } from 'react'
+import React from 'react'
 import { useNavigate } from 'react-router-dom'
+
+import { SearchContext } from '@/components/Search/SearchContext'
 
 const DATE_RANGE_PRESETS = [DEFAULT_TIME_PRESETS[1], DEFAULT_TIME_PRESETS[3]]
 const DEFAULT_PRESET = DATE_RANGE_PRESETS[0]
@@ -165,27 +154,6 @@ export const ProjectProductFilters: React.FC<{
 			awaitRefetchQueries: true,
 		})
 
-	const sessionSearchContext = useGetBaseSearchContext(
-		'sessions',
-		`{"isAnd":true,"rules":[]}`,
-		'highlightSegmentPickerForProjectFilterSessionsSelectedSegmentId',
-		CUSTOM_FIELDS,
-	)
-	const { searchQuery, setSearchQuery } = sessionSearchContext
-	const errorSearchContext = useGetBaseSearchContext(
-		'errors',
-		`{"isAnd":true,"rules":[]}`,
-		'highlightSegmentPickerForProjectFilterErrorsSelectedSegmentId',
-		ERROR_CUSTOM_FIELDS,
-	)
-	const [searchResultSecureIds, setSearchResultSecureIds] = useState<
-		string[]
-	>([])
-	const {
-		searchQuery: errorSearchQuery,
-		setSearchQuery: setErrorSearchQuery,
-	} = errorSearchContext
-
 	const formStore = Form.useStore<{
 		samplingPercent: number
 		minuteRateLimit: number | null
@@ -200,22 +168,9 @@ export const ProjectProductFilters: React.FC<{
 
 	const query = formStore.useValue('exclusionQuery') ?? ''
 	const canEditIngestion =
-		billingDetails?.billingDetailsForProject?.plan.type !== PlanType.Free
+		workspaceSettingsData?.workspaceSettings?.enable_ingest_filtering
 	const canEditSampling =
 		workspaceSettingsData?.workspaceSettings?.enable_ingest_sampling
-
-	const showEditSamplingUpgrade = React.useCallback(async () => {
-		analytics.track('Project Sampling Upgrade', {
-			product,
-			workspaceId: currentWorkspace?.id,
-		})
-		await message.warn(
-			'Setting up ingest sampling is only available on enterprise plans.',
-		)
-		await showSupportMessage(
-			'Hi! I would like to use the ingest sampling feature.',
-		)
-	}, [currentWorkspace?.id, product])
 
 	// loads data from the backend into the form state and the query builder context
 	const resetConfig = React.useCallback(() => {
@@ -262,66 +217,7 @@ export const ProjectProductFilters: React.FC<{
 			exclusionQuery: c?.exclusion_query ?? null,
 			minuteRateLimit: c?.minute_rate_limit ?? null,
 		})
-
-		if (
-			product === ProductType.Sessions ||
-			product === ProductType.Errors
-		) {
-			const params = {} as { [key: string]: string }
-			for (const pair of (c?.exclusion_query ?? '').split(' ')) {
-				const [key, value] = pair.split('=')
-				if (key && value) {
-					let op: Operator = 'is'
-					let k = key
-					if (k.endsWith('!')) {
-						op = 'is_not'
-						k = k.slice(0, -1)
-					}
-					params[
-						`${product.toLowerCase().slice(0, -1)}_${k}`
-					] = `${op}:${value}`
-				}
-			}
-			;(product === ProductType.Sessions
-				? setSearchQuery
-				: setErrorSearchQuery)(buildQueryStateString(params))
-		}
-	}, [
-		data?.projectSettings?.sampling,
-		formStore,
-		product,
-		setErrorSearchQuery,
-		setSearchQuery,
-	])
-
-	// updates the form state from the query builder context (for sessions / errors)
-	React.useEffect(() => {
-		if (
-			product === ProductType.Sessions ||
-			product === ProductType.Errors
-		) {
-			const rules = []
-			for (const [key, op, v] of JSON.parse(
-				product === ProductType.Sessions
-					? searchQuery
-					: product === ProductType.Errors
-					? errorSearchQuery
-					: JSON.stringify({ rules: [] }),
-			).rules as [key: string, op: Operator, v: string][]) {
-				const [_, k] = key.split(/_(.*)/s)
-				if (product === ProductType.Sessions && k === 'created_at')
-					continue
-				if (product === ProductType.Errors && k === 'timestamp')
-					continue
-				if (v.indexOf(' ') !== -1) {
-					rules.push(`${k}${op === 'is_not' ? '!' : ''}="${v}"`)
-				} else {
-					rules.push(`${k}${op === 'is_not' ? '!' : ''}=${v}`)
-				}
-			}
-			formStore.setValue('exclusionQuery', rules.join(' '))
-		}
-	}, [errorSearchQuery, formStore, product, searchQuery])
+	}, [data?.projectSettings?.sampling, formStore, product])
 
 	React.useEffect(resetConfig, [resetConfig])
 
@@ -348,38 +244,6 @@ export const ProjectProductFilters: React.FC<{
 		navigate(`/${projectId}/settings/filters`)
 	}
 
-	const sampling = (
-		<Box
-			display="flex"
-			width="full"
-			gap="8"
-			onClick={canEditSampling ? undefined : showEditSamplingUpgrade}
-		>
-			<Box width="full" display="flex" flexDirection="column" gap="4">
-				<Form.Label
-					label="Sampling %"
-					name={formStore.names.samplingPercent}
-				/>
-				<Form.Input
-					disabled={!canEditSampling}
-					name={formStore.names.samplingPercent}
-					type="number"
-				/>
-			</Box>
-			<Box width="full" display="flex" flexDirection="column" gap="4">
-				<Form.Label
-					label="Max ingest per minute"
-					name={formStore.names.minuteRateLimit}
-				/>
-				<Form.Input
-					disabled={!canEditSampling}
-					name={formStore.names.minuteRateLimit}
-					type="number"
-				/>
-			</Box>
-		</Box>
-	)
-
 	const edit = (
 		<Button
 			trackingId={`project-filters-${product}-edit`}
@@ -387,9 +251,10 @@ export const ProjectProductFilters: React.FC<{
 			size="small"
 			emphasis="medium"
 			iconRight={<IconSolidPencil />}
-			disabled={!canEditIngestion}
 			onClick={async () => {
-				navigate(product.toLowerCase())
+				if (canEditIngestion) {
+					navigate(product.toLowerCase())
+				}
 			}}
 		>
 			Edit
@@ -440,10 +305,7 @@ export const ProjectProductFilters: React.FC<{
 						<Text>{label} filters</Text>
 						{view ? null : (
 							<FilterPaywall
-								paywalled={
-									billingDetails?.billingDetailsForProject
-										?.plan.type === PlanType.Free
-								}
+								setting="enable_ingest_filtering"
 								product={product}
 							>
 								{save}
@@ -454,17 +316,14 @@ export const ProjectProductFilters: React.FC<{
 				<Stack gap="6" py="6">
 					<Box display="flex" width="full" gap="6">
 						<Box width="full" style={{ minHeight: 20 }}>
-							{product === ProductType.Logs ||
-							product === ProductType.Traces ? (
+							<SearchContext
+								initialQuery={query}
+								onSubmit={(value: string) => {
+									formStore.setValue('exclusionQuery', value)
+								}}
+								disabled={view}
+							>
 								<SearchForm
-									initialQuery={query}
-									onFormSubmit={(value: string) => {
-										formStore.setValue(
-											'exclusionQuery',
-											value,
-										)
-									}}
-									disableSearch={view}
 									hideDatePicker
 									hideCreateAlert
 									startDate={dateRange.start}
@@ -477,53 +336,11 @@ export const ProjectProductFilters: React.FC<{
 									timeMode="fixed-range"
 									productType={product}
 								/>
-							) : product === ProductType.Sessions ? (
-								<SearchContextProvider
-									value={sessionSearchContext}
-								>
-									<SessionQueryBuilder
-										minimal
-										readonly={view}
-										operators={['is', 'is_not']}
-										customFields={CUSTOM_FIELDS.filter(
-											(f) =>
-												!f.options?.operators ||
-												f.options.operators ===
-													BOOLEAN_OPERATORS,
-										)}
-										droppedFieldTypes={['user', 'track']}
-										onlyAnd
-										setDefault={false}
-									/>
-								</SearchContextProvider>
-							) : (
-								<ErrorSearchContextProvider
-									value={{
-										...errorSearchContext,
-										searchResultSecureIds,
-										setSearchResultSecureIds,
-									}}
-								>
-									<ErrorQueryBuilder
-										minimal
-										readonly={view}
-										operators={['is', 'is_not']}
-										customFields={ERROR_CUSTOM_FIELDS.filter(
-											(f) =>
-												!f.options?.operators ||
-												f.options.operators ===
-													BOOLEAN_OPERATORS,
-										)}
-										droppedFieldTypes={['error']}
-										onlyAnd
-										setDefault={false}
-									/>
-								</ErrorSearchContextProvider>
-							)}
+							</SearchContext>
 						</Box>
 						{view ? (
 							<FilterPaywall
-								paywalled={!canEditIngestion}
+								setting="enable_ingest_filtering"
 								product={product}
 							>
 								{edit}
@@ -587,24 +404,59 @@ export const ProjectProductFilters: React.FC<{
 					<Box display="flex" width="full">
 						{view ? null : (
 							<Stack display="flex" width="full" gap="8">
-								{canEditSampling ? (
-									sampling
-								) : (
-									<Tooltip trigger={sampling}>
+								<EnterpriseFeatureButton
+									setting="enable_ingest_sampling"
+									name="Ingestion Sampling"
+									fn={async () => {}}
+									variant="basic"
+								>
+									<Box display="flex" width="full" gap="8">
 										<Box
+											width="full"
 											display="flex"
-											alignItems="center"
-											justifyContent="center"
-											p="4"
-											onClick={showEditSamplingUpgrade}
+											flexDirection="column"
+											gap="4"
 										>
-											<Text>
-												Available to customers on an
-												enterprise plan
-											</Text>
+											<Form.Label
+												label="Sampling %"
+												name={
+													formStore.names
+														.samplingPercent
+												}
+											/>
+											<Form.Input
+												disabled={!canEditSampling}
+												name={
+													formStore.names
+														.samplingPercent
+												}
+												type="number"
+											/>
 										</Box>
-									</Tooltip>
-								)}
+										<Box
+											width="full"
+											display="flex"
+											flexDirection="column"
+											gap="4"
+										>
+											<Form.Label
+												label="Max ingest per minute"
+												name={
+													formStore.names
+														.minuteRateLimit
+												}
+											/>
+											<Form.Input
+												disabled={!canEditSampling}
+												name={
+													formStore.names
+														.minuteRateLimit
+												}
+												type="number"
+											/>
+										</Box>
+									</Box>
+								</EnterpriseFeatureButton>
 								<Callout>
 									<Box
 										display="flex"
@@ -637,46 +489,20 @@ export const ProjectProductFilters: React.FC<{
 }
 
 const FilterPaywall: React.FC<
-	React.PropsWithChildren<{ product: ProductType; paywalled: boolean }>
-> = ({ product, paywalled, children }) => {
-	const navigate = useNavigate()
-	const { currentWorkspace } = useApplicationContext()
-
-	const showEditIngestionUpgrade = React.useCallback(async () => {
-		analytics.track('Project Ingestion Upgrade', {
-			product,
-			workspaceId: currentWorkspace?.id,
-		})
-		await message.warn(
-			'Setting up ingest filters is only available on paying plans.',
-			3,
-		)
-		navigate(`/w/${currentWorkspace?.id}/current-plan/update-plan`)
-	}, [currentWorkspace?.id, navigate, product])
-
-	if (!paywalled) {
-		return <>{children}</>
-	}
+	React.PropsWithChildren<{
+		product: ProductType
+		setting: keyof AllWorkspaceSettings
+	}>
+> = ({ setting, children }) => {
 	return (
-		<Tooltip
-			trigger={
-				<Box display="inline-flex" onClick={showEditIngestionUpgrade}>
-					{children}
-				</Box>
-			}
+		<EnterpriseFeatureButton
+			setting={setting}
+			name="Ingestion Limits"
+			fn={async () => undefined}
+			variant="basic"
 		>
-			<Box display="flex" alignItems="center" justifyContent="center">
-				<Box
-					display="flex"
-					alignItems="center"
-					justifyContent="center"
-					p="4"
-					onClick={showEditIngestionUpgrade}
-				>
-					<Text>Available to paid customers</Text>
-				</Box>
-			</Box>
-		</Tooltip>
+			{children}
+		</EnterpriseFeatureButton>
 	)
 }
 
@@ -685,12 +511,14 @@ const IngestTimeline: React.FC<{
 	dateRange: DateRange
 }> = ({ product, dateRange }) => {
 	const { projectId } = useProjectId()
-	const { data, loading } = useGetTracesMetricsQuery({
+	const { data, loading } = useGetMetricsQuery({
 		variables: {
+			product_type: ProductType.Traces,
 			project_id: projectId,
 			column: MetricColumn.Duration,
 			metric_types: [MetricAggregator.CountDistinctKey],
 			group_by: ['ingested'],
+			bucket_by: TIMESTAMP_KEY,
 			params: {
 				query: `span_name:IsIngestedBy product:${product}`,
 				date_range: {
@@ -701,29 +529,28 @@ const IngestTimeline: React.FC<{
 		},
 	})
 
-	const groupedByBucket = _.groupBy(
-		data?.traces_metrics.buckets,
+	const groupedByBucket = groupBy(
+		data?.metrics.buckets.map((b) => ({
+			...b,
+			group: b.group[0] || 'true',
+		})),
 		(i) => i.bucket_id,
 	)
 
-	const histogramBuckets = data?.traces_metrics.buckets.map((b) => ({
-		bucketId: b.bucket_id,
-		group: b.group,
-		counts: [
-			{
-				level: 'Ingested',
-				count:
-					(100 *
-						(groupedByBucket[b.bucket_id][0]?.metric_value ?? 0)) /
-					((groupedByBucket[b.bucket_id][0]?.metric_value ?? 0) +
-						(groupedByBucket[b.bucket_id][1]?.metric_value ?? 0) ||
-						1),
-				unit: '%',
-			},
-		],
+	const histogramBuckets = data?.metrics.buckets.map((b) => ({
+		[TIMESTAMP_KEY]: (b.bucket_min + b.bucket_max) / 2,
+		['percent']:
+			(100 *
+				(groupedByBucket[b.bucket_id].find((g) => g.group === 'true')
+					?.metric_value ?? 0)) /
+			(groupedByBucket[b.bucket_id]
+				.map((g) => g?.metric_value ?? 0)
+				.reduce((a, b) => a + b, 0) || 1),
 	}))
 
-	if (!loading && !data?.traces_metrics.buckets?.length) {
+	if (loading) {
+		return <LoadingBox />
+	} else if (!data?.metrics.buckets?.length) {
 		return (
 			<Box
 				display="flex"
@@ -740,16 +567,18 @@ const IngestTimeline: React.FC<{
 	}
 
 	return (
-		<Box width="full" height="full">
-			<LogsHistogram
-				startDate={dateRange.start}
-				endDate={dateRange.end}
-				onDatesChange={() => {}}
-				histogramBuckets={histogramBuckets}
-				bucketCount={data?.traces_metrics.bucket_count}
-				loading={loading}
-				loadingState="spinner"
-				legend
+		<Box width="full" style={{ height: 100 }}>
+			<BarChart
+				data={histogramBuckets}
+				yAxisFunction={MetricAggregator.Count}
+				xAxisMetric={TIMESTAMP_KEY}
+				yAxisMetric="percent"
+				series={['percent']}
+				strokeColors={[vars.theme.static.content.moderate]}
+				viewConfig={{
+					type: 'Bar chart',
+					showLegend: true,
+				}}
 			/>
 		</Box>
 	)

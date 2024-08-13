@@ -31,7 +31,7 @@ type AccessibleJiraResources struct {
 	ID        string   `json:"id"`
 	URL       string   `json:"url"`
 	Name      string   `json:"name"`
-	Scopes    []string `json:"scopes"`
+	Scopes    []string `json:"scopes,omitempty"`
 	AvatarURL string   `json:"avatarUrl"`
 }
 
@@ -47,19 +47,19 @@ type Account struct {
 	PaidPrev             int        `json:"paid_prev"`
 	PaidPrevPrev         int        `json:"paid_prev_prev"`
 	Email                string     `json:"email"`
-	SubscriptionStart    *time.Time `json:"subscription_start"`
+	SubscriptionStart    *time.Time `json:"subscription_start,omitempty"`
 	PlanTier             string     `json:"plan_tier"`
 	UnlimitedMembers     bool       `json:"unlimited_members"`
 	StripeCustomerID     string     `json:"stripe_customer_id"`
 	MemberCount          int        `json:"member_count"`
-	MemberLimit          *int       `json:"member_limit"`
+	MemberLimit          *int       `json:"member_limit,omitempty"`
 }
 
 type AccountDetails struct {
 	ID                   int                     `json:"id"`
 	Name                 string                  `json:"name"`
-	SessionCountPerMonth []*NamedCount           `json:"session_count_per_month"`
-	SessionCountPerDay   []*NamedCount           `json:"session_count_per_day"`
+	SessionCountPerMonth []*NamedCount           `json:"session_count_per_month,omitempty"`
+	SessionCountPerDay   []*NamedCount           `json:"session_count_per_day,omitempty"`
 	StripeCustomerID     string                  `json:"stripe_customer_id"`
 	Members              []*AccountDetailsMember `json:"members"`
 }
@@ -68,7 +68,7 @@ type AccountDetailsMember struct {
 	ID         int        `json:"id"`
 	Name       string     `json:"name"`
 	Email      string     `json:"email"`
-	LastActive *time.Time `json:"last_active"`
+	LastActive *time.Time `json:"last_active,omitempty"`
 }
 
 type AdminAboutYouDetails struct {
@@ -80,7 +80,7 @@ type AdminAboutYouDetails struct {
 	HeardAbout              string  `json:"heard_about"`
 	PhoneHomeContactAllowed bool    `json:"phone_home_contact_allowed"`
 	Referral                string  `json:"referral"`
-	Phone                   *string `json:"phone"`
+	Phone                   *string `json:"phone,omitempty"`
 }
 
 type AdminAndWorkspaceDetails struct {
@@ -92,24 +92,39 @@ type AdminAndWorkspaceDetails struct {
 	PhoneHomeContactAllowed     bool    `json:"phone_home_contact_allowed"`
 	Referral                    string  `json:"referral"`
 	WorkspaceName               string  `json:"workspace_name"`
-	AllowedAutoJoinEmailOrigins *string `json:"allowed_auto_join_email_origins"`
-	PromoCode                   *string `json:"promo_code"`
+	AllowedAutoJoinEmailOrigins *string `json:"allowed_auto_join_email_origins,omitempty"`
+	PromoCode                   *string `json:"promo_code,omitempty"`
+}
+
+type AlertDestinationInput struct {
+	DestinationType AlertDestinationType `json:"destination_type"`
+	TypeID          string               `json:"type_id"`
+	TypeName        string               `json:"type_name"`
+}
+
+type AlertStateChange struct {
+	ID            int        `json:"id"`
+	Timestamp     time.Time  `json:"timestamp"`
+	AlertID       int        `json:"AlertID"`
+	State         AlertState `json:"State"`
+	PreviousState AlertState `json:"PreviousState"`
+	Title         string     `json:"Title"`
+	GroupByKey    string     `json:"GroupByKey"`
 }
 
 type AllProjectSettings struct {
 	ID                                int            `json:"id"`
 	VerboseID                         string         `json:"verbose_id"`
 	Name                              string         `json:"name"`
-	BillingEmail                      *string        `json:"billing_email"`
-	Secret                            *string        `json:"secret"`
+	BillingEmail                      *string        `json:"billing_email,omitempty"`
 	WorkspaceID                       int            `json:"workspace_id"`
-	ExcludedUsers                     pq.StringArray `json:"excluded_users"`
-	ErrorFilters                      pq.StringArray `json:"error_filters"`
-	ErrorJSONPaths                    pq.StringArray `json:"error_json_paths"`
-	RageClickWindowSeconds            *int           `json:"rage_click_window_seconds"`
-	RageClickRadiusPixels             *int           `json:"rage_click_radius_pixels"`
-	RageClickCount                    *int           `json:"rage_click_count"`
-	FilterChromeExtension             *bool          `json:"filter_chrome_extension"`
+	ExcludedUsers                     pq.StringArray `json:"excluded_users,omitempty"`
+	ErrorFilters                      pq.StringArray `json:"error_filters,omitempty"`
+	ErrorJSONPaths                    pq.StringArray `json:"error_json_paths,omitempty"`
+	RageClickWindowSeconds            *int           `json:"rage_click_window_seconds,omitempty"`
+	RageClickRadiusPixels             *int           `json:"rage_click_radius_pixels,omitempty"`
+	RageClickCount                    *int           `json:"rage_click_count,omitempty"`
+	FilterChromeExtension             *bool          `json:"filter_chrome_extension,omitempty"`
 	FilterSessionsWithoutError        bool           `json:"filterSessionsWithoutError"`
 	AutoResolveStaleErrorsDayInterval int            `json:"autoResolveStaleErrorsDayInterval"`
 	Sampling                          *Sampling      `json:"sampling"`
@@ -130,10 +145,10 @@ type BillingDetails struct {
 	ErrorsDailyAverage   float64 `json:"errorsDailyAverage"`
 	LogsDailyAverage     float64 `json:"logsDailyAverage"`
 	TracesDailyAverage   float64 `json:"tracesDailyAverage"`
-	SessionsBillingLimit *int64  `json:"sessionsBillingLimit"`
-	ErrorsBillingLimit   *int64  `json:"errorsBillingLimit"`
-	LogsBillingLimit     *int64  `json:"logsBillingLimit"`
-	TracesBillingLimit   *int64  `json:"tracesBillingLimit"`
+	SessionsBillingLimit *int64  `json:"sessionsBillingLimit,omitempty"`
+	ErrorsBillingLimit   *int64  `json:"errorsBillingLimit,omitempty"`
+	LogsBillingLimit     *int64  `json:"logsBillingLimit,omitempty"`
+	TracesBillingLimit   *int64  `json:"tracesBillingLimit,omitempty"`
 }
 
 type CategoryHistogramBucket struct {
@@ -194,64 +209,64 @@ type DashboardDefinition struct {
 	ProjectID         int                      `json:"project_id"`
 	Name              string                   `json:"name"`
 	Metrics           []*DashboardMetricConfig `json:"metrics"`
-	LastAdminToEditID *int                     `json:"last_admin_to_edit_id"`
-	Layout            *string                  `json:"layout"`
-	IsDefault         *bool                    `json:"is_default"`
+	LastAdminToEditID *int                     `json:"last_admin_to_edit_id,omitempty"`
+	Layout            *string                  `json:"layout,omitempty"`
+	IsDefault         *bool                    `json:"is_default,omitempty"`
 }
 
 type DashboardMetricConfig struct {
 	Name                     string                   `json:"name"`
 	Description              string                   `json:"description"`
-	ComponentType            *MetricViewComponentType `json:"component_type"`
-	MaxGoodValue             *float64                 `json:"max_good_value"`
-	MaxNeedsImprovementValue *float64                 `json:"max_needs_improvement_value"`
-	PoorValue                *float64                 `json:"poor_value"`
-	Units                    *string                  `json:"units"`
-	HelpArticle              *string                  `json:"help_article"`
-	ChartType                *DashboardChartType      `json:"chart_type"`
-	Aggregator               *MetricAggregator        `json:"aggregator"`
-	MinValue                 *float64                 `json:"min_value"`
-	MinPercentile            *float64                 `json:"min_percentile"`
-	MaxValue                 *float64                 `json:"max_value"`
-	MaxPercentile            *float64                 `json:"max_percentile"`
-	Filters                  []*MetricTagFilter       `json:"filters"`
-	Groups                   []string                 `json:"groups"`
+	ComponentType            *MetricViewComponentType `json:"component_type,omitempty"`
+	MaxGoodValue             *float64                 `json:"max_good_value,omitempty"`
+	MaxNeedsImprovementValue *float64                 `json:"max_needs_improvement_value,omitempty"`
+	PoorValue                *float64                 `json:"poor_value,omitempty"`
+	Units                    *string                  `json:"units,omitempty"`
+	HelpArticle              *string                  `json:"help_article,omitempty"`
+	ChartType                *DashboardChartType      `json:"chart_type,omitempty"`
+	Aggregator               *MetricAggregator        `json:"aggregator,omitempty"`
+	MinValue                 *float64                 `json:"min_value,omitempty"`
+	MinPercentile            *float64                 `json:"min_percentile,omitempty"`
+	MaxValue                 *float64                 `json:"max_value,omitempty"`
+	MaxPercentile            *float64                 `json:"max_percentile,omitempty"`
+	Filters                  []*MetricTagFilter       `json:"filters,omitempty"`
+	Groups                   []string                 `json:"groups,omitempty"`
 }
 
 type DashboardMetricConfigInput struct {
 	Name                     string                   `json:"name"`
 	Description              string                   `json:"description"`
-	ComponentType            *MetricViewComponentType `json:"component_type"`
-	MaxGoodValue             *float64                 `json:"max_good_value"`
-	MaxNeedsImprovementValue *float64                 `json:"max_needs_improvement_value"`
-	PoorValue                *float64                 `json:"poor_value"`
-	Units                    *string                  `json:"units"`
-	HelpArticle              *string                  `json:"help_article"`
-	ChartType                *DashboardChartType      `json:"chart_type"`
-	Aggregator               *MetricAggregator        `json:"aggregator"`
-	MinValue                 *float64                 `json:"min_value"`
-	MinPercentile            *float64                 `json:"min_percentile"`
-	MaxValue                 *float64                 `json:"max_value"`
-	MaxPercentile            *float64                 `json:"max_percentile"`
-	Filters                  []*MetricTagFilterInput  `json:"filters"`
-	Groups                   []string                 `json:"groups"`
+	ComponentType            *MetricViewComponentType `json:"component_type,omitempty"`
+	MaxGoodValue             *float64                 `json:"max_good_value,omitempty"`
+	MaxNeedsImprovementValue *float64                 `json:"max_needs_improvement_value,omitempty"`
+	PoorValue                *float64                 `json:"poor_value,omitempty"`
+	Units                    *string                  `json:"units,omitempty"`
+	HelpArticle              *string                  `json:"help_article,omitempty"`
+	ChartType                *DashboardChartType      `json:"chart_type,omitempty"`
+	Aggregator               *MetricAggregator        `json:"aggregator,omitempty"`
+	MinValue                 *float64                 `json:"min_value,omitempty"`
+	MinPercentile            *float64                 `json:"min_percentile,omitempty"`
+	MaxValue                 *float64                 `json:"max_value,omitempty"`
+	MaxPercentile            *float64                 `json:"max_percentile,omitempty"`
+	Filters                  []*MetricTagFilterInput  `json:"filters,omitempty"`
+	Groups                   []string                 `json:"groups,omitempty"`
 }
 
 type DashboardParamsInput struct {
 	DateRange         *DateRangeRequiredInput `json:"date_range"`
-	ResolutionMinutes *int                    `json:"resolution_minutes"`
-	Timezone          *string                 `json:"timezone"`
-	Units             *string                 `json:"units"`
+	ResolutionMinutes *int                    `json:"resolution_minutes,omitempty"`
+	Timezone          *string                 `json:"timezone,omitempty"`
+	Units             *string                 `json:"units,omitempty"`
 	Aggregator        MetricAggregator        `json:"aggregator"`
-	Filters           []*MetricTagFilterInput `json:"filters"`
-	Groups            []string                `json:"groups"`
+	Filters           []*MetricTagFilterInput `json:"filters,omitempty"`
+	Groups            []string                `json:"groups,omitempty"`
 }
 
 type DashboardPayload struct {
 	Date       string           `json:"date"`
 	Value      float64          `json:"value"`
 	Aggregator MetricAggregator `json:"aggregator"`
-	Group      *string          `json:"group"`
+	Group      *string          `json:"group,omitempty"`
 }
 
 type DateHistogramBucketSize struct {
@@ -266,13 +281,18 @@ type DateHistogramOptions struct {
 }
 
 type DateRangeInput struct {
-	StartDate *time.Time `json:"start_date"`
-	EndDate   *time.Time `json:"end_date"`
+	StartDate *time.Time `json:"start_date,omitempty"`
+	EndDate   *time.Time `json:"end_date,omitempty"`
 }
 
 type DateRangeRequiredInput struct {
 	StartDate time.Time `json:"start_date"`
 	EndDate   time.Time `json:"end_date"`
+}
+
+type DateRangeRequiredOutput struct {
+	StartDate *time.Time `json:"start_date,omitempty"`
+	EndDate   *time.Time `json:"end_date,omitempty"`
 }
 
 type DiscordChannelInput struct {
@@ -281,12 +301,12 @@ type DiscordChannelInput struct {
 }
 
 type EnhancedUserDetailsResult struct {
-	ID      *int          `json:"id"`
-	Name    *string       `json:"name"`
-	Avatar  *string       `json:"avatar"`
-	Bio     *string       `json:"bio"`
-	Socials []*SocialLink `json:"socials"`
-	Email   *string       `json:"email"`
+	ID      *int          `json:"id,omitempty"`
+	Name    *string       `json:"name,omitempty"`
+	Avatar  *string       `json:"avatar,omitempty"`
+	Bio     *string       `json:"bio,omitempty"`
+	Socials []*SocialLink `json:"socials,omitempty"`
+	Email   *string       `json:"email,omitempty"`
 }
 
 type ErrorDistributionItem struct {
@@ -316,65 +336,54 @@ type ErrorMetadata struct {
 	ErrorID         int        `json:"error_id"`
 	SessionID       int        `json:"session_id"`
 	SessionSecureID string     `json:"session_secure_id"`
-	Environment     *string    `json:"environment"`
-	Timestamp       *time.Time `json:"timestamp"`
-	Os              *string    `json:"os"`
-	Browser         *string    `json:"browser"`
-	VisitedURL      *string    `json:"visited_url"`
+	Environment     *string    `json:"environment,omitempty"`
+	Timestamp       *time.Time `json:"timestamp,omitempty"`
+	Os              *string    `json:"os,omitempty"`
+	Browser         *string    `json:"browser,omitempty"`
+	VisitedURL      *string    `json:"visited_url,omitempty"`
 	Fingerprint     string     `json:"fingerprint"`
-	Identifier      *string    `json:"identifier"`
-	UserProperties  *string    `json:"user_properties"`
-	RequestID       *string    `json:"request_id"`
-	Payload         *string    `json:"payload"`
+	Identifier      *string    `json:"identifier,omitempty"`
+	UserProperties  *string    `json:"user_properties,omitempty"`
+	RequestID       *string    `json:"request_id,omitempty"`
+	Payload         *string    `json:"payload,omitempty"`
 }
-
-type ErrorObjectConnection struct {
-	Edges    []*ErrorObjectEdge `json:"edges"`
-	PageInfo *PageInfo          `json:"pageInfo"`
-}
-
-func (ErrorObjectConnection) IsConnection()               {}
-func (this ErrorObjectConnection) GetPageInfo() *PageInfo { return this.PageInfo }
-
-type ErrorObjectEdge struct {
-	Cursor string           `json:"cursor"`
-	Node   *ErrorObjectNode `json:"node"`
-}
-
-func (ErrorObjectEdge) IsEdge()                {}
-func (this ErrorObjectEdge) GetCursor() string { return this.Cursor }
 
 type ErrorObjectNode struct {
 	ID                 int                     `json:"id"`
 	CreatedAt          time.Time               `json:"createdAt"`
 	Event              string                  `json:"event"`
 	Timestamp          time.Time               `json:"timestamp"`
-	Session            *ErrorObjectNodeSession `json:"session"`
-	ErrorGroupSecureID string                  `json:"errorGroupSecureID"`
+	Session            *ErrorObjectNodeSession `json:"session,omitempty"`
 	ServiceVersion     string                  `json:"serviceVersion"`
 	ServiceName        string                  `json:"serviceName"`
+	ErrorGroupSecureID string                  `json:"errorGroupSecureID"`
 }
 
 type ErrorObjectNodeSession struct {
 	SecureID    string  `json:"secureID"`
-	Email       *string `json:"email"`
-	Fingerprint *int    `json:"fingerprint"`
+	Email       *string `json:"email,omitempty"`
+	Fingerprint *int    `json:"fingerprint,omitempty"`
 	Excluded    bool    `json:"excluded"`
 }
 
+type ErrorObjectResults struct {
+	ErrorObjects []*ErrorObjectNode `json:"error_objects"`
+	TotalCount   int64              `json:"totalCount"`
+}
+
 type ErrorTrace struct {
-	FileName                   *string             `json:"fileName"`
-	LineNumber                 *int                `json:"lineNumber"`
-	FunctionName               *string             `json:"functionName"`
-	ColumnNumber               *int                `json:"columnNumber"`
-	Error                      *string             `json:"error"`
-	SourceMappingErrorMetadata *SourceMappingError `json:"sourceMappingErrorMetadata"`
-	LineContent                *string             `json:"lineContent"`
-	LinesBefore                *string             `json:"linesBefore"`
-	LinesAfter                 *string             `json:"linesAfter"`
-	ExternalLink               *string             `json:"externalLink"`
-	EnhancementSource          *EnhancementSource  `json:"enhancementSource"`
-	EnhancementVersion         *string             `json:"enhancementVersion"`
+	FileName                   *string             `json:"fileName,omitempty"`
+	LineNumber                 *int                `json:"lineNumber,omitempty"`
+	FunctionName               *string             `json:"functionName,omitempty"`
+	ColumnNumber               *int                `json:"columnNumber,omitempty"`
+	Error                      *string             `json:"error,omitempty"`
+	SourceMappingErrorMetadata *SourceMappingError `json:"sourceMappingErrorMetadata,omitempty"`
+	LineContent                *string             `json:"lineContent,omitempty"`
+	LinesBefore                *string             `json:"linesBefore,omitempty"`
+	LinesAfter                 *string             `json:"linesAfter,omitempty"`
+	ExternalLink               *string             `json:"externalLink,omitempty"`
+	EnhancementSource          *EnhancementSource  `json:"enhancementSource,omitempty"`
+	EnhancementVersion         *string             `json:"enhancementVersion,omitempty"`
 }
 
 type GitHubRepo struct {
@@ -387,6 +396,26 @@ type GitlabProject struct {
 	ID                int    `json:"id"`
 	Name              string `json:"name"`
 	NameWithNameSpace string `json:"nameWithNameSpace"`
+}
+
+type GraphInput struct {
+	ID                *int              `json:"id,omitempty"`
+	VisualizationID   int               `json:"visualizationId"`
+	AfterGraphID      *int              `json:"afterGraphId,omitempty"`
+	Type              string            `json:"type"`
+	Title             string            `json:"title"`
+	ProductType       ProductType       `json:"productType"`
+	Query             string            `json:"query"`
+	Metric            string            `json:"metric"`
+	FunctionType      MetricAggregator  `json:"functionType"`
+	GroupByKey        *string           `json:"groupByKey,omitempty"`
+	BucketByKey       *string           `json:"bucketByKey,omitempty"`
+	BucketCount       *int              `json:"bucketCount,omitempty"`
+	Limit             *int              `json:"limit,omitempty"`
+	LimitFunctionType *MetricAggregator `json:"limitFunctionType,omitempty"`
+	LimitMetric       *string           `json:"limitMetric,omitempty"`
+	Display           *string           `json:"display,omitempty"`
+	NullHandling      *string           `json:"nullHandling,omitempty"`
 }
 
 type HeightList struct {
@@ -422,16 +451,16 @@ type IntegrationProjectMappingInput struct {
 type IntegrationStatus struct {
 	Integrated   bool       `json:"integrated"`
 	ResourceType string     `json:"resourceType"`
-	CreatedAt    *time.Time `json:"createdAt"`
+	CreatedAt    *time.Time `json:"createdAt,omitempty"`
 }
 
 type Invoice struct {
-	AmountDue    *int64     `json:"amountDue"`
-	AmountPaid   *int64     `json:"amountPaid"`
-	AttemptCount *int64     `json:"attemptCount"`
-	Date         *time.Time `json:"date"`
-	URL          *string    `json:"url"`
-	Status       *string    `json:"status"`
+	AmountDue    *int64     `json:"amountDue,omitempty"`
+	AmountPaid   *int64     `json:"amountPaid,omitempty"`
+	AttemptCount *int64     `json:"attemptCount,omitempty"`
+	Date         *time.Time `json:"date,omitempty"`
+	URL          *string    `json:"url,omitempty"`
+	Status       *string    `json:"status,omitempty"`
 }
 
 type IssuesSearchResult struct {
@@ -448,12 +477,12 @@ type JiraIssueType struct {
 	Name             string              `json:"name"`
 	UntranslatedName string              `json:"untranslatedName"`
 	Subtask          bool                `json:"subtask"`
-	Scope            *JiraIssueTypeScope `json:"scope"`
+	Scope            *JiraIssueTypeScope `json:"scope,omitempty"`
 }
 
 type JiraIssueTypeScope struct {
 	Type    string                 `json:"type"`
-	Project *JiraProjectIdentifier `json:"project"`
+	Project *JiraProjectIdentifier `json:"project,omitempty"`
 }
 
 type JiraProject struct {
@@ -461,7 +490,7 @@ type JiraProject struct {
 	Key        string           `json:"key"`
 	ID         string           `json:"id"`
 	Self       string           `json:"self"`
-	IssueTypes []*JiraIssueType `json:"issueTypes"`
+	IssueTypes []*JiraIssueType `json:"issueTypes,omitempty"`
 }
 
 type JiraProjectIdentifier struct {
@@ -475,8 +504,8 @@ type JiraTeam struct {
 }
 
 type LengthRangeInput struct {
-	Min *float64 `json:"min"`
-	Max *float64 `json:"max"`
+	Min *float64 `json:"min,omitempty"`
+	Max *float64 `json:"max,omitempty"`
 }
 
 type LinearTeam struct {
@@ -491,13 +520,13 @@ type Log struct {
 	Level           LogLevel               `json:"level"`
 	Message         string                 `json:"message"`
 	LogAttributes   map[string]interface{} `json:"logAttributes"`
-	TraceID         *string                `json:"traceID"`
-	SpanID          *string                `json:"spanID"`
-	SecureSessionID *string                `json:"secureSessionID"`
-	Source          *string                `json:"source"`
-	ServiceName     *string                `json:"serviceName"`
-	ServiceVersion  *string                `json:"serviceVersion"`
-	Environment     *string                `json:"environment"`
+	TraceID         *string                `json:"traceID,omitempty"`
+	SpanID          *string                `json:"spanID,omitempty"`
+	SecureSessionID *string                `json:"secureSessionID,omitempty"`
+	Source          *string                `json:"source,omitempty"`
+	ServiceName     *string                `json:"serviceName,omitempty"`
+	ServiceVersion  *string                `json:"serviceVersion,omitempty"`
+	Environment     *string                `json:"environment,omitempty"`
 }
 
 type LogAlertInput struct {
@@ -511,9 +540,8 @@ type LogAlertInput struct {
 	MicrosoftTeamsChannels []*MicrosoftTeamsChannelInput `json:"microsoft_teams_channels"`
 	WebhookDestinations    []*WebhookDestinationInput    `json:"webhook_destinations"`
 	Emails                 []string                      `json:"emails"`
-	Environments           []string                      `json:"environments"`
 	Disabled               bool                          `json:"disabled"`
-	Default                *bool                         `json:"default"`
+	Default                *bool                         `json:"default,omitempty"`
 	Query                  string                        `json:"query"`
 }
 
@@ -532,6 +560,13 @@ type LogEdge struct {
 
 func (LogEdge) IsEdge()                {}
 func (this LogEdge) GetCursor() string { return this.Cursor }
+
+type LogLine struct {
+	Timestamp time.Time `json:"timestamp"`
+	Body      string    `json:"body"`
+	Severity  *LogLevel `json:"severity,omitempty"`
+	Labels    string    `json:"labels"`
+}
 
 type LogsHistogram struct {
 	Buckets      []*LogsHistogramBucket `json:"buckets"`
@@ -564,7 +599,7 @@ type MetricBucket struct {
 	Group       []string         `json:"group"`
 	Column      MetricColumn     `json:"column"`
 	MetricType  MetricAggregator `json:"metric_type"`
-	MetricValue *float64         `json:"metric_value"`
+	MetricValue *float64         `json:"metric_value,omitempty"`
 }
 
 type MetricPreview struct {
@@ -595,6 +630,9 @@ type MicrosoftTeamsChannelInput struct {
 	ID   string `json:"id"`
 }
 
+type Mutation struct {
+}
+
 type NamedCount struct {
 	Name  string `json:"name"`
 	Count int    `json:"count"`
@@ -602,7 +640,7 @@ type NamedCount struct {
 
 type NetworkHistogramParamsInput struct {
 	LookbackDays float64                  `json:"lookback_days"`
-	Attribute    *NetworkRequestAttribute `json:"attribute"`
+	Attribute    *NetworkRequestAttribute `json:"attribute,omitempty"`
 }
 
 type NewUsersCount struct {
@@ -625,9 +663,9 @@ type PageInfo struct {
 type Plan struct {
 	Type                PlanType                    `json:"type"`
 	Interval            SubscriptionInterval        `json:"interval"`
-	MembersLimit        *int64                      `json:"membersLimit"`
+	MembersLimit        *int64                      `json:"membersLimit,omitempty"`
 	EnableBillingLimits bool                        `json:"enableBillingLimits"`
-	AwsMpSubscription   *AWSMarketplaceSubscription `json:"aws_mp_subscription"`
+	AwsMpSubscription   *AWSMarketplaceSubscription `json:"aws_mp_subscription,omitempty"`
 	SessionsLimit       int64                       `json:"sessionsLimit"`
 	ErrorsLimit         int64                       `json:"errorsLimit"`
 	LogsLimit           int64                       `json:"logsLimit"`
@@ -641,11 +679,17 @@ type Plan struct {
 type QueryInput struct {
 	Query     string                  `json:"query"`
 	DateRange *DateRangeRequiredInput `json:"date_range"`
+	Sort      *SortInput              `json:"sort,omitempty"`
 }
 
 type QueryKey struct {
 	Name string  `json:"name"`
 	Type KeyType `json:"type"`
+}
+
+type QueryOutput struct {
+	Query     string                   `json:"query"`
+	DateRange *DateRangeRequiredOutput `json:"date_range"`
 }
 
 type RageClickEventForProject struct {
@@ -662,7 +706,7 @@ type ReferrerTablePayload struct {
 }
 
 type S3File struct {
-	Key *string `json:"key"`
+	Key *string `json:"key,omitempty"`
 }
 
 type Sampling struct {
@@ -670,52 +714,52 @@ type Sampling struct {
 	ErrorSamplingRate      float64 `json:"error_sampling_rate"`
 	LogSamplingRate        float64 `json:"log_sampling_rate"`
 	TraceSamplingRate      float64 `json:"trace_sampling_rate"`
-	SessionMinuteRateLimit *int64  `json:"session_minute_rate_limit"`
-	ErrorMinuteRateLimit   *int64  `json:"error_minute_rate_limit"`
-	LogMinuteRateLimit     *int64  `json:"log_minute_rate_limit"`
-	TraceMinuteRateLimit   *int64  `json:"trace_minute_rate_limit"`
-	SessionExclusionQuery  *string `json:"session_exclusion_query"`
-	ErrorExclusionQuery    *string `json:"error_exclusion_query"`
-	LogExclusionQuery      *string `json:"log_exclusion_query"`
-	TraceExclusionQuery    *string `json:"trace_exclusion_query"`
+	SessionMinuteRateLimit *int64  `json:"session_minute_rate_limit,omitempty"`
+	ErrorMinuteRateLimit   *int64  `json:"error_minute_rate_limit,omitempty"`
+	LogMinuteRateLimit     *int64  `json:"log_minute_rate_limit,omitempty"`
+	TraceMinuteRateLimit   *int64  `json:"trace_minute_rate_limit,omitempty"`
+	SessionExclusionQuery  *string `json:"session_exclusion_query,omitempty"`
+	ErrorExclusionQuery    *string `json:"error_exclusion_query,omitempty"`
+	LogExclusionQuery      *string `json:"log_exclusion_query,omitempty"`
+	TraceExclusionQuery    *string `json:"trace_exclusion_query,omitempty"`
 }
 
 type SamplingInput struct {
-	SessionSamplingRate    *float64 `json:"session_sampling_rate"`
-	ErrorSamplingRate      *float64 `json:"error_sampling_rate"`
-	LogSamplingRate        *float64 `json:"log_sampling_rate"`
-	TraceSamplingRate      *float64 `json:"trace_sampling_rate"`
-	SessionMinuteRateLimit *int64   `json:"session_minute_rate_limit"`
-	ErrorMinuteRateLimit   *int64   `json:"error_minute_rate_limit"`
-	LogMinuteRateLimit     *int64   `json:"log_minute_rate_limit"`
-	TraceMinuteRateLimit   *int64   `json:"trace_minute_rate_limit"`
-	SessionExclusionQuery  *string  `json:"session_exclusion_query"`
-	ErrorExclusionQuery    *string  `json:"error_exclusion_query"`
-	LogExclusionQuery      *string  `json:"log_exclusion_query"`
-	TraceExclusionQuery    *string  `json:"trace_exclusion_query"`
+	SessionSamplingRate    *float64 `json:"session_sampling_rate,omitempty"`
+	ErrorSamplingRate      *float64 `json:"error_sampling_rate,omitempty"`
+	LogSamplingRate        *float64 `json:"log_sampling_rate,omitempty"`
+	TraceSamplingRate      *float64 `json:"trace_sampling_rate,omitempty"`
+	SessionMinuteRateLimit *int64   `json:"session_minute_rate_limit,omitempty"`
+	ErrorMinuteRateLimit   *int64   `json:"error_minute_rate_limit,omitempty"`
+	LogMinuteRateLimit     *int64   `json:"log_minute_rate_limit,omitempty"`
+	TraceMinuteRateLimit   *int64   `json:"trace_minute_rate_limit,omitempty"`
+	SessionExclusionQuery  *string  `json:"session_exclusion_query,omitempty"`
+	ErrorExclusionQuery    *string  `json:"error_exclusion_query,omitempty"`
+	LogExclusionQuery      *string  `json:"log_exclusion_query,omitempty"`
+	TraceExclusionQuery    *string  `json:"trace_exclusion_query,omitempty"`
 }
 
 type SanitizedAdmin struct {
 	ID       int     `json:"id"`
-	Name     *string `json:"name"`
+	Name     *string `json:"name,omitempty"`
 	Email    string  `json:"email"`
-	PhotoURL *string `json:"photo_url"`
+	PhotoURL *string `json:"photo_url,omitempty"`
 }
 
 type SanitizedAdminInput struct {
 	ID    int     `json:"id"`
-	Name  *string `json:"name"`
+	Name  *string `json:"name,omitempty"`
 	Email string  `json:"email"`
 }
 
 type SanitizedSlackChannel struct {
-	WebhookChannel   *string `json:"webhook_channel"`
-	WebhookChannelID *string `json:"webhook_channel_id"`
+	WebhookChannel   *string `json:"webhook_channel,omitempty"`
+	WebhookChannelID *string `json:"webhook_channel_id,omitempty"`
 }
 
 type SanitizedSlackChannelInput struct {
-	WebhookChannelName *string `json:"webhook_channel_name"`
-	WebhookChannelID   *string `json:"webhook_channel_id"`
+	WebhookChannelName *string `json:"webhook_channel_name,omitempty"`
+	WebhookChannelID   *string `json:"webhook_channel_id,omitempty"`
 }
 
 type ServiceConnection struct {
@@ -739,10 +783,10 @@ type ServiceNode struct {
 	ProjectID      int           `json:"projectID"`
 	Name           string        `json:"name"`
 	Status         ServiceStatus `json:"status"`
-	GithubRepoPath *string       `json:"githubRepoPath"`
-	BuildPrefix    *string       `json:"buildPrefix"`
-	GithubPrefix   *string       `json:"githubPrefix"`
-	ErrorDetails   []string      `json:"errorDetails"`
+	GithubRepoPath *string       `json:"githubRepoPath,omitempty"`
+	BuildPrefix    *string       `json:"buildPrefix,omitempty"`
+	GithubPrefix   *string       `json:"githubPrefix,omitempty"`
+	ErrorDetails   []string      `json:"errorDetails,omitempty"`
 }
 
 type SessionAlertInput struct {
@@ -757,7 +801,7 @@ type SessionAlertInput struct {
 	Emails                 []string                      `json:"emails"`
 	Environments           []string                      `json:"environments"`
 	Disabled               bool                          `json:"disabled"`
-	Default                *bool                         `json:"default"`
+	Default                *bool                         `json:"default,omitempty"`
 	Type                   SessionAlertType              `json:"type"`
 	UserProperties         []*UserPropertyInput          `json:"user_properties"`
 	ExcludeRules           []string                      `json:"exclude_rules"`
@@ -765,7 +809,7 @@ type SessionAlertInput struct {
 }
 
 type SessionCommentTagInput struct {
-	ID   *int   `json:"id"`
+	ID   *int   `json:"id,omitempty"`
 	Name string `json:"name"`
 }
 
@@ -776,7 +820,7 @@ type SessionExportWithSession struct {
 	Error        string    `json:"error"`
 	SecureID     string    `json:"secure_id"`
 	Identifier   string    `json:"identifier"`
-	ActiveLength *int      `json:"active_length"`
+	ActiveLength *int      `json:"active_length,omitempty"`
 }
 
 type SessionQuery struct {
@@ -805,29 +849,42 @@ type SlackSyncResponse struct {
 
 type SocialLink struct {
 	Type SocialType `json:"type"`
-	Link *string    `json:"link"`
+	Link *string    `json:"link,omitempty"`
+}
+
+type SortInput struct {
+	Column    string        `json:"column"`
+	Direction SortDirection `json:"direction"`
+}
+
+type SortOutput struct {
+	Column    string        `json:"column"`
+	Direction SortDirection `json:"direction"`
 }
 
 type SourceMappingError struct {
-	ErrorCode                  *SourceMappingErrorCode `json:"errorCode"`
-	StackTraceFileURL          *string                 `json:"stackTraceFileURL"`
-	SourcemapFetchStrategy     *string                 `json:"sourcemapFetchStrategy"`
-	SourceMapURL               *string                 `json:"sourceMapURL"`
-	MinifiedFetchStrategy      *string                 `json:"minifiedFetchStrategy"`
-	ActualMinifiedFetchedPath  *string                 `json:"actualMinifiedFetchedPath"`
-	MinifiedLineNumber         *int                    `json:"minifiedLineNumber"`
-	MinifiedColumnNumber       *int                    `json:"minifiedColumnNumber"`
-	ActualSourcemapFetchedPath *string                 `json:"actualSourcemapFetchedPath"`
-	SourcemapFileSize          *int                    `json:"sourcemapFileSize"`
-	MinifiedFileSize           *int                    `json:"minifiedFileSize"`
-	MappedLineNumber           *int                    `json:"mappedLineNumber"`
-	MappedColumnNumber         *int                    `json:"mappedColumnNumber"`
+	ErrorCode                  *SourceMappingErrorCode `json:"errorCode,omitempty"`
+	StackTraceFileURL          *string                 `json:"stackTraceFileURL,omitempty"`
+	SourcemapFetchStrategy     *string                 `json:"sourcemapFetchStrategy,omitempty"`
+	SourceMapURL               *string                 `json:"sourceMapURL,omitempty"`
+	MinifiedFetchStrategy      *string                 `json:"minifiedFetchStrategy,omitempty"`
+	ActualMinifiedFetchedPath  *string                 `json:"actualMinifiedFetchedPath,omitempty"`
+	MinifiedLineNumber         *int                    `json:"minifiedLineNumber,omitempty"`
+	MinifiedColumnNumber       *int                    `json:"minifiedColumnNumber,omitempty"`
+	ActualSourcemapFetchedPath *string                 `json:"actualSourcemapFetchedPath,omitempty"`
+	SourcemapFileSize          *int                    `json:"sourcemapFileSize,omitempty"`
+	MinifiedFileSize           *int                    `json:"minifiedFileSize,omitempty"`
+	MappedLineNumber           *int                    `json:"mappedLineNumber,omitempty"`
+	MappedColumnNumber         *int                    `json:"mappedColumnNumber,omitempty"`
+}
+
+type Subscription struct {
 }
 
 type SubscriptionDetails struct {
 	BaseAmount           int64                 `json:"baseAmount"`
-	Discount             *SubscriptionDiscount `json:"discount"`
-	LastInvoice          *Invoice              `json:"lastInvoice"`
+	Discount             *SubscriptionDiscount `json:"discount,omitempty"`
+	LastInvoice          *Invoice              `json:"lastInvoice,omitempty"`
 	BillingIssue         bool                  `json:"billingIssue"`
 	BillingIngestBlocked bool                  `json:"billingIngestBlocked"`
 }
@@ -836,7 +893,7 @@ type SubscriptionDiscount struct {
 	Name    string     `json:"name"`
 	Percent float64    `json:"percent"`
 	Amount  int64      `json:"amount"`
-	Until   *time.Time `json:"until"`
+	Until   *time.Time `json:"until,omitempty"`
 }
 
 type TopUsersPayload struct {
@@ -866,13 +923,14 @@ type Trace struct {
 	TraceAttributes map[string]interface{} `json:"traceAttributes"`
 	StatusCode      string                 `json:"statusCode"`
 	StatusMessage   string                 `json:"statusMessage"`
-	Events          []*TraceEvent          `json:"events"`
-	Links           []*TraceLink           `json:"links"`
+	Events          []*TraceEvent          `json:"events,omitempty"`
+	Links           []*TraceLink           `json:"links,omitempty"`
 }
 
 type TraceConnection struct {
 	Edges    []*TraceEdge `json:"edges"`
 	PageInfo *PageInfo    `json:"pageInfo"`
+	Sampled  bool         `json:"sampled"`
 }
 
 func (TraceConnection) IsConnection()               {}
@@ -888,9 +946,10 @@ func (this TraceEdge) GetCursor() string { return this.Cursor }
 
 type TraceError struct {
 	CreatedAt          time.Time `json:"created_at"`
-	TraceID            *string   `json:"trace_id"`
-	SpanID             *string   `json:"span_id"`
-	LogCursor          *string   `json:"log_cursor"`
+	ID                 int       `json:"id"`
+	TraceID            *string   `json:"trace_id,omitempty"`
+	SpanID             *string   `json:"span_id,omitempty"`
+	LogCursor          *string   `json:"log_cursor,omitempty"`
 	Event              string    `json:"event"`
 	Type               string    `json:"type"`
 	Source             string    `json:"source"`
@@ -917,9 +976,13 @@ type TracePayload struct {
 }
 
 type TrackPropertyInput struct {
-	ID    *int   `json:"id"`
+	ID    *int   `json:"id,omitempty"`
 	Name  string `json:"name"`
 	Value string `json:"value"`
+}
+
+type UsageHistory struct {
+	Usage *MetricsBuckets `json:"usage"`
 }
 
 type User struct {
@@ -955,8 +1018,15 @@ type VercelProjectMapping struct {
 
 type VercelProjectMappingInput struct {
 	VercelProjectID string  `json:"vercel_project_id"`
-	NewProjectName  *string `json:"new_project_name"`
-	ProjectID       *int    `json:"project_id"`
+	NewProjectName  *string `json:"new_project_name,omitempty"`
+	ProjectID       *int    `json:"project_id,omitempty"`
+}
+
+type VisualizationInput struct {
+	ID        *int   `json:"id,omitempty"`
+	ProjectID int    `json:"projectId"`
+	Name      string `json:"name"`
+	GraphIds  []int  `json:"graphIds,omitempty"`
 }
 
 type WebSocketEvent struct {
@@ -970,16 +1040,113 @@ type WebSocketEvent struct {
 
 type WebhookDestinationInput struct {
 	URL           string  `json:"url"`
-	Authorization *string `json:"authorization"`
+	Authorization *string `json:"authorization,omitempty"`
 }
 
 type WorkspaceForInviteLink struct {
-	ExpirationDate  *time.Time `json:"expiration_date"`
-	InviteeEmail    *string    `json:"invitee_email"`
+	ExpirationDate  *time.Time `json:"expiration_date,omitempty"`
+	InviteeEmail    *string    `json:"invitee_email,omitempty"`
 	Secret          string     `json:"secret"`
 	WorkspaceID     int        `json:"workspace_id"`
 	WorkspaceName   string     `json:"workspace_name"`
 	ExistingAccount bool       `json:"existing_account"`
+	ProjectID       int        `json:"project_id"`
+}
+
+type AlertDestinationType string
+
+const (
+	AlertDestinationTypeSlack          AlertDestinationType = "Slack"
+	AlertDestinationTypeDiscord        AlertDestinationType = "Discord"
+	AlertDestinationTypeMicrosoftTeams AlertDestinationType = "MicrosoftTeams"
+	AlertDestinationTypeWebhook        AlertDestinationType = "Webhook"
+	AlertDestinationTypeEmail          AlertDestinationType = "Email"
+)
+
+var AllAlertDestinationType = []AlertDestinationType{
+	AlertDestinationTypeSlack,
+	AlertDestinationTypeDiscord,
+	AlertDestinationTypeMicrosoftTeams,
+	AlertDestinationTypeWebhook,
+	AlertDestinationTypeEmail,
+}
+
+func (e AlertDestinationType) IsValid() bool {
+	switch e {
+	case AlertDestinationTypeSlack, AlertDestinationTypeDiscord, AlertDestinationTypeMicrosoftTeams, AlertDestinationTypeWebhook, AlertDestinationTypeEmail:
+		return true
+	}
+	return false
+}
+
+func (e AlertDestinationType) String() string {
+	return string(e)
+}
+
+func (e *AlertDestinationType) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AlertDestinationType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AlertDestinationType", str)
+	}
+	return nil
+}
+
+func (e AlertDestinationType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+type AlertState string
+
+const (
+	AlertStateNormal           AlertState = "Normal"
+	AlertStatePending          AlertState = "Pending"
+	AlertStateAlerting         AlertState = "Alerting"
+	AlertStateAlertingSilently AlertState = "AlertingSilently"
+	AlertStateNoData           AlertState = "NoData"
+	AlertStateError            AlertState = "Error"
+)
+
+var AllAlertState = []AlertState{
+	AlertStateNormal,
+	AlertStatePending,
+	AlertStateAlerting,
+	AlertStateAlertingSilently,
+	AlertStateNoData,
+	AlertStateError,
+}
+
+func (e AlertState) IsValid() bool {
+	switch e {
+	case AlertStateNormal, AlertStatePending, AlertStateAlerting, AlertStateAlertingSilently, AlertStateNoData, AlertStateError:
+		return true
+	}
+	return false
+}
+
+func (e AlertState) String() string {
+	return string(e)
+}
+
+func (e *AlertState) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AlertState(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AlertState", str)
+	}
+	return nil
+}
+
+func (e AlertState) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
 }
 
 type DashboardChartType string
@@ -1212,6 +1379,8 @@ const (
 	IntegrationTypeJira           IntegrationType = "Jira"
 	IntegrationTypeMicrosoftTeams IntegrationType = "MicrosoftTeams"
 	IntegrationTypeGitLab         IntegrationType = "GitLab"
+	IntegrationTypeHeroku         IntegrationType = "Heroku"
+	IntegrationTypeCloudflare     IntegrationType = "Cloudflare"
 )
 
 var AllIntegrationType = []IntegrationType{
@@ -1227,11 +1396,13 @@ var AllIntegrationType = []IntegrationType{
 	IntegrationTypeJira,
 	IntegrationTypeMicrosoftTeams,
 	IntegrationTypeGitLab,
+	IntegrationTypeHeroku,
+	IntegrationTypeCloudflare,
 }
 
 func (e IntegrationType) IsValid() bool {
 	switch e {
-	case IntegrationTypeSlack, IntegrationTypeLinear, IntegrationTypeZapier, IntegrationTypeFront, IntegrationTypeVercel, IntegrationTypeDiscord, IntegrationTypeClickUp, IntegrationTypeHeight, IntegrationTypeGitHub, IntegrationTypeJira, IntegrationTypeMicrosoftTeams, IntegrationTypeGitLab:
+	case IntegrationTypeSlack, IntegrationTypeLinear, IntegrationTypeZapier, IntegrationTypeFront, IntegrationTypeVercel, IntegrationTypeDiscord, IntegrationTypeClickUp, IntegrationTypeHeight, IntegrationTypeGitHub, IntegrationTypeJira, IntegrationTypeMicrosoftTeams, IntegrationTypeGitLab, IntegrationTypeHeroku, IntegrationTypeCloudflare:
 		return true
 	}
 	return false
@@ -1261,18 +1432,22 @@ func (e IntegrationType) MarshalGQL(w io.Writer) {
 type KeyType string
 
 const (
-	KeyTypeString  KeyType = "String"
-	KeyTypeNumeric KeyType = "Numeric"
+	KeyTypeBoolean   KeyType = "Boolean"
+	KeyTypeCreatable KeyType = "Creatable"
+	KeyTypeNumeric   KeyType = "Numeric"
+	KeyTypeString    KeyType = "String"
 )
 
 var AllKeyType = []KeyType{
-	KeyTypeString,
+	KeyTypeBoolean,
+	KeyTypeCreatable,
 	KeyTypeNumeric,
+	KeyTypeString,
 }
 
 func (e KeyType) IsValid() bool {
 	switch e {
-	case KeyTypeString, KeyTypeNumeric:
+	case KeyTypeBoolean, KeyTypeCreatable, KeyTypeNumeric, KeyTypeString:
 		return true
 	}
 	return false
@@ -1308,6 +1483,7 @@ const (
 	LogLevelWarn  LogLevel = "warn"
 	LogLevelError LogLevel = "error"
 	LogLevelFatal LogLevel = "fatal"
+	LogLevelPanic LogLevel = "panic"
 )
 
 var AllLogLevel = []LogLevel{
@@ -1317,11 +1493,12 @@ var AllLogLevel = []LogLevel{
 	LogLevelWarn,
 	LogLevelError,
 	LogLevelFatal,
+	LogLevelPanic,
 }
 
 func (e LogLevel) IsValid() bool {
 	switch e {
-	case LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelFatal:
+	case LogLevelTrace, LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelError, LogLevelFatal, LogLevelPanic:
 		return true
 	}
 	return false
@@ -1393,6 +1570,7 @@ type MetricAggregator string
 
 const (
 	MetricAggregatorCount            MetricAggregator = "Count"
+	MetricAggregatorCountDistinct    MetricAggregator = "CountDistinct"
 	MetricAggregatorCountDistinctKey MetricAggregator = "CountDistinctKey"
 	MetricAggregatorMin              MetricAggregator = "Min"
 	MetricAggregatorAvg              MetricAggregator = "Avg"
@@ -1402,10 +1580,12 @@ const (
 	MetricAggregatorP99              MetricAggregator = "P99"
 	MetricAggregatorMax              MetricAggregator = "Max"
 	MetricAggregatorSum              MetricAggregator = "Sum"
+	MetricAggregatorNone             MetricAggregator = "None"
 )
 
 var AllMetricAggregator = []MetricAggregator{
 	MetricAggregatorCount,
+	MetricAggregatorCountDistinct,
 	MetricAggregatorCountDistinctKey,
 	MetricAggregatorMin,
 	MetricAggregatorAvg,
@@ -1415,11 +1595,12 @@ var AllMetricAggregator = []MetricAggregator{
 	MetricAggregatorP99,
 	MetricAggregatorMax,
 	MetricAggregatorSum,
+	MetricAggregatorNone,
 }
 
 func (e MetricAggregator) IsValid() bool {
 	switch e {
-	case MetricAggregatorCount, MetricAggregatorCountDistinctKey, MetricAggregatorMin, MetricAggregatorAvg, MetricAggregatorP50, MetricAggregatorP90, MetricAggregatorP95, MetricAggregatorP99, MetricAggregatorMax, MetricAggregatorSum:
+	case MetricAggregatorCount, MetricAggregatorCountDistinct, MetricAggregatorCountDistinctKey, MetricAggregatorMin, MetricAggregatorAvg, MetricAggregatorP50, MetricAggregatorP90, MetricAggregatorP95, MetricAggregatorP99, MetricAggregatorMax, MetricAggregatorSum, MetricAggregatorNone:
 		return true
 	}
 	return false
@@ -1492,18 +1673,16 @@ func (e MetricBucketBy) MarshalGQL(w io.Writer) {
 type MetricColumn string
 
 const (
-	MetricColumnDuration    MetricColumn = "Duration"
-	MetricColumnMetricValue MetricColumn = "MetricValue"
+	MetricColumnDuration MetricColumn = "Duration"
 )
 
 var AllMetricColumn = []MetricColumn{
 	MetricColumnDuration,
-	MetricColumnMetricValue,
 }
 
 func (e MetricColumn) IsValid() bool {
 	switch e {
-	case MetricColumnDuration, MetricColumnMetricValue:
+	case MetricColumnDuration:
 		return true
 	}
 	return false
@@ -1632,6 +1811,9 @@ const (
 	NetworkRequestAttributeResponseSize     NetworkRequestAttribute = "response_size"
 	NetworkRequestAttributeStatus           NetworkRequestAttribute = "status"
 	NetworkRequestAttributeLatency          NetworkRequestAttribute = "latency"
+	NetworkRequestAttributeConnectLatency   NetworkRequestAttribute = "connect_latency"
+	NetworkRequestAttributeDNSLatency       NetworkRequestAttribute = "dns_latency"
+	NetworkRequestAttributeRedirectLatency  NetworkRequestAttribute = "redirect_latency"
 	NetworkRequestAttributeRequestID        NetworkRequestAttribute = "request_id"
 	NetworkRequestAttributeGraphqlOperation NetworkRequestAttribute = "graphql_operation"
 )
@@ -1644,13 +1826,16 @@ var AllNetworkRequestAttribute = []NetworkRequestAttribute{
 	NetworkRequestAttributeResponseSize,
 	NetworkRequestAttributeStatus,
 	NetworkRequestAttributeLatency,
+	NetworkRequestAttributeConnectLatency,
+	NetworkRequestAttributeDNSLatency,
+	NetworkRequestAttributeRedirectLatency,
 	NetworkRequestAttributeRequestID,
 	NetworkRequestAttributeGraphqlOperation,
 }
 
 func (e NetworkRequestAttribute) IsValid() bool {
 	switch e {
-	case NetworkRequestAttributeMethod, NetworkRequestAttributeInitiatorType, NetworkRequestAttributeURL, NetworkRequestAttributeBodySize, NetworkRequestAttributeResponseSize, NetworkRequestAttributeStatus, NetworkRequestAttributeLatency, NetworkRequestAttributeRequestID, NetworkRequestAttributeGraphqlOperation:
+	case NetworkRequestAttributeMethod, NetworkRequestAttributeInitiatorType, NetworkRequestAttributeURL, NetworkRequestAttributeBodySize, NetworkRequestAttributeResponseSize, NetworkRequestAttributeStatus, NetworkRequestAttributeLatency, NetworkRequestAttributeConnectLatency, NetworkRequestAttributeDNSLatency, NetworkRequestAttributeRedirectLatency, NetworkRequestAttributeRequestID, NetworkRequestAttributeGraphqlOperation:
 		return true
 	}
 	return false
@@ -1738,6 +1923,7 @@ const (
 	PlanTypeEnterprise PlanType = "Enterprise"
 	PlanTypeUsageBased PlanType = "UsageBased"
 	PlanTypeGraduated  PlanType = "Graduated"
+	PlanTypeBusiness   PlanType = "Business"
 )
 
 var AllPlanType = []PlanType{
@@ -1748,11 +1934,12 @@ var AllPlanType = []PlanType{
 	PlanTypeEnterprise,
 	PlanTypeUsageBased,
 	PlanTypeGraduated,
+	PlanTypeBusiness,
 }
 
 func (e PlanType) IsValid() bool {
 	switch e {
-	case PlanTypeFree, PlanTypeLite, PlanTypeBasic, PlanTypeStartup, PlanTypeEnterprise, PlanTypeUsageBased, PlanTypeGraduated:
+	case PlanTypeFree, PlanTypeLite, PlanTypeBasic, PlanTypeStartup, PlanTypeEnterprise, PlanTypeUsageBased, PlanTypeGraduated, PlanTypeBusiness:
 		return true
 	}
 	return false
@@ -1786,6 +1973,7 @@ const (
 	ProductTypeErrors   ProductType = "Errors"
 	ProductTypeLogs     ProductType = "Logs"
 	ProductTypeTraces   ProductType = "Traces"
+	ProductTypeMetrics  ProductType = "Metrics"
 )
 
 var AllProductType = []ProductType{
@@ -1793,11 +1981,12 @@ var AllProductType = []ProductType{
 	ProductTypeErrors,
 	ProductTypeLogs,
 	ProductTypeTraces,
+	ProductTypeMetrics,
 }
 
 func (e ProductType) IsValid() bool {
 	switch e {
-	case ProductTypeSessions, ProductTypeErrors, ProductTypeLogs, ProductTypeTraces:
+	case ProductTypeSessions, ProductTypeErrors, ProductTypeLogs, ProductTypeTraces, ProductTypeMetrics:
 		return true
 	}
 	return false
@@ -1827,14 +2016,16 @@ func (e ProductType) MarshalGQL(w io.Writer) {
 type ReservedErrorGroupKey string
 
 const (
-	ReservedErrorGroupKeyEvent  ReservedErrorGroupKey = "event"
-	ReservedErrorGroupKeyStatus ReservedErrorGroupKey = "status"
-	ReservedErrorGroupKeyTag    ReservedErrorGroupKey = "tag"
-	ReservedErrorGroupKeyType   ReservedErrorGroupKey = "type"
+	ReservedErrorGroupKeyEvent    ReservedErrorGroupKey = "event"
+	ReservedErrorGroupKeySecureID ReservedErrorGroupKey = "secure_id"
+	ReservedErrorGroupKeyStatus   ReservedErrorGroupKey = "status"
+	ReservedErrorGroupKeyTag      ReservedErrorGroupKey = "tag"
+	ReservedErrorGroupKeyType     ReservedErrorGroupKey = "type"
 )
 
 var AllReservedErrorGroupKey = []ReservedErrorGroupKey{
 	ReservedErrorGroupKeyEvent,
+	ReservedErrorGroupKeySecureID,
 	ReservedErrorGroupKeyStatus,
 	ReservedErrorGroupKeyTag,
 	ReservedErrorGroupKeyType,
@@ -1842,7 +2033,7 @@ var AllReservedErrorGroupKey = []ReservedErrorGroupKey{
 
 func (e ReservedErrorGroupKey) IsValid() bool {
 	switch e {
-	case ReservedErrorGroupKeyEvent, ReservedErrorGroupKeyStatus, ReservedErrorGroupKeyTag, ReservedErrorGroupKeyType:
+	case ReservedErrorGroupKeyEvent, ReservedErrorGroupKeySecureID, ReservedErrorGroupKeyStatus, ReservedErrorGroupKeyTag, ReservedErrorGroupKeyType:
 		return true
 	}
 	return false
@@ -1932,6 +2123,7 @@ type ReservedErrorsJoinedKey string
 
 const (
 	// ReservedErrorObjectKey
+	ReservedErrorsJoinedKeyID              ReservedErrorsJoinedKey = "id"
 	ReservedErrorsJoinedKeyBrowser         ReservedErrorsJoinedKey = "browser"
 	ReservedErrorsJoinedKeyClientID        ReservedErrorsJoinedKey = "client_id"
 	ReservedErrorsJoinedKeyEnvironment     ReservedErrorsJoinedKey = "environment"
@@ -1944,13 +2136,15 @@ const (
 	ReservedErrorsJoinedKeyTraceID         ReservedErrorsJoinedKey = "trace_id"
 	ReservedErrorsJoinedKeyVisitedURL      ReservedErrorsJoinedKey = "visited_url"
 	// ReservedErrorGroupKey
-	ReservedErrorsJoinedKeyEvent  ReservedErrorsJoinedKey = "event"
-	ReservedErrorsJoinedKeyStatus ReservedErrorsJoinedKey = "status"
-	ReservedErrorsJoinedKeyTag    ReservedErrorsJoinedKey = "tag"
-	ReservedErrorsJoinedKeyType   ReservedErrorsJoinedKey = "type"
+	ReservedErrorsJoinedKeyEvent    ReservedErrorsJoinedKey = "event"
+	ReservedErrorsJoinedKeySecureID ReservedErrorsJoinedKey = "secure_id"
+	ReservedErrorsJoinedKeyStatus   ReservedErrorsJoinedKey = "status"
+	ReservedErrorsJoinedKeyTag      ReservedErrorsJoinedKey = "tag"
+	ReservedErrorsJoinedKeyType     ReservedErrorsJoinedKey = "type"
 )
 
 var AllReservedErrorsJoinedKey = []ReservedErrorsJoinedKey{
+	ReservedErrorsJoinedKeyID,
 	ReservedErrorsJoinedKeyBrowser,
 	ReservedErrorsJoinedKeyClientID,
 	ReservedErrorsJoinedKeyEnvironment,
@@ -1963,6 +2157,7 @@ var AllReservedErrorsJoinedKey = []ReservedErrorsJoinedKey{
 	ReservedErrorsJoinedKeyTraceID,
 	ReservedErrorsJoinedKeyVisitedURL,
 	ReservedErrorsJoinedKeyEvent,
+	ReservedErrorsJoinedKeySecureID,
 	ReservedErrorsJoinedKeyStatus,
 	ReservedErrorsJoinedKeyTag,
 	ReservedErrorsJoinedKeyType,
@@ -1970,7 +2165,7 @@ var AllReservedErrorsJoinedKey = []ReservedErrorsJoinedKey{
 
 func (e ReservedErrorsJoinedKey) IsValid() bool {
 	switch e {
-	case ReservedErrorsJoinedKeyBrowser, ReservedErrorsJoinedKeyClientID, ReservedErrorsJoinedKeyEnvironment, ReservedErrorsJoinedKeyHasSession, ReservedErrorsJoinedKeyOsName, ReservedErrorsJoinedKeySecureSessionID, ReservedErrorsJoinedKeyServiceName, ReservedErrorsJoinedKeyServiceVersion, ReservedErrorsJoinedKeyTimestamp, ReservedErrorsJoinedKeyTraceID, ReservedErrorsJoinedKeyVisitedURL, ReservedErrorsJoinedKeyEvent, ReservedErrorsJoinedKeyStatus, ReservedErrorsJoinedKeyTag, ReservedErrorsJoinedKeyType:
+	case ReservedErrorsJoinedKeyID, ReservedErrorsJoinedKeyBrowser, ReservedErrorsJoinedKeyClientID, ReservedErrorsJoinedKeyEnvironment, ReservedErrorsJoinedKeyHasSession, ReservedErrorsJoinedKeyOsName, ReservedErrorsJoinedKeySecureSessionID, ReservedErrorsJoinedKeyServiceName, ReservedErrorsJoinedKeyServiceVersion, ReservedErrorsJoinedKeyTimestamp, ReservedErrorsJoinedKeyTraceID, ReservedErrorsJoinedKeyVisitedURL, ReservedErrorsJoinedKeyEvent, ReservedErrorsJoinedKeySecureID, ReservedErrorsJoinedKeyStatus, ReservedErrorsJoinedKeyTag, ReservedErrorsJoinedKeyType:
 		return true
 	}
 	return false
@@ -2010,6 +2205,7 @@ const (
 	ReservedLogKeySource          ReservedLogKey = "source"
 	ReservedLogKeyServiceName     ReservedLogKey = "service_name"
 	ReservedLogKeyServiceVersion  ReservedLogKey = "service_version"
+	ReservedLogKeyTimestamp       ReservedLogKey = "timestamp"
 )
 
 var AllReservedLogKey = []ReservedLogKey{
@@ -2022,11 +2218,12 @@ var AllReservedLogKey = []ReservedLogKey{
 	ReservedLogKeySource,
 	ReservedLogKeyServiceName,
 	ReservedLogKeyServiceVersion,
+	ReservedLogKeyTimestamp,
 }
 
 func (e ReservedLogKey) IsValid() bool {
 	switch e {
-	case ReservedLogKeyEnvironment, ReservedLogKeyLevel, ReservedLogKeyMessage, ReservedLogKeySecureSessionID, ReservedLogKeySpanID, ReservedLogKeyTraceID, ReservedLogKeySource, ReservedLogKeyServiceName, ReservedLogKeyServiceVersion:
+	case ReservedLogKeyEnvironment, ReservedLogKeyLevel, ReservedLogKeyMessage, ReservedLogKeySecureSessionID, ReservedLogKeySpanID, ReservedLogKeyTraceID, ReservedLogKeySource, ReservedLogKeyServiceName, ReservedLogKeyServiceVersion, ReservedLogKeyTimestamp:
 		return true
 	}
 	return false
@@ -2056,58 +2253,74 @@ func (e ReservedLogKey) MarshalGQL(w io.Writer) {
 type ReservedSessionKey string
 
 const (
-	ReservedSessionKeyEnvironment     ReservedSessionKey = "environment"
-	ReservedSessionKeyServiceName     ReservedSessionKey = "service_name"
-	ReservedSessionKeyAppVersion      ReservedSessionKey = "app_version"
-	ReservedSessionKeySecureSessionID ReservedSessionKey = "secure_session_id"
-	ReservedSessionKeyIdentified      ReservedSessionKey = "identified"
-	ReservedSessionKeyFingerprint     ReservedSessionKey = "fingerprint"
-	ReservedSessionKeyIdentifier      ReservedSessionKey = "identifier"
-	ReservedSessionKeyCity            ReservedSessionKey = "city"
-	ReservedSessionKeyCountry         ReservedSessionKey = "country"
-	ReservedSessionKeyOsName          ReservedSessionKey = "os_name"
-	ReservedSessionKeyOsVersion       ReservedSessionKey = "os_version"
-	ReservedSessionKeyBrowserName     ReservedSessionKey = "browser_name"
-	ReservedSessionKeyBrowserVersion  ReservedSessionKey = "browser_version"
-	ReservedSessionKeyProcessed       ReservedSessionKey = "processed"
-	ReservedSessionKeyHasRageClicks   ReservedSessionKey = "has_rage_clicks"
-	ReservedSessionKeyHasErrors       ReservedSessionKey = "has_errors"
-	ReservedSessionKeyLength          ReservedSessionKey = "length"
-	ReservedSessionKeyActiveLength    ReservedSessionKey = "active_length"
-	ReservedSessionKeyFirstTime       ReservedSessionKey = "first_time"
-	ReservedSessionKeyViewed          ReservedSessionKey = "viewed"
-	ReservedSessionKeyPagesVisited    ReservedSessionKey = "pages_visited"
-	ReservedSessionKeyNormalness      ReservedSessionKey = "normalness"
+	ReservedSessionKeyActiveLength       ReservedSessionKey = "active_length"
+	ReservedSessionKeyBrowserName        ReservedSessionKey = "browser_name"
+	ReservedSessionKeyBrowserVersion     ReservedSessionKey = "browser_version"
+	ReservedSessionKeyCity               ReservedSessionKey = "city"
+	ReservedSessionKeyCompleted          ReservedSessionKey = "completed"
+	ReservedSessionKeyCountry            ReservedSessionKey = "country"
+	ReservedSessionKeyEnvironment        ReservedSessionKey = "environment"
+	ReservedSessionKeyExcluded           ReservedSessionKey = "excluded"
+	ReservedSessionKeyFirstTime          ReservedSessionKey = "first_time"
+	ReservedSessionKeyHasComments        ReservedSessionKey = "has_comments"
+	ReservedSessionKeyHasErrors          ReservedSessionKey = "has_errors"
+	ReservedSessionKeyHasRageClicks      ReservedSessionKey = "has_rage_clicks"
+	ReservedSessionKeyIdentified         ReservedSessionKey = "identified"
+	ReservedSessionKeyIdentifier         ReservedSessionKey = "identifier"
+	ReservedSessionKeyIP                 ReservedSessionKey = "ip"
+	ReservedSessionKeyLength             ReservedSessionKey = "length"
+	ReservedSessionKeyNormalness         ReservedSessionKey = "normalness"
+	ReservedSessionKeyOsName             ReservedSessionKey = "os_name"
+	ReservedSessionKeyOsVersion          ReservedSessionKey = "os_version"
+	ReservedSessionKeyPagesVisited       ReservedSessionKey = "pages_visited"
+	ReservedSessionKeySample             ReservedSessionKey = "sample"
+	ReservedSessionKeySecureID           ReservedSessionKey = "secure_id"
+	ReservedSessionKeyServiceVersion     ReservedSessionKey = "service_version"
+	ReservedSessionKeyState              ReservedSessionKey = "state"
+	ReservedSessionKeyViewedByAnyone     ReservedSessionKey = "viewed_by_anyone"
+	ReservedSessionKeyViewedByMe         ReservedSessionKey = "viewed_by_me"
+	ReservedSessionKeyWithinBillingQuota ReservedSessionKey = "within_billing_quota"
+	ReservedSessionKeyLocState           ReservedSessionKey = "loc_state"
+	ReservedSessionKeyProcessed          ReservedSessionKey = "processed"
+	ReservedSessionKeyViewed             ReservedSessionKey = "viewed"
 )
 
 var AllReservedSessionKey = []ReservedSessionKey{
-	ReservedSessionKeyEnvironment,
-	ReservedSessionKeyServiceName,
-	ReservedSessionKeyAppVersion,
-	ReservedSessionKeySecureSessionID,
-	ReservedSessionKeyIdentified,
-	ReservedSessionKeyFingerprint,
-	ReservedSessionKeyIdentifier,
-	ReservedSessionKeyCity,
-	ReservedSessionKeyCountry,
-	ReservedSessionKeyOsName,
-	ReservedSessionKeyOsVersion,
+	ReservedSessionKeyActiveLength,
 	ReservedSessionKeyBrowserName,
 	ReservedSessionKeyBrowserVersion,
-	ReservedSessionKeyProcessed,
-	ReservedSessionKeyHasRageClicks,
-	ReservedSessionKeyHasErrors,
-	ReservedSessionKeyLength,
-	ReservedSessionKeyActiveLength,
+	ReservedSessionKeyCity,
+	ReservedSessionKeyCompleted,
+	ReservedSessionKeyCountry,
+	ReservedSessionKeyEnvironment,
+	ReservedSessionKeyExcluded,
 	ReservedSessionKeyFirstTime,
-	ReservedSessionKeyViewed,
-	ReservedSessionKeyPagesVisited,
+	ReservedSessionKeyHasComments,
+	ReservedSessionKeyHasErrors,
+	ReservedSessionKeyHasRageClicks,
+	ReservedSessionKeyIdentified,
+	ReservedSessionKeyIdentifier,
+	ReservedSessionKeyIP,
+	ReservedSessionKeyLength,
 	ReservedSessionKeyNormalness,
+	ReservedSessionKeyOsName,
+	ReservedSessionKeyOsVersion,
+	ReservedSessionKeyPagesVisited,
+	ReservedSessionKeySample,
+	ReservedSessionKeySecureID,
+	ReservedSessionKeyServiceVersion,
+	ReservedSessionKeyState,
+	ReservedSessionKeyViewedByAnyone,
+	ReservedSessionKeyViewedByMe,
+	ReservedSessionKeyWithinBillingQuota,
+	ReservedSessionKeyLocState,
+	ReservedSessionKeyProcessed,
+	ReservedSessionKeyViewed,
 }
 
 func (e ReservedSessionKey) IsValid() bool {
 	switch e {
-	case ReservedSessionKeyEnvironment, ReservedSessionKeyServiceName, ReservedSessionKeyAppVersion, ReservedSessionKeySecureSessionID, ReservedSessionKeyIdentified, ReservedSessionKeyFingerprint, ReservedSessionKeyIdentifier, ReservedSessionKeyCity, ReservedSessionKeyCountry, ReservedSessionKeyOsName, ReservedSessionKeyOsVersion, ReservedSessionKeyBrowserName, ReservedSessionKeyBrowserVersion, ReservedSessionKeyProcessed, ReservedSessionKeyHasRageClicks, ReservedSessionKeyHasErrors, ReservedSessionKeyLength, ReservedSessionKeyActiveLength, ReservedSessionKeyFirstTime, ReservedSessionKeyViewed, ReservedSessionKeyPagesVisited, ReservedSessionKeyNormalness:
+	case ReservedSessionKeyActiveLength, ReservedSessionKeyBrowserName, ReservedSessionKeyBrowserVersion, ReservedSessionKeyCity, ReservedSessionKeyCompleted, ReservedSessionKeyCountry, ReservedSessionKeyEnvironment, ReservedSessionKeyExcluded, ReservedSessionKeyFirstTime, ReservedSessionKeyHasComments, ReservedSessionKeyHasErrors, ReservedSessionKeyHasRageClicks, ReservedSessionKeyIdentified, ReservedSessionKeyIdentifier, ReservedSessionKeyIP, ReservedSessionKeyLength, ReservedSessionKeyNormalness, ReservedSessionKeyOsName, ReservedSessionKeyOsVersion, ReservedSessionKeyPagesVisited, ReservedSessionKeySample, ReservedSessionKeySecureID, ReservedSessionKeyServiceVersion, ReservedSessionKeyState, ReservedSessionKeyViewedByAnyone, ReservedSessionKeyViewedByMe, ReservedSessionKeyWithinBillingQuota, ReservedSessionKeyLocState, ReservedSessionKeyProcessed, ReservedSessionKeyViewed:
 		return true
 	}
 	return false
@@ -2141,7 +2354,8 @@ const (
 	ReservedTraceKeyHasErrors       ReservedTraceKey = "has_errors"
 	ReservedTraceKeyLevel           ReservedTraceKey = "level"
 	ReservedTraceKeyMessage         ReservedTraceKey = "message"
-	ReservedTraceKeyMetric          ReservedTraceKey = "metric"
+	ReservedTraceKeyMetricName      ReservedTraceKey = "metric_name"
+	ReservedTraceKeyMetricValue     ReservedTraceKey = "metric_value"
 	ReservedTraceKeySecureSessionID ReservedTraceKey = "secure_session_id"
 	ReservedTraceKeySpanID          ReservedTraceKey = "span_id"
 	ReservedTraceKeyTraceID         ReservedTraceKey = "trace_id"
@@ -2152,6 +2366,8 @@ const (
 	ReservedTraceKeyDuration        ReservedTraceKey = "duration"
 	ReservedTraceKeyServiceName     ReservedTraceKey = "service_name"
 	ReservedTraceKeyServiceVersion  ReservedTraceKey = "service_version"
+	ReservedTraceKeyTimestamp       ReservedTraceKey = "timestamp"
+	ReservedTraceKeyHighlightType   ReservedTraceKey = "highlight_type"
 )
 
 var AllReservedTraceKey = []ReservedTraceKey{
@@ -2159,7 +2375,8 @@ var AllReservedTraceKey = []ReservedTraceKey{
 	ReservedTraceKeyHasErrors,
 	ReservedTraceKeyLevel,
 	ReservedTraceKeyMessage,
-	ReservedTraceKeyMetric,
+	ReservedTraceKeyMetricName,
+	ReservedTraceKeyMetricValue,
 	ReservedTraceKeySecureSessionID,
 	ReservedTraceKeySpanID,
 	ReservedTraceKeyTraceID,
@@ -2170,11 +2387,13 @@ var AllReservedTraceKey = []ReservedTraceKey{
 	ReservedTraceKeyDuration,
 	ReservedTraceKeyServiceName,
 	ReservedTraceKeyServiceVersion,
+	ReservedTraceKeyTimestamp,
+	ReservedTraceKeyHighlightType,
 }
 
 func (e ReservedTraceKey) IsValid() bool {
 	switch e {
-	case ReservedTraceKeyEnvironment, ReservedTraceKeyHasErrors, ReservedTraceKeyLevel, ReservedTraceKeyMessage, ReservedTraceKeyMetric, ReservedTraceKeySecureSessionID, ReservedTraceKeySpanID, ReservedTraceKeyTraceID, ReservedTraceKeyParentSpanID, ReservedTraceKeyTraceState, ReservedTraceKeySpanName, ReservedTraceKeySpanKind, ReservedTraceKeyDuration, ReservedTraceKeyServiceName, ReservedTraceKeyServiceVersion:
+	case ReservedTraceKeyEnvironment, ReservedTraceKeyHasErrors, ReservedTraceKeyLevel, ReservedTraceKeyMessage, ReservedTraceKeyMetricName, ReservedTraceKeyMetricValue, ReservedTraceKeySecureSessionID, ReservedTraceKeySpanID, ReservedTraceKeyTraceID, ReservedTraceKeyParentSpanID, ReservedTraceKeyTraceState, ReservedTraceKeySpanName, ReservedTraceKeySpanKind, ReservedTraceKeyDuration, ReservedTraceKeyServiceName, ReservedTraceKeyServiceVersion, ReservedTraceKeyTimestamp, ReservedTraceKeyHighlightType:
 		return true
 	}
 	return false
@@ -2204,6 +2423,7 @@ func (e ReservedTraceKey) MarshalGQL(w io.Writer) {
 type RetentionPeriod string
 
 const (
+	RetentionPeriodSevenDays    RetentionPeriod = "SevenDays"
 	RetentionPeriodThirtyDays   RetentionPeriod = "ThirtyDays"
 	RetentionPeriodThreeMonths  RetentionPeriod = "ThreeMonths"
 	RetentionPeriodSixMonths    RetentionPeriod = "SixMonths"
@@ -2213,6 +2433,7 @@ const (
 )
 
 var AllRetentionPeriod = []RetentionPeriod{
+	RetentionPeriodSevenDays,
 	RetentionPeriodThirtyDays,
 	RetentionPeriodThreeMonths,
 	RetentionPeriodSixMonths,
@@ -2223,7 +2444,7 @@ var AllRetentionPeriod = []RetentionPeriod{
 
 func (e RetentionPeriod) IsValid() bool {
 	switch e {
-	case RetentionPeriodThirtyDays, RetentionPeriodThreeMonths, RetentionPeriodSixMonths, RetentionPeriodTwelveMonths, RetentionPeriodTwoYears, RetentionPeriodThreeYears:
+	case RetentionPeriodSevenDays, RetentionPeriodThirtyDays, RetentionPeriodThreeMonths, RetentionPeriodSixMonths, RetentionPeriodTwelveMonths, RetentionPeriodTwoYears, RetentionPeriodThreeYears:
 		return true
 	}
 	return false
@@ -2253,18 +2474,22 @@ func (e RetentionPeriod) MarshalGQL(w io.Writer) {
 type SavedSegmentEntityType string
 
 const (
-	SavedSegmentEntityTypeLog   SavedSegmentEntityType = "Log"
-	SavedSegmentEntityTypeTrace SavedSegmentEntityType = "Trace"
+	SavedSegmentEntityTypeLog     SavedSegmentEntityType = "Log"
+	SavedSegmentEntityTypeTrace   SavedSegmentEntityType = "Trace"
+	SavedSegmentEntityTypeError   SavedSegmentEntityType = "Error"
+	SavedSegmentEntityTypeSession SavedSegmentEntityType = "Session"
 )
 
 var AllSavedSegmentEntityType = []SavedSegmentEntityType{
 	SavedSegmentEntityTypeLog,
 	SavedSegmentEntityTypeTrace,
+	SavedSegmentEntityTypeError,
+	SavedSegmentEntityTypeSession,
 }
 
 func (e SavedSegmentEntityType) IsValid() bool {
 	switch e {
-	case SavedSegmentEntityTypeLog, SavedSegmentEntityTypeTrace:
+	case SavedSegmentEntityTypeLog, SavedSegmentEntityTypeTrace, SavedSegmentEntityTypeError, SavedSegmentEntityTypeSession:
 		return true
 	}
 	return false

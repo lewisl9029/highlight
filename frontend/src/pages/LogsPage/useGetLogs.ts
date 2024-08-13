@@ -27,6 +27,8 @@ const initialWindowInfo: PageInfo = {
 	endCursor: '', // unused but needed for typedef
 }
 
+export const MAX_LOGS = 50
+
 export const useGetLogs = ({
 	query,
 	project_id,
@@ -110,10 +112,11 @@ export const useGetLogs = ({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [data?.logs.edges])
 
-	const { numMore, reset } = usePollQuery<
+	const { numMore, pollingExpired, reset } = usePollQuery<
 		GetLogsQuery,
 		GetLogsQueryVariables
 	>({
+		maxResults: MAX_LOGS,
 		skip: disablePolling,
 		variableFn: useCallback(
 			() => ({
@@ -123,9 +126,9 @@ export const useGetLogs = ({
 				params: {
 					query,
 					date_range: {
-						start_date: moment(logResultMetadata.endDate).format(
-							TIME_FORMAT,
-						),
+						start_date: moment(logResultMetadata.endDate)
+							.add(1, 'second')
+							.format(TIME_FORMAT),
 						end_date: moment().format(TIME_FORMAT),
 					},
 				},
@@ -247,6 +250,7 @@ export const useGetLogs = ({
 		logEdges: logEdgesWithResources,
 		moreLogs: numMore,
 		clearMoreLogs: reset,
+		pollingExpired,
 		loading,
 		loadingAfter,
 		loadingBefore,

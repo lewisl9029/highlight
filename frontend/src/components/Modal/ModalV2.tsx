@@ -9,6 +9,7 @@ import type { sprinkles } from '@highlight-run/ui/sprinkles'
 import { vars } from '@highlight-run/ui/vars'
 import clsx from 'clsx'
 import React from 'react'
+import { createPortal } from 'react-dom'
 
 import { styledVerticalScrollbar } from '@/style/common.css'
 
@@ -26,7 +27,7 @@ export const Modal: React.FC<
 		innerWidth?: Pick<Parameters<typeof sprinkles>[0], 'width'>['width']
 		innerHeight?: Pick<Parameters<typeof sprinkles>[0], 'height'>['height']
 		maxHeight?: string
-		title?: string
+		title?: React.ReactNode
 		footer?: React.ReactNode
 	}>
 > = ({
@@ -41,7 +42,8 @@ export const Modal: React.FC<
 	title,
 	footer,
 }) => {
-	return (
+	const portalRoot = document.getElementById('portal')!
+	return createPortal(
 		<Box
 			width="screen"
 			display="flex"
@@ -52,7 +54,7 @@ export const Modal: React.FC<
 			style={{
 				top: 0,
 				left: 0,
-				zIndex: '90',
+				zIndex: '20001', // +1 more than the header z-index
 				overflow: 'hidden',
 				backgroundColor: '#6F6E777A',
 			}}
@@ -99,7 +101,7 @@ export const Modal: React.FC<
 							<ButtonIcon
 								kind="secondary"
 								emphasis="none"
-								size="xSmall"
+								size="minimal"
 								onClick={onClose}
 								icon={
 									<IconSolidX
@@ -117,6 +119,8 @@ export const Modal: React.FC<
 				</Box>
 				{footer}
 			</Stack>
-		</Box>
+		</Box>,
+		portalRoot,
+		'modal',
 	)
 }

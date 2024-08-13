@@ -24,15 +24,22 @@ import {
 	RequestType,
 	Tab,
 } from '@pages/Player/Toolbar/DevToolsWindowV2/utils'
-import { useParams } from '@util/react-router/useParams'
-import { playerTimeToSessionAbsoluteTime } from '@util/session/utils'
 import { formatTime, MillisToMinutesAndSeconds } from '@util/time'
 import _ from 'lodash'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import moment from 'moment'
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 
 import { ErrorObject } from '@/graph/generated/schemas'
 import { useActiveNetworkResourceId } from '@/hooks/useActiveNetworkResourceId'
+import { useSessionParams } from '@/pages/Sessions/utils'
 import { styledVerticalScrollbar } from '@/style/common.css'
 import analytics from '@/util/analytics'
 
@@ -59,7 +66,7 @@ export const NetworkPage = ({
 	const startTime = sessionMetadata.startTime
 	const { showPlayerAbsoluteTime } = usePlayerConfiguration()
 	const { setActiveNetworkResourceId } = useActiveNetworkResourceId()
-	const { session_secure_id } = useParams<{ session_secure_id: string }>()
+	const { sessionSecureId } = useSessionParams()
 
 	const virtuoso = useRef<VirtuosoHandle>(null)
 
@@ -72,12 +79,13 @@ export const NetworkPage = ({
 	useEffect(() => {
 		loadResources()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [session_secure_id])
+	}, [sessionSecureId])
 
 	const networkRange = useMemo(() => {
 		if (parsedResources.length > 0) {
-			const start = parsedResources[0].startTime
-			const end = parsedResources[parsedResources.length - 1].responseEnd
+			const start = parsedResources[0].startTimeAbs
+			const end =
+				parsedResources[parsedResources.length - 1].responseEndAbs
 			return end - start
 		}
 		return 0
@@ -140,7 +148,16 @@ export const NetworkPage = ({
 
 		// Need to have timestamp for findLastActiveEventIndex.
 		current.forEach((resource) => {
-			resource.timestamp = resource.startTime + startTime
+			if (resource.startTimeAbs) {
+				resource.timestamp = resource.startTimeAbs
+				resource.relativeStartTime = Math.max(
+					resource.startTimeAbs - startTime,
+					0,
+				)
+			} else {
+				resource.timestamp = resource.startTime + startTime
+				resource.relativeStartTime = resource.startTime
+			}
 		})
 
 		if (filter !== '') {
@@ -158,13 +175,25 @@ export const NetworkPage = ({
 		return current
 	}, [parsedResources, filter, requestTypes, requestStatuses, startTime])
 
-	const currentResourceIdx = useMemo(() => {
-		return findLastActiveEventIndex(
-			Math.round(time),
-			startTime,
-			resourcesToRender,
-		)
-	}, [resourcesToRender, startTime, time])
+	const [currentResourceIdx, setCurrentResourceIdx] = useState(-1)
+
+	useEffect(
+		() =>
+			_.throttle(
+				() => {
+					const activeIndex = findLastActiveEventIndex(
+						Math.round(time),
+						startTime,
+						resourcesToRender,
+					)
+
+					setCurrentResourceIdx(activeIndex)
+				},
+				THROTTLED_UPDATE_MS,
+				{ leading: true, trailing: false },
+			),
+		[resourcesToRender, startTime, time],
+	)
 
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	const scrollFunction = useCallback(
@@ -315,13 +344,12 @@ const ResourceRow = ({
 	setActiveNetworkResourceId,
 	networkRequestAndResponseRecordingEnabled,
 	setTime,
-	playerStartTime,
 	errors,
 	showPlayerAbsoluteTime,
 }: ResourceRowProps) => {
-	const leftPaddingPercent = (resource.startTime / networkRange) * 100
+	const leftPaddingPercent = (resource.relativeStartTime / networkRange) * 100
 	const actualPercent = Math.max(
-		((resource.responseEnd - resource.startTime) / networkRange) * 100,
+		(resource.duration / networkRange) * 100,
 		0.1,
 	)
 	const rightPaddingPercent = 100 - actualPercent - leftPaddingPercent
@@ -391,15 +419,12 @@ const ResourceRow = ({
 					lines="1"
 				>
 					{showPlayerAbsoluteTime
-						? playerTimeToSessionAbsoluteTime({
-								sessionStartTime: playerStartTime,
-								relativeTime: resource.startTime,
-						  })
-						: MillisToMinutesAndSeconds(resource.startTime)}
+						? moment(resource.timestamp).format('h:mm:ss A')
+						: MillisToMinutesAndSeconds(resource.relativeStartTime)}
 				</Text>
 				<Text size="small" weight={showingDetails ? 'bold' : 'medium'}>
-					{resource.responseEnd && resource.startTime
-						? formatTime(resource.responseEnd - resource.startTime)
+					{!!resource.duration
+						? formatTime(resource.duration)
 						: 'N/A'}
 				</Text>
 				<Box cssClass={styles.timingBarWrapper}>
@@ -429,7 +454,7 @@ const ResourceRow = ({
 					size="medium"
 					onClick={(event) => {
 						event.stopPropagation() // prevent panel from closing when clicking a resource
-						setTime(resource.startTime)
+						setTime(resource.relativeStartTime)
 						setActiveNetworkResourceId(resource.id)
 					}}
 				>
@@ -487,22 +512,7 @@ const ResourceLoadingErrorCallout = function ({
 			<Callout
 				border
 				title={`Failed to load session network resources: ${error}`}
-				icon={() => (
-					<Box
-						borderRadius="5"
-						style={{
-							alignItems: 'center',
-							backgroundColor: '#E9E9E9',
-							display: 'flex',
-							height: 22,
-							justifyContent: 'center',
-							textAlign: 'center',
-							width: 22,
-						}}
-					>
-						<IconSolidExclamation size={14} color="#777777" />
-					</Box>
-				)}
+				icon={IconSolidExclamation}
 			/>
 		</Box>
 	)

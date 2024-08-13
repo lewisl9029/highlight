@@ -1,3 +1,6 @@
+import { CalendlyButton } from '@components/CalendlyModal/CalendlyButton'
+import LoadingBox from '@components/LoadingBox'
+import { toast } from '@components/Toaster'
 import { USD } from '@dinero.js/currencies'
 import {
 	Badge,
@@ -5,7 +8,7 @@ import {
 	Callout,
 	Heading,
 	IconProps,
-	IconSolidArrowSmRight,
+	IconSolidCheveronDown,
 	IconSolidCheveronRight,
 	IconSolidExclamation,
 	IconSolidInformationCircle,
@@ -14,14 +17,15 @@ import {
 	IconSolidPencil,
 	IconSolidPlayCircle,
 	IconSolidTraces,
+	Menu,
 	Stack,
 	Tag,
 	Text,
 	Tooltip,
 } from '@highlight-run/ui/components'
 import { vars } from '@highlight-run/ui/vars'
-import { getPlanChangeEmail } from '@util/billing/billing'
-import { message } from 'antd'
+import { BarChart } from '@pages/Graphing/components/BarChart'
+import { TIMESTAMP_KEY } from '@pages/Graphing/components/Graph'
 import { dinero, toDecimal } from 'dinero.js'
 import moment from 'moment'
 import React, { useEffect } from 'react'
@@ -32,10 +36,12 @@ import { LoadingRightPanel } from '@/components/Loading/Loading'
 import {
 	useGetBillingDetailsQuery,
 	useGetCustomerPortalUrlLazyQuery,
+	useGetWorkspaceUsageHistoryQuery,
 	useUpdateBillingDetailsMutation,
 } from '@/graph/generated/hooks'
 import {
 	AwsMarketplaceSubscription,
+	MetricAggregator,
 	PlanType,
 	ProductType,
 	RetentionPeriod,
@@ -43,7 +49,6 @@ import {
 import {
 	getCostCents,
 	getNextBillingDate,
-	getQuantity,
 	PlanSelectStep,
 	UpdatePlanModal,
 } from '@/pages/Billing/UpdatePlanPage'
@@ -64,13 +69,21 @@ type UsageCardProps = {
 	planType: PlanType
 	billingLimitCents: number | undefined
 	usageAmount: number
+	usageLimitAmount: number | undefined
 	includedQuantity: number
 	isPaying: boolean
 	enableBillingLimits: boolean | undefined
 	billingIssues: boolean
 	setStep: (step: PlanSelectStep) => void
 	awsMpSubscription?: AwsMarketplaceSubscription | null | undefined
+	billingPeriodEnd?: moment.Moment
 }
+
+const UsageRangeOptions = ['Monthly', 'Weekly', 'Daily'] as const
+
+const BucketCount = 12
+const DaysInWeek = 7
+const WeeksInMonth = 4
 
 const UsageCard = ({
 	productIcon,
@@ -79,13 +92,54 @@ const UsageCard = ({
 	retentionPeriod,
 	billingLimitCents,
 	usageAmount,
+	usageLimitAmount,
+	planType,
 	includedQuantity,
 	isPaying,
 	enableBillingLimits,
 	billingIssues,
 	setStep,
 	awsMpSubscription,
+	billingPeriodEnd,
 }: UsageCardProps) => {
+	const { workspace_id } = useParams<{
+		workspace_id: string
+	}>()
+
+	const [usageRange, setRange] = React.useState<{
+		start: moment.Moment
+		end: moment.Moment
+	}>({
+		start: (moment(billingPeriodEnd) ?? moment()).subtract(3, 'months'),
+		end: moment(billingPeriodEnd) ?? moment(),
+	})
+
+	const setUsageRange = (option: 'Monthly' | 'Weekly' | 'Daily') => {
+		setRange({
+			start: moment().subtract(
+				option === 'Monthly'
+					? BucketCount * DaysInWeek * WeeksInMonth
+					: option === 'Weekly'
+					? BucketCount * DaysInWeek
+					: BucketCount,
+				'days',
+			),
+			end: moment(),
+		})
+	}
+
+	const { data: usageHistoryData } = useGetWorkspaceUsageHistoryQuery({
+		variables: {
+			workspace_id: workspace_id!,
+			product_type: productType,
+			date_range: {
+				start_date: usageRange.start.toISOString(),
+				end_date: usageRange.end.toISOString(),
+			},
+		},
+	})
+	const usageHistory = usageHistoryData?.usageHistory?.usage
+
 	const costCents = isPaying
 		? getCostCents(
 				productType,
@@ -95,13 +149,6 @@ const UsageCard = ({
 				includedQuantity,
 		  )
 		: 0
-	const usageLimitAmount = getQuantity(
-		productType,
-		rate,
-		retentionPeriod,
-		billingLimitCents,
-		includedQuantity,
-	)
 
 	const costFormatted =
 		'$ ' +
@@ -143,22 +190,62 @@ const UsageCard = ({
 				</Box>
 				<Box display="flex" gap="4">
 					{!enableBillingLimits ? (
-						<Badge
-							size="medium"
-							shape="basic"
-							kind="primary"
-							variant="gray"
-							label={`${usageAmount.toLocaleString()} ${productType.toLocaleLowerCase()}`}
-						></Badge>
+						<Tooltip
+							maxWidth={177}
+							delayed
+							trigger={
+								<Badge
+									size="medium"
+									shape="basic"
+									kind="primary"
+									variant="gray"
+									label={`${usageAmount.toLocaleString()} ${productType.toLocaleLowerCase()} this month`}
+									iconEnd={
+										<IconSolidInformationCircle size={12} />
+									}
+								></Badge>
+							}
+						>
+							<Box padding="4">
+								<Text size="xSmall" color="moderate">
+									We’ve ingested{' '}
+									<b>
+										{usageAmount.toLocaleString()}{' '}
+										{productType.toLocaleLowerCase()}
+									</b>{' '}
+									this month. {includedQuantity} are included
+									on the {planType} tier.
+								</Text>
+							</Box>
+						</Tooltip>
 					) : null}
-					<Badge
-						size="medium"
-						shape="basic"
-						kind="secondary"
-						label={RETENTION_PERIOD_LABELS[retentionPeriod]}
-					/>
+					<Tooltip
+						maxWidth={177}
+						delayed
+						trigger={
+							<Badge
+								size="medium"
+								shape="basic"
+								kind="secondary"
+								label={RETENTION_PERIOD_LABELS[retentionPeriod]}
+								iconEnd={
+									<IconSolidInformationCircle size={12} />
+								}
+							/>
+						}
+					>
+						<Box padding="4">
+							<Text size="xSmall" color="moderate">
+								We retain your{' '}
+								<b>{productType.toLocaleLowerCase()}</b> for{' '}
+								{RETENTION_PERIOD_LABELS[retentionPeriod]}. Data
+								is deleted after that period.
+							</Text>
+						</Box>
+					</Tooltip>
 					{enableBillingLimits ? (
 						<Tooltip
+							maxWidth={177}
 							delayed
 							trigger={
 								<Badge
@@ -171,11 +258,15 @@ const UsageCard = ({
 									iconEnd={
 										<IconSolidInformationCircle size={12} />
 									}
-								></Badge>
+								/>
 							}
 						>
-							{productType} will not be recorded once this billing
-							limit is reached.
+							<Box padding="4">
+								<Text size="xSmall" color="moderate">
+									<b>{productType}</b> will not be recorded
+									once this billing limit is reached.
+								</Text>
+							</Box>
 						</Tooltip>
 					) : null}
 					{billingLimitCents === 0 ? (
@@ -220,9 +311,18 @@ const UsageCard = ({
 							</Text>
 						)}
 						{isOverage && (
-							<Tooltip delayed trigger={<IconSolidExclamation />}>
-								{productType} have exceeded your billing limit
-								and are not being recorded.
+							<Tooltip
+								maxWidth={177}
+								delayed
+								trigger={<IconSolidExclamation size={12} />}
+							>
+								<Box padding="4">
+									<Text size="xSmall" color="moderate">
+										<b>{productType}</b> have exceeded your
+										billing limit and are not being
+										recorded.
+									</Text>
+								</Box>
 							</Tooltip>
 						)}
 					</Box>
@@ -239,6 +339,99 @@ const UsageCard = ({
 					</Box>
 				</Box>
 			) : null}
+			<Box
+				width="full"
+				height="full"
+				padding="8"
+				gap="4"
+				display="flex"
+				flexDirection="column"
+				alignItems="flex-end"
+				border="dividerWeak"
+				borderRadius="6"
+				style={{
+					backgroundColor: vars.theme.static.surface.raised,
+				}}
+			>
+				<Box
+					width="full"
+					height="full"
+					display="flex"
+					justifyContent="space-between"
+					alignItems="center"
+				>
+					<Text size="xSmall" color="moderate">
+						Past Usage
+					</Text>
+					<Menu>
+						<Menu.Button
+							iconRight={<IconSolidCheveronDown />}
+							size="xSmall"
+							kind="secondary"
+							emphasis="medium"
+							style={{
+								border: vars.border.secondary,
+								borderRadius: 6,
+								backgroundColor:
+									vars.theme.static.surface.raised,
+							}}
+						>
+							<Text size="xSmall" color="moderate">
+								{usageRange.end.diff(usageRange.start, 'day') >
+								100
+									? 'Monthly'
+									: usageRange.end.diff(
+											usageRange.start,
+											'day',
+									  ) > 40
+									? 'Weekly'
+									: 'Daily'}
+							</Text>
+						</Menu.Button>
+						<Menu.List>
+							{UsageRangeOptions.map((option) => (
+								<Menu.Item
+									key={option}
+									onClick={() => setUsageRange(option)}
+								>
+									<Box display="flex" alignItems="center">
+										<Text size="xSmall" color="moderate">
+											{option}
+										</Text>
+									</Box>
+								</Menu.Item>
+							))}
+						</Menu.List>
+					</Menu>
+				</Box>
+				<Box
+					width="full"
+					style={{
+						height: 100,
+					}}
+				>
+					{usageHistory?.buckets ? (
+						<BarChart
+							data={usageHistory.buckets.map((b) => ({
+								[TIMESTAMP_KEY]:
+									(b.bucket_min + b.bucket_max) / 2,
+								['Ingested']: b.metric_value,
+							}))}
+							yAxisFunction={MetricAggregator.Count}
+							xAxisMetric={TIMESTAMP_KEY}
+							yAxisMetric="Ingested"
+							series={['Ingested']}
+							strokeColors={[vars.theme.static.content.moderate]}
+							viewConfig={{
+								type: 'Bar chart',
+								showLegend: true,
+							}}
+						/>
+					) : (
+						<LoadingBox />
+					)}
+				</Box>
+			</Box>
 		</Box>
 	)
 }
@@ -281,7 +474,7 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 		if (response === 'success') {
 			updateBillingDetails().then(() => {
 				refetch()
-				message.success('Billing plan saved!')
+				toast.success('Billing plan saved!')
 			})
 		}
 	}, [location.pathname, refetch, updateBillingDetails])
@@ -324,6 +517,11 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 	const errorsUsage = data?.billingDetails.errorsMeter ?? 0
 	const logsUsage = data?.billingDetails.logsMeter ?? 0
 	const tracesUsage = data?.billingDetails.tracesMeter ?? 0
+
+	const sessionsLimit = data?.billingDetails.sessionsBillingLimit ?? undefined
+	const errorsLimit = data?.billingDetails.errorsBillingLimit ?? undefined
+	const logsLimit = data?.billingDetails.logsBillingLimit ?? undefined
+	const tracesLimit = data?.billingDetails.tracesBillingLimit ?? undefined
 
 	const includedSessions = data?.billingDetails.plan.sessionsLimit ?? 0
 	const includedErrors = data?.billingDetails.plan.errorsLimit ?? 0
@@ -379,19 +577,19 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 		'$ ' +
 		toDecimal(dinero({ amount: Math.round(totalCents), currency: USD }))
 
-	const sessionsLimit = isPaying
+	const sessionsSpendLimit = isPaying
 		? data?.workspace?.sessions_max_cents ?? undefined
 		: 0
 
-	const errorsLimit = isPaying
+	const errorsSpendLimit = isPaying
 		? data?.workspace?.errors_max_cents ?? undefined
 		: 0
 
-	const logsLimit = isPaying
+	const logsSpendLimit = isPaying
 		? data?.workspace?.logs_max_cents ?? undefined
 		: 0
 
-	const tracesLimit = isPaying
+	const tracesSpendLimit = isPaying
 		? data?.workspace?.traces_max_cents ?? undefined
 		: 0
 
@@ -428,25 +626,17 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 				<Stack>
 					<Heading level="h4">Billing plans</Heading>
 					{isAWSMP ? null : (
-						<Box display="inline-flex">
+						<Box display="inline-flex" gap="4" alignItems="center">
 							<Text size="small" color="weak">
 								Prices are flexible around your needs. Custom
-								quote?{' '}
-								<a
-									href={getPlanChangeEmail({
-										workspaceID: workspace_id,
-										planType: PlanType.Enterprise,
-									})}
-								>
-									<Box
-										display="inline-flex"
-										alignItems="center"
-									>
-										Reach out to sales{' '}
-										<IconSolidArrowSmRight />
-									</Box>
-								</a>
+								quote?
 							</Text>
+							<CalendlyButton
+								text="Book a call."
+								size="xSmall"
+								emphasis="low"
+								howCanWeHelp="Custom quote"
+							/>
 						</Box>
 					)}
 					{billingIssue ? (
@@ -564,85 +754,79 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 					gap="12"
 					mt="8"
 				>
-					<UsageCard
-						productIcon={<IconSolidPlayCircle />}
-						productType={ProductType.Sessions}
-						rate={sessionsRate}
-						retentionPeriod={sessionsRetention}
-						billingLimitCents={sessionsLimit}
-						usageAmount={sessionsUsage}
-						awsMpSubscription={
-							data?.billingDetails?.plan.aws_mp_subscription
-						}
-						includedQuantity={includedSessions}
-						isPaying={isPaying}
-						planType={planType}
-						enableBillingLimits={
-							data?.billingDetails.plan.enableBillingLimits
-						}
-						billingIssues={billingIssue}
-						setStep={setStep}
-					/>
-					<Box borderTop="secondary" />
-					<UsageCard
-						productIcon={<IconSolidLightningBolt />}
-						productType={ProductType.Errors}
-						rate={errorsRate}
-						retentionPeriod={errorsRetention}
-						billingLimitCents={errorsLimit}
-						usageAmount={errorsUsage}
-						awsMpSubscription={
-							data?.billingDetails?.plan.aws_mp_subscription
-						}
-						includedQuantity={includedErrors}
-						isPaying={isPaying}
-						planType={planType}
-						enableBillingLimits={
-							data?.billingDetails.plan.enableBillingLimits
-						}
-						billingIssues={billingIssue}
-						setStep={setStep}
-					/>
-					<Box borderTop="secondary" />
-					<UsageCard
-						productIcon={<IconSolidLogs />}
-						productType={ProductType.Logs}
-						rate={logsRate}
-						retentionPeriod={logsRetention}
-						billingLimitCents={logsLimit}
-						usageAmount={logsUsage}
-						awsMpSubscription={
-							data?.billingDetails?.plan.aws_mp_subscription
-						}
-						includedQuantity={includedLogs}
-						isPaying={isPaying}
-						planType={planType}
-						enableBillingLimits={
-							data?.billingDetails.plan.enableBillingLimits
-						}
-						billingIssues={billingIssue}
-						setStep={setStep}
-					/>
-					<Box borderTop="secondary" />
-					<UsageCard
-						productIcon={<IconSolidTraces />}
-						productType={ProductType.Traces}
-						rate={tracesRate}
-						retentionPeriod={tracesRetention}
-						billingLimitCents={tracesLimit}
-						usageAmount={tracesUsage}
-						awsMpSubscription={
-							data?.billingDetails?.plan.aws_mp_subscription
-						}
-						includedQuantity={includedTraces}
-						isPaying={isPaying}
-						planType={planType}
-						enableBillingLimits={
-							data?.billingDetails.plan.enableBillingLimits
-						}
-						billingIssues={billingIssue}
-						setStep={setStep}
-					/>
+					{[
+						{
+							icon: <IconSolidPlayCircle />,
+							productType: ProductType.Sessions,
+							rate: sessionsRate,
+							retentionPeriod: sessionsRetention,
+							billingLimitCents: sessionsSpendLimit,
+							usageAmount: sessionsUsage,
+							usageLimitAmount: sessionsLimit,
+							includedQuantity: includedSessions,
+						},
+						{
+							icon: <IconSolidLightningBolt />,
+							productType: ProductType.Errors,
+							rate: errorsRate,
+							retentionPeriod: errorsRetention,
+							billingLimitCents: errorsSpendLimit,
+							usageAmount: errorsUsage,
+							usageLimitAmount: errorsLimit,
+							includedQuantity: includedErrors,
+						},
+						{
+							icon: <IconSolidLogs />,
+							productType: ProductType.Logs,
+							rate: logsRate,
+							retentionPeriod: logsRetention,
+							billingLimitCents: logsSpendLimit,
+							usageAmount: logsUsage,
+							usageLimitAmount: logsLimit,
+							includedQuantity: includedLogs,
+						},
+						{
+							icon: <IconSolidTraces />,
+							productType: ProductType.Traces,
+							rate: tracesRate,
+							retentionPeriod: tracesRetention,
+							billingLimitCents: tracesSpendLimit,
+							usageAmount: tracesUsage,
+							usageLimitAmount: tracesLimit,
+							includedQuantity: includedTraces,
+						},
+					].map((product, idx) => (
+						<>
+							<UsageCard
+								productIcon={<IconSolidPlayCircle />}
+								awsMpSubscription={
+									data?.billingDetails?.plan
+										.aws_mp_subscription
+								}
+								isPaying={isPaying}
+								planType={planType}
+								enableBillingLimits={
+									data?.billingDetails.plan
+										.enableBillingLimits
+								}
+								billingIssues={billingIssue}
+								setStep={setStep}
+								billingPeriodEnd={
+									data?.workspace?.next_invoice_date ??
+									data?.workspace?.billing_period_end
+										? moment(
+												data?.workspace
+													?.next_invoice_date ??
+													data?.workspace
+														?.billing_period_end,
+										  )
+										: undefined
+								}
+								{...product}
+							/>
+							{idx < 3 ? <Box borderTop="secondary" /> : null}
+						</>
+					))}
 				</Box>
 				{isAWSMP ? null : (
 					<Stack
@@ -733,6 +917,7 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 									>
 										{hasExtras && (
 											<Tooltip
+												maxWidth={177}
 												delayed
 												trigger={
 													<IconSolidInformationCircle
@@ -740,20 +925,28 @@ const BillingPageV2 = ({}: BillingPageProps) => {
 													/>
 												}
 											>
-												Includes a{' '}
-												{data?.billingDetails.plan
-													.interval === 'Annual'
-													? 'yearly'
-													: 'monthly'}{' '}
-												base charge of{' '}
-												{baseAmountFormatted}
-												{discountPercent
-													? ` with a ${discountPercent}% discount`
-													: ''}
-												{discountAmount
-													? ` with a ${discountAmountFormatted} discount`
-													: ''}
-												.
+												<Box padding="4">
+													<Text
+														size="xSmall"
+														color="moderate"
+													>
+														Includes a{' '}
+														{data?.billingDetails
+															.plan.interval ===
+														'Annual'
+															? 'yearly'
+															: 'monthly'}{' '}
+														base charge of{' '}
+														{baseAmountFormatted}
+														{discountPercent
+															? ` with a ${discountPercent}% discount`
+															: ''}
+														{discountAmount
+															? ` with a ${discountAmountFormatted} discount`
+															: ''}
+														.
+													</Text>
+												</Box>
 											</Tooltip>
 										)}
 										<Text color="p11" weight="bold">

@@ -1,9 +1,12 @@
+import EnterpriseFeatureButton from '@components/Billing/EnterpriseFeatureButton'
 import { Modal } from '@components/Modal/ModalV2'
 import Switch from '@components/Switch/Switch'
+import { toast } from '@components/Toaster'
 import { USD } from '@dinero.js/currencies'
 import {
 	Badge,
 	Box,
+	Callout,
 	Form,
 	IconProps,
 	IconSolidChatAlt,
@@ -35,7 +38,6 @@ import { loadStripe } from '@stripe/stripe-js'
 import { getPlanChangeEmail } from '@util/billing/billing'
 import { formatNumber, formatNumberWithDelimiters } from '@util/numbers'
 import { isOnPrem } from '@util/onPrem/onPremUtils'
-import { message } from 'antd'
 import { dinero, toDecimal } from 'dinero.js'
 import moment from 'moment'
 import React from 'react'
@@ -50,25 +52,34 @@ import {
 	useSaveBillingPlanMutation,
 } from '@/graph/generated/hooks'
 import { namedOperations } from '@/graph/generated/operations'
-import { PlanType, RetentionPeriod } from '@/graph/generated/schemas'
 import {
+	PlanType,
+	ProductType,
+	RetentionPeriod,
+} from '@/graph/generated/schemas'
+import {
+	PLANS_WITH_ENTERPRISE_FEATURES,
 	RETENTION_PERIOD_LABELS,
 	tryCastDate,
 } from '@/pages/Billing/utils/utils'
 import { useParams } from '@/util/react-router/useParams'
 
+import { CalendlyButton } from '../../components/CalendlyModal/CalendlyButton'
 import * as style from './UpdatePlanPage.css'
 
-type ProductType = 'Sessions' | 'Errors' | 'Logs' | 'Traces'
+const STANDARD_RETENTION = RetentionPeriod.SevenDays
 
+// TODO(vkorolik) billing for metrics ingest
 const RETENTION_OPTIONS = {
 	Sessions: [
+		RetentionPeriod.SevenDays,
 		RetentionPeriod.ThreeMonths,
 		RetentionPeriod.SixMonths,
 		RetentionPeriod.TwelveMonths,
 		RetentionPeriod.TwoYears,
 	],
 	Errors: [
+		RetentionPeriod.SevenDays,
 		RetentionPeriod.ThreeMonths,
 		RetentionPeriod.SixMonths,
 		RetentionPeriod.TwelveMonths,
@@ -76,9 +87,11 @@ const RETENTION_OPTIONS = {
 	],
 	Logs: [RetentionPeriod.ThirtyDays],
 	Traces: [RetentionPeriod.ThirtyDays],
+	Metrics: [RetentionPeriod.ThirtyDays],
 } as const
 
 const RETENTION_MULTIPLIER = {
+	[RetentionPeriod.SevenDays]: 1,
 	[RetentionPeriod.ThirtyDays]: 1,
 	[RetentionPeriod.ThreeMonths]: 1,
 	[RetentionPeriod.SixMonths]: 1.5,
@@ -92,6 +105,7 @@ const BASE_UNIT_COST_CENTS = {
 	Errors: 20,
 	Logs: 150,
 	Traces: 150,
+	Metrics: 150,
 } as const
 
 const UNIT_QUANTITY = {
@@ -99,6 +113,7 @@ const UNIT_QUANTITY = {
 	Errors: 1_000,
 	Logs: 1_000_000,
 	Traces: 1_000_000,
+	Metrics: 1_000_000,
 } as const
 
 export const getCostCents = (
@@ -116,27 +131,6 @@ export const getCostCents = (
 		rateCents *
 			RETENTION_MULTIPLIER[retentionPeriod] *
 			Math.max(quantity - includedQuantity, 0),
-	)
-}
-
-export const getQuantity = (
-	productType: ProductType,
-	rateCents: number | undefined,
-	retentionPeriod: RetentionPeriod,
-	totalCents: number | undefined,
-	includedQuantity: number,
-): number | undefined => {
-	if (totalCents === undefined) {
-		return undefined
-	}
-
-	if (!rateCents) {
-		rateCents =
-			BASE_UNIT_COST_CENTS[productType] / UNIT_QUANTITY[productType]
-	}
-	return Math.floor(
-		totalCents / (rateCents * RETENTION_MULTIPLIER[retentionPeriod]) +
-			includedQuantity,
 	)
 }
 
@@ -180,6 +174,7 @@ type ProductCardProps = {
 	usageAmount: number
 	predictedUsageAmount: number
 	setHasChanges: (changes: boolean) => void
+	setStep: (step: PlanSelectStep) => void
 }
 
 interface UpdatePlanForm {
@@ -270,6 +265,7 @@ const ProductCard = ({
 	includedQuantity,
 	usageAmount,
 	predictedUsageAmount,
+	setStep,
 }: ProductCardProps) => {
 	const unitCost = BASE_UNIT_COST_CENTS[productType]
 	const unitCostCents =
@@ -507,17 +503,52 @@ const ProductCard = ({
 									<IconSolidCheveronDown />
 								</Box>
 							</Menu.Button>
-							<Menu.List>
+							<Menu.List style={{ minWidth: 320 }}>
 								{RETENTION_OPTIONS[productType].map((rp) => (
-									<Menu.Item
-										key={rp}
-										onClick={() => {
+									<EnterpriseFeatureButton
+										setting="enable_business_retention"
+										name="Custom Data Retention"
+										key="Custom Data Retention"
+										fn={async () => {
 											setRetentionPeriod(rp)
 											setHasChanges(true)
 										}}
+										onShowModal={() =>
+											setStep('Custom Data Retention')
+										}
+										variant="basic"
 									>
-										{RETENTION_PERIOD_LABELS[rp]}
-									</Menu.Item>
+										<Menu.Item key={rp}>
+											<Box
+												color="secondaryContentText"
+												display="inline-flex"
+												alignItems="center"
+												gap="6"
+												flexGrow={1}
+											>
+												<Text lines="1">
+													{
+														RETENTION_PERIOD_LABELS[
+															rp
+														]
+													}
+												</Text>
+											</Box>
+											{rp ===
+											STANDARD_RETENTION ? null : (
+												<Box
+													display="flex"
+													alignItems="center"
+													justifyContent="flex-end"
+												>
+													<Badge
+														size="small"
+														label="Business"
+													/>
+												</Box>
+											)}
+										</Menu.Item>
+									</EnterpriseFeatureButton>
 								))}
 							</Menu.List>
 						</Menu>
@@ -541,6 +572,7 @@ export type PlanSelectStep =
 	| 'Select plan'
 	| 'Configure plan'
 	| 'Enter payment details'
+	| 'Custom Data Retention'
 	| null
 
 type BillingPageProps = {
@@ -564,9 +596,9 @@ const UpdatePlanPage = ({
 
 	const formStore = Form.useStore<UpdatePlanForm>({
 		defaultValues: {
-			sessionsRetention: RetentionPeriod.ThreeMonths,
+			sessionsRetention: RetentionPeriod.SevenDays,
 			sessionsLimitCents: undefined,
-			errorsRetention: RetentionPeriod.ThreeMonths,
+			errorsRetention: RetentionPeriod.SevenDays,
 			errorsLimitCents: undefined,
 			logsRetention: RetentionPeriod.ThirtyDays,
 			logsLimitCents: undefined,
@@ -643,10 +675,6 @@ const UpdatePlanPage = ({
 		}
 	}, [isPaying, loading, setHasChanges])
 
-	if (loading) {
-		return null
-	}
-
 	const nextInvoiceDate = tryCastDate(data?.workspace?.next_invoice_date)
 	const billingPeriodEnd = tryCastDate(data?.workspace?.billing_period_end)
 	const nextBillingDate = getNextBillingDate(
@@ -666,14 +694,14 @@ const UpdatePlanPage = ({
 	)
 	const includedSessions = data?.billingDetails.plan.sessionsLimit ?? 0
 	let predictedSessionsCost = getCostCents(
-		'Sessions',
+		ProductType.Sessions,
 		data?.billingDetails.plan.sessionsRate,
 		formState.values.sessionsRetention,
 		predictedSessionsUsage,
 		includedSessions,
 	)
 	const actualSessionsCost = getCostCents(
-		'Sessions',
+		ProductType.Sessions,
 		data?.billingDetails.plan.sessionsRate,
 		formState.values.sessionsRetention,
 		sessionsUsage,
@@ -695,14 +723,14 @@ const UpdatePlanPage = ({
 	)
 	const includedErrors = data?.billingDetails.plan.errorsLimit ?? 0
 	let predictedErrorsCost = getCostCents(
-		'Errors',
+		ProductType.Errors,
 		data?.billingDetails.plan.errorsRate,
 		formState.values.errorsRetention,
 		predictedErrorsUsage,
 		includedErrors,
 	)
 	const actualErrorsCost = getCostCents(
-		'Errors',
+		ProductType.Errors,
 		data?.billingDetails.plan.errorsRate,
 		formState.values.errorsRetention,
 		errorsUsage,
@@ -724,14 +752,14 @@ const UpdatePlanPage = ({
 	)
 	const includedLogs = data?.billingDetails.plan.logsLimit ?? 0
 	let predictedLogsCost = getCostCents(
-		'Logs',
+		ProductType.Logs,
 		data?.billingDetails.plan.logsRate,
 		formState.values.logsRetention,
 		predictedLogsUsage,
 		includedLogs,
 	)
 	const actualLogsCost = getCostCents(
-		'Logs',
+		ProductType.Logs,
 		data?.billingDetails.plan.logsRate,
 		formState.values.logsRetention,
 		logsUsage,
@@ -753,14 +781,14 @@ const UpdatePlanPage = ({
 	)
 	const includedTraces = data?.billingDetails.plan.tracesLimit ?? 0
 	let predictedTracesCost = getCostCents(
-		'Traces',
+		ProductType.Traces,
 		data?.billingDetails.plan.tracesRate,
 		formState.values.tracesRetention,
 		predictedTracesUsage,
 		includedTraces,
 	)
 	const actualTracesCost = getCostCents(
-		'Traces',
+		ProductType.Traces,
 		data?.billingDetails.plan.tracesRate,
 		formState.values.logsRetention,
 		tracesUsage,
@@ -870,7 +898,7 @@ const UpdatePlanPage = ({
 								color={vars.theme.static.content.weak}
 							/>
 						}
-						productType="Sessions"
+						productType={ProductType.Sessions}
 						rate={data?.billingDetails.plan.sessionsRate}
 						retentionPeriod={formState.values.sessionsRetention}
 						setRetentionPeriod={(rp) =>
@@ -893,6 +921,7 @@ const UpdatePlanPage = ({
 						predictedUsageAmount={predictedSessionsUsage}
 						includedQuantity={includedSessions}
 						planType={selectedPlanType}
+						setStep={setStep}
 					/>
 					<Box borderBottom="divider" />
 					<ProductCard
@@ -901,7 +930,7 @@ const UpdatePlanPage = ({
 								color={vars.theme.static.content.weak}
 							/>
 						}
-						productType="Errors"
+						productType={ProductType.Errors}
 						rate={data?.billingDetails.plan.errorsRate}
 						retentionPeriod={formState.values.errorsRetention}
 						setRetentionPeriod={(rp) =>
@@ -924,6 +953,7 @@ const UpdatePlanPage = ({
 						predictedUsageAmount={predictedErrorsUsage}
 						includedQuantity={includedErrors}
 						planType={selectedPlanType}
+						setStep={setStep}
 					/>
 					<Box borderBottom="divider" />
 					<ProductCard
@@ -932,7 +962,7 @@ const UpdatePlanPage = ({
 								color={vars.theme.static.content.weak}
 							/>
 						}
-						productType="Logs"
+						productType={ProductType.Logs}
 						rate={data?.billingDetails.plan.logsRate}
 						retentionPeriod={formState.values.logsRetention}
 						setRetentionPeriod={(rp) =>
@@ -955,6 +985,7 @@ const UpdatePlanPage = ({
 						predictedUsageAmount={predictedLogsUsage}
 						includedQuantity={includedLogs}
 						planType={selectedPlanType}
+						setStep={setStep}
 					/>
 					<Box borderBottom="divider" />
 					<ProductCard
@@ -963,7 +994,7 @@ const UpdatePlanPage = ({
 								color={vars.theme.static.content.weak}
 							/>
 						}
-						productType="Traces"
+						productType={ProductType.Traces}
 						rate={data?.billingDetails.plan.tracesRate}
 						retentionPeriod={formState.values.tracesRetention}
 						setRetentionPeriod={(rp) =>
@@ -986,6 +1017,7 @@ const UpdatePlanPage = ({
 						predictedUsageAmount={predictedTracesUsage}
 						includedQuantity={includedTraces}
 						planType={selectedPlanType}
+						setStep={setStep}
 					/>
 					<Box borderBottom="divider" />
 					{selectedPlanType === PlanType.Free ? null : (
@@ -1163,14 +1195,14 @@ const UpdatePlanPage = ({
 													},
 												)
 											} else {
-												message.success(
+												toast.success(
 													'Billing plan saved!',
 												)
 												setHasChanges(false)
 											}
 										})
 										.catch(() => {
-											message.error(
+											toast.error(
 												'Failed to save billing plan details',
 											)
 										})
@@ -1194,7 +1226,7 @@ type Plan = {
 	name: string
 	descriptions: string[]
 	icon: React.ReactNode
-	price: number
+	price: number | '800+' | 'Custom'
 }
 
 const PLAN_BASE_FEES = {
@@ -1221,7 +1253,7 @@ const PLANS = {
 	},
 	[PlanType.Graduated]: {
 		type: PlanType.Graduated,
-		name: 'Pay as you go (Cloud)',
+		name: 'Developer',
 		descriptions: [
 			'Monitoring for your production application',
 			'Flexible billing that scales as you grow',
@@ -1229,23 +1261,14 @@ const PLANS = {
 		icon: <IconSolidPuzzle size="24" color="#0090FF" />,
 		price: 50,
 	},
-	[PlanType.Enterprise]: {
-		type: PlanType.Enterprise,
-		name: 'Enterprise (Cloud)',
+	[PlanType.Business]: {
+		type: PlanType.Business,
+		name: 'Business',
 		descriptions: [
-			'Robust availability for large-scale demanding teams',
-			'Support for SSO, RBAC, and other organizational requirements',
-		],
-		icon: <IconSolidServer size="24" color="#E93D82" />,
-		price: 1000,
-	},
-	'Self-host': {
-		type: PlanType.Enterprise,
-		name: 'Enterprise (Self-hosted)',
-		descriptions: [
-			'Highly-available on-prem / cloud-prem deployments',
-			'Bring your own infrastructure',
-			'Govern data in your environment',
+			'Unlimited projects, user seats, and dashboards',
+			'Configurable spend limits and data retention',
+			'Reporting and analytics for sessions and more',
+			'MP4 video export for sessions',
 		],
 		icon: (
 			<IconSolidOfficeBuilding
@@ -1253,7 +1276,19 @@ const PLANS = {
 				color={vars.theme.static.content.default}
 			/>
 		),
-		price: 3000,
+		price: '800+',
+	},
+	[PlanType.Enterprise]: {
+		type: PlanType.Enterprise,
+		name: 'Enterprise',
+		descriptions: [
+			'Highly-available on-prem deployments',
+			'Customized data storage and retention',
+			'Robust availability for large-scale teams',
+			'Support for SSO, RBAC, and other organizational requirements',
+		],
+		icon: <IconSolidServer size="24" color="#E93D82" />,
+		price: 'Custom',
 	},
 } as { [plan in PlanType | 'Self-host']: Plan }
 
@@ -1281,17 +1316,22 @@ const PlanCard = ({
 	setSelectedPlanType,
 	setStep,
 	currentPlanType,
+	howCanWeHelp,
+	onClick,
 }: {
 	plan: Plan
 	setSelectedPlanType: (step: PlanType) => void
 	setStep: (step: PlanSelectStep) => void
 	currentPlanType?: PlanType
+	howCanWeHelp?: string
+	onClick?: () => void
 }) => {
 	const { workspace_id } = useParams<{
 		workspace_id: string
 	}>()
 	const current = plan.type === currentPlanType
-	const enterprise = plan.type === PlanType.Enterprise
+	const enterprise =
+		plan.type === PlanType.Business || plan.type === PlanType.Enterprise
 	const free = plan.type === PlanType.Free
 	return (
 		<Stack
@@ -1308,43 +1348,62 @@ const PlanCard = ({
 				{plan.name}
 			</Text>
 			<h3 style={{ fontWeight: 700 }}>
-				${plan.price}
-				{plan.price >= 1000 ? '+' : ''}
+				{plan.price === 'Custom' ? plan.price : `$${plan.price}`}
 			</h3>
-			<Text size="xxSmall" color="weak" cssClass={style.priceSubtitle}>
-				per month
-			</Text>
-			<Button
-				trackingId={`planSelect-${plan.name}`}
-				kind="secondary"
-				size="small"
-				emphasis="high"
-				disabled={current}
-				iconLeft={enterprise ? <IconSolidChatAlt /> : undefined}
-				onClick={() => {
-					if (free || enterprise) {
-						window.open(
-							getPlanChangeEmail({
-								workspaceID: workspace_id,
-								planType: plan.type,
-							}),
-						)
-					} else if (isOnPrem) {
-						window.open(
-							'https://app.highlight.io/sign_up?ref=hobby',
-						)
-					} else {
-						setSelectedPlanType(plan.type)
-						setStep('Configure plan')
+			{plan.price === 'Custom' ? null : (
+				<Text
+					size="xxSmall"
+					color="weak"
+					cssClass={style.priceSubtitle}
+				>
+					per month
+				</Text>
+			)}
+			{enterprise ? (
+				<CalendlyButton
+					text="Talk to sales"
+					howCanWeHelp={
+						howCanWeHelp ??
+						`I'd like to explore an enterprise plan.`
 					}
-				}}
-			>
-				{enterprise
-					? 'Talk to sales'
-					: current
-					? 'Current plan'
-					: 'Select plan'}
-			</Button>
+					kind="secondary"
+					size="small"
+					emphasis="high"
+					disabled={current}
+					iconLeft={enterprise ? <IconSolidChatAlt /> : undefined}
+					onClick={onClick}
+				/>
+			) : (
+				<Button
+					trackingId={`planSelect-${plan.name}`}
+					kind="secondary"
+					size="small"
+					emphasis="high"
+					disabled={current}
+					onClick={() => {
+						if (onClick) {
+							onClick()
+						}
+						if (free) {
+							window.open(
+								getPlanChangeEmail({
+									workspaceID: workspace_id,
+									planType: plan.type,
+								}),
+							)
+						} else if (isOnPrem) {
+							window.open(
+								'https://app.highlight.io/sign_up?ref=hobby',
+							)
+						} else {
+							setSelectedPlanType(plan.type)
+							setStep('Configure plan')
+						}
+					}}
+				>
+					{current ? 'Current plan' : 'Select plan'}
+				</Button>
+			)}
 			<Stack>
 				{plan.descriptions.map((d) => (
 					<Box
@@ -1352,6 +1411,7 @@ const PlanCard = ({
 							display: 'grid',
 							gap: 4,
 							gridTemplateColumns: '14px 1fr',
+							alignItems: 'center',
 						}}
 						key={d}
 					>
@@ -1369,23 +1429,41 @@ const PlanCard = ({
 export const PlanComparisonPage: React.FC<{
 	setSelectedPlanType: (plan: PlanType) => void
 	setStep: (step: PlanSelectStep) => void
-}> = ({ setSelectedPlanType, setStep }) => {
+	title?: string
+	description?: string
+	enterprise?: true
+	onClick?: () => void
+	howCanWeHelp?: string
+}> = ({
+	setSelectedPlanType,
+	setStep,
+	title,
+	description,
+	enterprise,
+	onClick,
+	howCanWeHelp,
+}) => {
 	const { workspace_id } = useParams<{
 		workspace_id: string
 	}>()
-	const { data, loading } = useGetBillingDetailsQuery({
+	const { data } = useGetBillingDetailsQuery({
 		variables: {
 			workspace_id: workspace_id!,
 		},
 	})
 
-	if (loading) {
-		return null
-	}
-
 	return (
-		<Box height="full" margin="auto" p="32">
-			<Stack gap="48">
+		<Box height="full" margin="auto" p="12">
+			<Stack gap="12">
+				{title ? (
+					<Callout title={title}>
+						<Box mb="6">
+							<Text size="small" color="moderate">
+								Upgrade your plan to {description}
+							</Text>
+						</Box>
+					</Callout>
+				) : null}
 				<Box
 					display="flex"
 					gap="12"
@@ -1398,13 +1476,23 @@ export const PlanComparisonPage: React.FC<{
 				>
 					{Object.entries(PLANS)
 						.filter(([name]) => !isOnPrem || name !== 'Free')
+						.filter(
+							([, plan]) =>
+								!enterprise ||
+								PLANS_WITH_ENTERPRISE_FEATURES.has(plan.type),
+						)
 						.map(([, plan]) => (
 							<PlanCard
-								currentPlanType={data?.billingDetails.plan.type}
+								currentPlanType={
+									data?.billingDetails.plan.type ??
+									PlanType.Free
+								}
 								plan={plan}
 								setSelectedPlanType={setSelectedPlanType}
 								setStep={setStep}
 								key={plan.name}
+								howCanWeHelp={howCanWeHelp}
+								onClick={onClick}
 							/>
 						))}
 				</Box>
@@ -1412,6 +1500,7 @@ export const PlanComparisonPage: React.FC<{
 					display="flex"
 					flexDirection="column"
 					gap="12"
+					mt="16"
 					alignItems="stretch"
 					justifyContent="space-between"
 					m="auto"
@@ -1580,6 +1669,18 @@ export const UpdatePlanModal: React.FC<{
 		}
 	}, [step])
 	if (step === null) return null
+	if (step === 'Custom Data Retention') {
+		return (
+			<EnterpriseFeatureButton
+				setting="enable_business_retention"
+				name="Custom Data Retention"
+				key="Custom Data Retention"
+				fn={async () => undefined}
+				variant="basic"
+				shown
+			></EnterpriseFeatureButton>
+		)
+	}
 	return (
 		<Modal
 			justifyContent="space-between"

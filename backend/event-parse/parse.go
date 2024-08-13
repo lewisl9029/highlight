@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/highlight-run/highlight/backend/env"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,21 +19,18 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
+	"github.com/highlight-run/highlight/backend/model"
+	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
+	"github.com/highlight-run/highlight/backend/store"
+	"github.com/highlight-run/highlight/backend/util"
+	hmetric "github.com/highlight/highlight/sdk/highlight-go/metric"
 	"github.com/lukasbob/srcset"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/tdewolff/parse/css"
-
-	"github.com/highlight-run/highlight/backend/model"
-	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
-	"github.com/highlight-run/highlight/backend/redis"
-	"github.com/highlight-run/highlight/backend/storage"
-	"github.com/highlight-run/highlight/backend/util"
-	hmetric "github.com/highlight/highlight/sdk/highlight-go/metric"
 )
 
 type EventType int
@@ -82,8 +80,9 @@ const (
 
 const (
 	ScriptPlaceholder = "SCRIPT_PLACEHOLDER"
-	ProxyURL          = "https://replay-cors-proxy.highlightrun.workers.dev"
 )
+
+var ProxyURL = fmt.Sprintf("%s/cors", env.Config.PublicGraphUri)
 
 var DisallowedTagPrefixes = []string{
 	"onchange",
@@ -92,9 +91,6 @@ var DisallowedTagPrefixes = []string{
 	"onload",
 	"onmouse",
 }
-
-var ResourcesBasePath = os.Getenv("RESOURCES_BASE_PATH")
-var PrivateGraphBasePath = os.Getenv("REACT_APP_PRIVATE_GRAPH_URI")
 
 const (
 	ErrAssetTooLarge    = "ErrAssetTooLarge"
@@ -168,7 +164,7 @@ func replaceRelativePaths(body []byte, href string) []byte {
 		groups := pathPattern.FindSubmatch(match)
 		u, _ := url.Parse(fmt.Sprintf("%s/%s", *base, groups[1]))
 		u.Path = strings.Trim(u.Path, "/")
-		result := []byte(fmt.Sprintf("url('%s?url=%s')", ProxyURL, u.String()))
+		result := []byte(fmt.Sprintf("url('%s?src=go&url=%s')", ProxyURL, u.String()))
 		return result
 	})
 }
@@ -422,7 +418,7 @@ func (s *Snapshot) InjectStylesheets(ctx context.Context) error {
 		delete(attrs, "rel")
 		delete(attrs, "href")
 
-		// The '_cssText' attribute tells @highlight-run/rrweb to create a custom <style/> tag to populate
+		// The '_cssText' attribute tells rrweb to create a custom <style/> tag to populate
 		// content w/.
 		attrs["_cssText"] = string(data)
 	}
@@ -453,7 +449,7 @@ type assetValue struct {
 
 // If a url was already created for this resource in the past day, return that
 // Else, fetch the resource, generate a new url for it, and save to S3
-func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, s storage.Client, db *gorm.DB, redis *redis.Client, retentionPeriod modelInputs.RetentionPeriod) (map[string]string, error) {
+func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, store *store.Store, retentionPeriod modelInputs.RetentionPeriod) (map[string]string, error) {
 	// maps a long url to the minimal version of the url. ie https://foo.com/example?key=value&signature=bar -> https://foo.com/example?key=value
 	urlMap := make(map[string]assetValue)
 	for _, u := range lo.Uniq(originalUrls) {
@@ -477,10 +473,18 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 		parsedUrl.Fragment = ""
 		assetKey := parsedUrl.String()
 		assetURL := u
-		if (projectId == 33914 || projectId == 33886) && parsedUrl.Scheme == "capacitor" {
-			parsedUrl.Scheme = "https"
-			parsedUrl.Host = "app.priceworx.co.uk"
+		if transform, _ := store.GetProjectAssetTransform(ctx, projectId, parsedUrl.Scheme); transform != nil {
+			parsedUrl.Scheme = transform.DestinationScheme
+			parsedUrl.Host = transform.DestinationHost
 			assetURL = parsedUrl.String()
+			log.WithContext(ctx).
+				WithField("u", u).
+				WithField("transform", transform).
+				WithField("assetURL", assetURL).
+				WithField("assetKey", assetKey).
+				WithField("projectId", projectId).
+				WithField("scheme", parsedUrl.Scheme).
+				Info("using project transform url")
 		}
 		urlMap[u] = assetValue{assetKey, assetURL}
 	}
@@ -495,7 +499,7 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 			dateTrunc,
 		}
 	})
-	if err := db.WithContext(ctx).Where("(project_id, original_url, date) IN ?", keys).Find(&results).Error; err != nil {
+	if err := store.DB.WithContext(ctx).Where("(project_id, original_url, date) IN ?", keys).Find(&results).Error; err != nil {
 		return nil, errors.Wrap(err, "error querying saved assets")
 	}
 
@@ -510,7 +514,7 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 	}, len(urlMap))
 	lo.ForEach(lo.Entries(urlMap), func(u lo.Entry[string, assetValue], i int) {
 		eg.Go(func() error {
-			if mutex, err := redis.AcquireLock(ctx, u.Value.assetKey, 3*time.Minute); err == nil {
+			if mutex, err := store.Redis.AcquireLock(ctx, u.Value.assetKey, 3*time.Minute); err == nil {
 				defer func() {
 					if _, err := mutex.Unlock(); err != nil {
 						log.WithContext(ctx).WithError(err).WithField("url", u.Value).Error("failed to release asset lock")
@@ -572,7 +576,7 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 					hashVal = strings.ReplaceAll(hashVal, "+", "_")
 					hashVal = strings.ReplaceAll(hashVal, "=", "~")
 					contentType := response.Header.Get("Content-Type")
-					err = s.UploadAsset(ctx, strconv.Itoa(projectId)+"/"+hashVal, contentType, file, retentionPeriod)
+					err = store.StorageClient.UploadAsset(ctx, strconv.Itoa(projectId)+"/"+hashVal, contentType, file, retentionPeriod)
 					if err != nil {
 						return errors.Wrap(err, "error uploading asset")
 					}
@@ -582,7 +586,7 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 						Date:        dateTrunc,
 						HashVal:     hashVal,
 					}
-					if err := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&result).Error; err != nil {
+					if err := store.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&result).Error; err != nil {
 						return errors.Wrap(err, "error saving asset metadata")
 					}
 				}
@@ -592,7 +596,7 @@ func getOrCreateUrls(ctx context.Context, projectId int, originalUrls []string, 
 			if hashVal == ErrAssetTooLarge || hashVal == ErrAssetSizeUnknown || hashVal == ErrFailedToFetch {
 				newUrl = hashVal
 			} else {
-				newUrl = fmt.Sprintf("%s/assets/%d/%s", PrivateGraphBasePath, projectId, hashVal)
+				newUrl = fmt.Sprintf("%s/assets/%d/%s", env.Config.PrivateGraphUri, projectId, hashVal)
 			}
 			assetChan <- struct {
 				OriginalURL string
@@ -691,9 +695,9 @@ lexerLoop:
 	return
 }
 
-func (s *Snapshot) ReplaceAssets(ctx context.Context, projectId int, s3 storage.Client, db *gorm.DB, redis *redis.Client, retentionPeriod modelInputs.RetentionPeriod) error {
+func (s *Snapshot) ReplaceAssets(ctx context.Context, projectId int, store *store.Store, retentionPeriod modelInputs.RetentionPeriod) error {
 	urls := getAssetUrlsFromTree(ctx, projectId, s.data, map[string]string{})
-	replacements, err := getOrCreateUrls(ctx, projectId, urls, s3, db, redis, retentionPeriod)
+	replacements, err := getOrCreateUrls(ctx, projectId, urls, store, retentionPeriod)
 	if err != nil {
 		return errors.Wrap(err, "error creating replacement urls")
 	}
@@ -776,6 +780,9 @@ func tryGetAssetUrls(ctx context.Context, projectId int, node map[string]interfa
 		newUrl, ok := replacements[href]
 		if ok {
 			attributes["href"] = newUrl
+			if rel, ok := attributes["rel"].(string); ok && rel == "modulepreload" {
+				delete(attributes, "rel")
+			}
 		}
 		urls = append(urls, href)
 	}

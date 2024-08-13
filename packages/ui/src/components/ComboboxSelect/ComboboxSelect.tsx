@@ -31,8 +31,10 @@ type Props<T extends string | string[]> = {
 	options: Option[] | undefined
 	onChange: (value: T) => void
 	onChangeQuery?: (value: string) => void
+	onClose?: () => void
 	queryPlaceholder?: string
 	cssClass?: ClassValue | ClassValue[]
+	wrapperCssClass?: ClassValue | ClassValue[]
 	popoverCssClass?: ClassValue | ClassValue[]
 	creatableRender?: (key: string) => React.ReactNode | undefined
 	defaultOpen?: boolean
@@ -49,8 +51,10 @@ export const ComboboxSelect = <T extends string | string[]>({
 	options,
 	onChange,
 	onChangeQuery,
+	onClose,
 	queryPlaceholder,
 	cssClass,
+	wrapperCssClass,
 	popoverCssClass,
 	creatableRender,
 	defaultOpen,
@@ -99,7 +103,7 @@ export const ComboboxSelect = <T extends string | string[]>({
 	const allOptions = queryOptions.concat(createdOptions).concat(options ?? [])
 
 	return (
-		<div>
+		<div className={clsx(wrapperCssClass)}>
 			<SelectLabel store={select} className={styles.selectLabel}>
 				{label}
 			</SelectLabel>
@@ -120,26 +124,29 @@ export const ComboboxSelect = <T extends string | string[]>({
 				className={clsx([styles.selectPopover, popoverCssClass])}
 				gutter={4}
 				autoFocusOnHide={false}
+				onClose={onClose}
 			>
 				<PopoverArrow size={0} />
-				<div
-					className={clsx(styles.comboboxWrapper, {
-						[styles.comboboxHasResults]:
-							allOptions.length > 0 ||
-							isLoading ||
-							!!emptyStateRender,
-					})}
-				>
-					<IconSolidSearch />
-					<Combobox
-						store={combobox}
-						type="text"
-						autoSelect
-						autoComplete="none"
-						placeholder={queryPlaceholder}
-						className={styles.combobox}
-					></Combobox>
-				</div>
+				{onChangeQuery !== undefined && (
+					<div
+						className={clsx(styles.comboboxWrapper, {
+							[styles.comboboxHasResults]:
+								allOptions.length > 0 ||
+								isLoading ||
+								!!emptyStateRender,
+						})}
+					>
+						<IconSolidSearch />
+						<Combobox
+							store={combobox}
+							type="text"
+							autoSelect
+							autoComplete="none"
+							placeholder={queryPlaceholder}
+							className={styles.combobox}
+						></Combobox>
+					</div>
+				)}
 				<ComboboxList
 					store={combobox}
 					className={clsx([styles.comboboxList, 'hide-scrollbar'])}
@@ -219,6 +226,7 @@ export const ComboboxSelect_test = () => {
 			onChange={(valueNext: string) => {
 				setValue(valueNext)
 			}}
+			onChangeQuery={() => undefined}
 			queryPlaceholder="Filter..."
 		/>
 	)

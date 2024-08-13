@@ -1,5 +1,264 @@
 # @highlight-run/next
 
+## 7.5.18
+
+### Patch Changes
+
+-   Updated dependencies [d67bd4425]
+    -   highlight.run@9.2.0
+    -   @highlight-run/node@3.9.0
+    -   @highlight-run/react@4.0.0
+
+## 7.5.17
+
+### Patch Changes
+
+-   Updated dependencies [5b0b5a503]
+    -   highlight.run@9.1.5
+    -   @highlight-run/node@3.9.0
+    -   @highlight-run/react@3.2.5
+
+## 7.5.16
+
+### Patch Changes
+
+-   Updated dependencies [b09f21e4b]
+    -   @highlight-run/react@3.2.4
+
+## 7.5.15
+
+### Patch Changes
+
+-   Updated dependencies [3e99f48ca]
+    -   highlight.run@9.1.4
+    -   @highlight-run/node@3.9.0
+
+## 7.5.14
+
+### Patch Changes
+
+-   Updated dependencies [efdf6b66a]
+    -   highlight.run@9.1.3
+    -   @highlight-run/node@3.9.0
+
+## 7.5.13
+
+### Patch Changes
+
+-   Updated dependencies [50dba067f]
+    -   highlight.run@9.1.2
+    -   @highlight-run/node@3.9.0
+
+## 7.5.12
+
+### Patch Changes
+
+-   Updated dependencies [e239b1a02]
+    -   highlight.run@9.0.5
+    -   @highlight-run/node@3.9.0
+
+## 7.5.11
+
+### Patch Changes
+
+-   Updated dependencies [0a245b208]
+    -   highlight.run@9.0.4
+    -   @highlight-run/node@3.9.0
+
+## 7.5.10
+
+### Patch Changes
+
+-   Updated dependencies [50c74161e]
+    -   highlight.run@9.0.3
+    -   @highlight-run/node@3.9.0
+
+## 7.5.9
+
+### Patch Changes
+
+-   Updated dependencies [fd011e719]
+-   Updated dependencies [1dbe1bc6c]
+    -   highlight.run@9.0.2
+    -   @highlight-run/react@3.2.3
+    -   @highlight-run/node@3.9.0
+
+## 7.5.8
+
+### Patch Changes
+
+-   Updated dependencies [2ced0e269]
+    -   highlight.run@9.0.1
+    -   @highlight-run/node@3.9.0
+
+## 7.5.7
+
+### Patch Changes
+
+-   Updated dependencies [e7eb5f581]
+    -   highlight.run@9.0.0
+    -   @highlight-run/cloudflare@2.1.6
+    -   @highlight-run/node@3.9.0
+
+## 7.5.6
+
+### Patch Changes
+
+-   Updated dependencies [8905154ff]
+    -   highlight.run@8.13.0
+    -   @highlight-run/node@3.9.0
+
+## 7.5.5
+
+### Patch Changes
+
+-   Updated dependencies [2a90db809]
+-   Updated dependencies [2a90db809]
+    -   highlight.run@8.12.4
+    -   @highlight-run/node@3.9.0
+
+## 7.5.4
+
+### Patch Changes
+
+-   Updated dependencies [2ea916328]
+-   Updated dependencies [11fe2921b]
+    -   highlight.run@8.12.3
+    -   @highlight-run/node@3.9.0
+
+## 7.5.3
+
+### Patch Changes
+
+-   Updated dependencies [8899ee039]
+    -   @highlight-run/react@3.2.2
+    -   highlight.run@8.12.2
+    -   @highlight-run/node@3.9.0
+
+## 7.5.2
+
+### Patch Changes
+
+-   Updated dependencies [926c3a1d7]
+    -   highlight.run@8.12.1
+    -   @highlight-run/node@3.9.0
+
+## 7.5.1
+
+### Patch Changes
+
+-   Updated dependencies [ec466b8b2]
+-   Updated dependencies [ec466b8b2]
+-   Updated dependencies [ec466b8b2]
+    -   @highlight-run/node@3.9.0
+
+## 7.5.0
+
+### Minor Changes
+
+-   83b8e75c0: generate server sourcemaps for next.js code
+
+### Patch Changes
+
+-   Updated dependencies [b27a0bcd2]
+-   Updated dependencies [83b8e75c0]
+    -   highlight.run@8.12.0
+    -   @highlight-run/sourcemap-uploader@0.6.3
+    -   @highlight-run/node@3.8.3
+
+## 7.4.13
+
+### Patch Changes
+
+-   Updated dependencies [4ecafffe6]
+    -   highlight.run@8.11.1
+    -   @highlight-run/node@3.8.3
+
+## 7.4.12
+
+### Patch Changes
+
+-   Updated dependencies [5e61d5859]
+    -   @highlight-run/sourcemap-uploader@0.6.2
+
+## 7.4.11
+
+### Patch Changes
+
+-   Updated dependencies [e14192fa4]
+    -   @highlight-run/node@3.8.3
+
+## 7.4.10
+
+### Patch Changes
+
+-   Updated dependencies [4574c8dfa]
+    -   highlight.run@8.11.0
+    -   @highlight-run/node@3.8.2
+
+## 7.4.9
+
+### Patch Changes
+
+-   Updated dependencies [bd410081e]
+-   Updated dependencies [dded74108]
+    -   highlight.run@8.10.1
+    -   @highlight-run/node@3.8.2
+
+## 7.4.8
+
+### Patch Changes
+
+-   Updated dependencies [112fa2ced]
+    -   highlight.run@8.10.0
+    -   @highlight-run/node@3.8.1
+
+## 7.4.7
+
+### Patch Changes
+
+-   Updated dependencies [3528f2de7]
+    -   highlight.run@8.9.1
+    -   @highlight-run/node@3.8.1
+
+## 7.4.6
+
+### Patch Changes
+
+-   Updated dependencies [f45323273]
+    -   highlight.run@8.9.0
+    -   @highlight-run/node@3.8.1
+
+## 7.4.5
+
+### Patch Changes
+
+-   Updated dependencies [240143f9d]
+    -   @highlight-run/node@3.8.1
+
+## 7.4.4
+
+### Patch Changes
+
+-   c2b88ec32: Handling undefined NEXT_RUNTIME
+
+## 7.4.3
+
+### Patch Changes
+
+-   Updated dependencies [23a01e3d6]
+-   Updated dependencies [6a8151dc3]
+    -   highlight.run@8.8.0
+    -   @highlight-run/node@3.8.0
+
+## 7.4.2
+
+### Patch Changes
+
+-   Updated dependencies [31486ce41]
+    -   highlight.run@8.7.1
+    -   @highlight-run/node@3.8.0
+
 ## 7.4.1
 
 ### Patch Changes

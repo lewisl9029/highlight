@@ -7,12 +7,12 @@
 		<script>
 			H.init('1', {
 				backendUrl: 'http://localhost:8082/public',
-				scriptUrl: 'http://localhost:8080/dist/index.js',
 				environment: 'test',
 				networkRecording: {
 					enabled: true,
 					recordHeadersAndBody: true,
 				},
+				debug: { clientInteractions: true, domRecording: true },
 			})
 		</script>
 	</head>

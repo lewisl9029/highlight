@@ -1,5 +1,34 @@
 # @highlight-run/node
 
+## 3.9.0
+
+### Minor Changes
+
+-   ec466b8b2: refactor highlight-run-with-headers to highlight-ctx
+-   ec466b8b2: fix nestjs trace context propagation and update node sdk span names
+
+### Patch Changes
+
+-   ec466b8b2: update node sdk to export in larger batches
+
+## 3.8.3
+
+### Patch Changes
+
+-   e14192fa4: fixes opentelemetry http instrumentation breaking nestjs
+
+## 3.8.2
+
+### Patch Changes
+
+-   dded74108: Enabling automatic propagation. It won't work until open-telemetry/opentelemetry-js-contrib PR #1951 goes through.
+
+## 3.8.1
+
+### Patch Changes
+
+-   240143f9d: Resolve node sdk issues from an OTel package version bump
+
 ## 3.8.0
 
 ### Minor Changes

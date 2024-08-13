@@ -8,12 +8,7 @@ import {
 	Text,
 } from '@highlight-run/ui/components'
 import { themeVars } from '@highlight-run/ui/theme'
-import {
-	RightPanelView,
-	usePlayerUIContext,
-} from '@pages/Player/context/PlayerUIContext'
 import { THROTTLED_UPDATE_MS } from '@pages/Player/PlayerHook/PlayerState'
-import usePlayerConfiguration from '@pages/Player/PlayerHook/utils/usePlayerConfiguration'
 import { EmptyDevToolsCallout } from '@pages/Player/Toolbar/DevToolsWindowV2/EmptyDevToolsCallout/EmptyDevToolsCallout'
 import {
 	findLastActiveEventIndex,
@@ -28,10 +23,15 @@ import React, {
 	useLayoutEffect,
 	useMemo,
 	useRef,
+	useState,
 } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso'
 
+import {
+	RelatedError,
+	useRelatedResource,
+} from '@/components/RelatedResources/hooks'
 import { styledVerticalScrollbar } from '@/style/common.css'
 import analytics from '@/util/analytics'
 
@@ -51,26 +51,35 @@ const ErrorsPage = ({
 	const location = useLocation()
 	const { errors, state, session, sessionMetadata, isPlayerReady, setTime } =
 		useReplayerContext()
-
-	const { activeError, setActiveError, setRightPanelView } =
-		usePlayerUIContext()
-	const { setShowRightPanel } = usePlayerConfiguration()
+	const { resource, set } = useRelatedResource()
+	const activeError = resource as RelatedError
 
 	const loading = state === ReplayerState.Loading
 
 	/** Only errors recorded after this feature was released will have the timestamp. */
 
 	const hasTimestamp = !loading && errors?.every((error) => !!error.timestamp)
-	const lastActiveErrorIndex = useMemo(() => {
-		if (hasTimestamp) {
-			return findLastActiveEventIndex(
-				time,
-				sessionMetadata.startTime,
-				errors,
-			)
-		}
-		return -1
-	}, [errors, hasTimestamp, sessionMetadata.startTime, time])
+	const [lastActiveErrorIndex, setLastActiveErrorIndex] = useState(-1)
+
+	useEffect(
+		() =>
+			_.throttle(
+				() => {
+					if (hasTimestamp) {
+						const activeIndex = findLastActiveEventIndex(
+							time,
+							sessionMetadata.startTime,
+							errors,
+						)
+
+						setLastActiveErrorIndex(activeIndex)
+					}
+				},
+				THROTTLED_UPDATE_MS,
+				{ leading: true, trailing: false },
+			),
+		[errors, hasTimestamp, sessionMetadata.startTime, time],
+	)
 
 	// eslint-disable-next-line react-hooks/exhaustive-deps
 	const scrollFunction = useCallback(
@@ -120,14 +129,26 @@ const ErrorsPage = ({
 		})
 	}, [errors, filter])
 
-	const selectedError = useMemo(() => {
-		if (!activeError) return
-
-		return errors.find((error) => error.id === activeError.id)
-	}, [activeError, errors])
-
 	useEffect(() => {
 		analytics.track('session_view-errors')
+	}, [])
+
+	useEffect(() => {
+		if (activeError?.instanceId) {
+			const currentIndex = errorsToRender.findIndex(
+				(error) => error.id === activeError.instanceId,
+			)
+
+			set(activeError, {
+				currentIndex,
+				resources: errors.map((error) => ({
+					type: 'error',
+					secureId: error.error_group_secure_id,
+					instanceId: error.id,
+				})),
+			})
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	return (
@@ -147,15 +168,30 @@ const ErrorsPage = ({
 							key={error.error_group_secure_id}
 							error={error}
 							onClickHandler={() => {
-								setActiveError(error)
-								setShowRightPanel(true)
-								setRightPanelView(RightPanelView.Error)
+								set(
+									{
+										type: 'error',
+										secureId: error.error_group_secure_id,
+										instanceId: error.id,
+									},
+									{
+										currentIndex: index,
+										resources: errorsToRender.map(
+											(error) => ({
+												type: 'error',
+												secureId:
+													error.error_group_secure_id,
+												instanceId: error.id,
+											}),
+										),
+										onChange: () => {},
+									},
+								)
 							}}
-							setActiveError={setActiveError}
 							setTime={setTime}
 							startTime={sessionMetadata.startTime}
 							searchQuery={filter}
-							selectedError={selectedError?.id === error.id}
+							selectedError={activeError?.instanceId === error.id}
 							current={index === lastActiveErrorIndex}
 							past={index <= lastActiveErrorIndex}
 						/>
@@ -175,9 +211,6 @@ interface Props {
 	error: ErrorObject
 	onClickHandler: () => void
 	selectedError: boolean
-	setActiveError: React.Dispatch<
-		React.SetStateAction<ErrorObject | undefined>
-	>
 	setTime: (time: number) => void
 	startTime: number
 	searchQuery: string
@@ -190,7 +223,6 @@ const ErrorRow = React.memo(
 		error,
 		onClickHandler,
 		selectedError,
-		setActiveError,
 		setTime,
 		startTime,
 		searchQuery,
@@ -279,7 +311,6 @@ const ErrorRow = React.memo(
 							onClick={(event) => {
 								setTime(timestamp)
 								event.stopPropagation() /* Prevents opening of right panel by parent row's onClick handler */
-								setActiveError(error)
 							}}
 						>
 							<IconSolidArrowCircleRight />

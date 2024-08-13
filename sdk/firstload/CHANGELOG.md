@@ -1,5 +1,176 @@
 # highlight.run
 
+## 9.2.0
+
+### Minor Changes
+
+-   d67bd4425: stop recording if pushpayload cannot keep up with uploading data
+
+## 9.1.5
+
+### Patch Changes
+
+-   5b0b5a503: update rrweb to ^2.0.0-alpha.17
+    ensure multiple tabs report data to distinct sessions
+
+## 9.1.4
+
+### Patch Changes
+
+-   3e99f48ca: fix otel webjs event monkeypatch breaking mouse event listeners
+
+## 9.1.3
+
+### Patch Changes
+
+-   efdf6b66a: fix highlight.run getSessionUrl only returning session ID
+
+## 9.1.2
+
+### Patch Changes
+
+-   50dba067f: fix otel webjs startSpan crashing when otel code has not loaded
+
+## 9.1.1
+
+### Patch Changes
+
+-   05fbf19aa: report performance resource timings in nanoseconds
+-   24c5b00b6: fix span renaming of GraphQL requests
+
+## 9.1.0
+
+### Minor Changes
+
+-   463e99106: add browser OTEL tracing
+-   8fd0e8f92: add `startSpan` and `startManualSpan` methods
+
+## 9.0.5
+
+### Patch Changes
+
+-   e239b1a02: fix cross-origin iframe recording
+
+## 9.0.4
+
+### Patch Changes
+
+-   0a245b208: default to jpeg canvas recording when webp not supported
+
+## 9.0.3
+
+### Patch Changes
+
+-   50c74161e: add screen measurements to session viewport data
+
+## 9.0.2
+
+### Patch Changes
+
+-   fd011e719: ensure getSessionURL correctly returns session url
+
+## 9.0.1
+
+### Patch Changes
+
+-   2ced0e269: fix inlineImages video recording showing incorrect solution and breaking videos on load
+
+## 9.0.0
+
+### Major Changes
+
+-   e7eb5f581: updates rrweb to 2.0.15 with LWC support
+
+## 8.13.0
+
+### Minor Changes
+
+-   8905154ff: make browser sdk more robust to avoid broken sessions
+
+## 8.12.4
+
+### Patch Changes
+
+-   2a90db809: improve dev reliability of browser fetch patch
+-   2a90db809: record more attributes as part of captured frontend network requests
+
+## 8.12.3
+
+### Patch Changes
+
+-   2ea916328: Fix duplicate network requests when performance.clearResourceTimings has been monkeypatched by external libraries
+-   11fe2921b: export highlight state on sdk
+
+## 8.12.2
+
+### Patch Changes
+
+-   8899ee039: report additional metadata on error boundary exceptions
+
+## 8.12.1
+
+### Patch Changes
+
+-   926c3a1d7: fix rrweb merge conflict breaking canvas recording
+
+## 8.12.0
+
+### Minor Changes
+
+-   b27a0bcd2: update rrweb version to 729361e
+
+## 8.11.1
+
+### Patch Changes
+
+-   4ecafffe6: fix xhr monkeypatch breaking for URL objects
+
+## 8.11.0
+
+### Minor Changes
+
+-   4574c8dfa: lazy load client bundle from node modules to avoid ad blockers
+
+## 8.10.1
+
+### Patch Changes
+
+-   bd410081e: switch replay to using highlight backend for font cors proxying
+
+## 8.10.0
+
+### Minor Changes
+
+-   112fa2ced: Fix bug with recording traces.
+
+## 8.9.1
+
+### Patch Changes
+
+-   3528f2de7: support sonner by disabling promise monkeypatching
+
+## 8.9.0
+
+### Minor Changes
+
+-   f45323273: Update websocket events to use absolute timestamps. Remove relative timestamps from all requests.
+
+## 8.8.0
+
+### Minor Changes
+
+-   23a01e3d6: update rrweb to pr-1352
+
+### Patch Changes
+
+-   6a8151dc3: fix console log serialization
+
+## 8.7.1
+
+### Patch Changes
+
+-   31486ce41: Deep stringify network request and response bodies
+
 ## 8.7.0
 
 ### Minor Changes

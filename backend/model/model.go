@@ -6,17 +6,16 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgerrcode"
+	"github.com/highlight-run/highlight/backend/env"
 
 	Email "github.com/highlight-run/highlight/backend/email"
 	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/ReneKroon/ttlcache"
 	"github.com/lib/pq"
@@ -28,31 +27,12 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
 	"github.com/pkg/errors"
 	e "github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 )
-
-var (
-	env     = os.Getenv("ENVIRONMENT")
-	DevEnv  = "dev"
-	TestEnv = "test"
-)
-
-func IsDevEnv() bool {
-	return env == DevEnv
-}
-
-func IsTestEnv() bool {
-	return env == TestEnv
-}
-
-func IsDevOrTestEnv() bool {
-	return IsTestEnv() || IsDevEnv()
-}
 
 var (
 	DB                *gorm.DB
@@ -71,6 +51,7 @@ const (
 
 // TODO(et) - replace this with generated SessionAlertType
 var AlertType = struct {
+	// deprecated alerts
 	ERROR            string
 	NEW_USER         string
 	TRACK_PROPERTIES string
@@ -79,7 +60,14 @@ var AlertType = struct {
 	RAGE_CLICK       string
 	NEW_SESSION      string
 	LOG              string
+	// new alerts
+	SESSIONS string
+	ERRORS   string
+	LOGS     string
+	TRACES   string
+	METRICS  string
 }{
+	// deprecated alerts
 	ERROR:            "ERROR_ALERT",
 	NEW_USER:         "NEW_USER_ALERT",
 	TRACK_PROPERTIES: "TRACK_PROPERTIES_ALERT",
@@ -88,6 +76,12 @@ var AlertType = struct {
 	RAGE_CLICK:       "RAGE_CLICK_ALERT",
 	NEW_SESSION:      "NEW_SESSION_ALERT",
 	LOG:              "LOG",
+	// new alerts
+	SESSIONS: "SESSIONS_ALERT",
+	ERRORS:   "ERRORS_ALERT",
+	LOGS:     "LOGS_ALERT",
+	TRACES:   "TRACES_ALERT",
+	METRICS:  "METRICS_ALERT",
 }
 
 var AdminRole = struct {
@@ -137,13 +131,11 @@ var ContextKeys = struct {
 var Models = []interface{}{
 	&AWSMarketplaceCustomer{},
 	&ErrorObject{},
-	&ErrorObjectEmbeddings{},
 	&ErrorGroup{},
+	&ErrorGroupEmbeddings{},
 	&ErrorField{},
-	&ErrorSegment{},
 	&SavedSegment{},
 	&Organization{},
-	&Segment{},
 	&Admin{},
 	&Session{},
 	&SessionInterval{},
@@ -179,6 +171,7 @@ var Models = []interface{}{
 	&ErrorFingerprint{},
 	&EventChunk{},
 	&SavedAsset{},
+	&ProjectAssetTransform{},
 	&Dashboard{},
 	&DashboardMetric{},
 	&DashboardMetricFilter{},
@@ -191,7 +184,6 @@ var Models = []interface{}{
 	&IntegrationWorkspaceMapping{},
 	&EmailOptOut{},
 	&BillingEmailHistory{},
-	&Retryable{},
 	&Service{},
 	&SetupEvent{},
 	&SessionAdminsView{},
@@ -204,6 +196,10 @@ var Models = []interface{}{
 	&SystemConfiguration{},
 	&SessionInsight{},
 	&ErrorTag{},
+	&Graph{},
+	&Visualization{},
+	&Alert{},
+	&AlertDestination{},
 }
 
 func init() {
@@ -222,14 +218,14 @@ func init() {
 }
 
 type Model struct {
-	ID        int        `gorm:"primary_key;type:serial" json:"id" deep:"-"`
+	ID        int        `gorm:"primary_key;type:integer;autoIncrement" json:"id" deep:"-"`
 	CreatedAt time.Time  `json:"created_at" deep:"-"`
 	UpdatedAt time.Time  `json:"updated_at" deep:"-"`
 	DeletedAt *time.Time `json:"deleted_at" deep:"-"`
 }
 
 type Int64Model struct {
-	ID        int64      `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID        int64      `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	CreatedAt time.Time  `json:"created_at" deep:"-"`
 	UpdatedAt time.Time  `json:"updated_at" deep:"-"`
 	DeletedAt *time.Time `json:"deleted_at" deep:"-"`
@@ -268,6 +264,7 @@ type Workspace struct {
 	LinearAccessToken           *string
 	VercelAccessToken           *string
 	VercelTeamID                *string
+	CloudflareProxy             *string
 	Projects                    []Project
 	MigratedFromProjectID       *int // Column can be removed after migration is done
 	HubspotCompanyID            *int
@@ -283,10 +280,10 @@ type Workspace struct {
 	MonthlyErrorsLimit          *int
 	MonthlyLogsLimit            *int
 	MonthlyTracesLimit          *int
-	RetentionPeriod             *modelInputs.RetentionPeriod
-	ErrorsRetentionPeriod       *modelInputs.RetentionPeriod
-	LogsRetentionPeriod         *modelInputs.RetentionPeriod
-	TracesRetentionPeriod       *modelInputs.RetentionPeriod
+	RetentionPeriod             *modelInputs.RetentionPeriod `gorm:"default:SevenDays"`
+	ErrorsRetentionPeriod       *modelInputs.RetentionPeriod `gorm:"default:SevenDays"`
+	LogsRetentionPeriod         *modelInputs.RetentionPeriod `gorm:"default:ThirtyDays"`
+	TracesRetentionPeriod       *modelInputs.RetentionPeriod `gorm:"default:ThirtyDays"`
 	SessionsMaxCents            *int
 	ErrorsMaxCents              *int
 	LogsMaxCents                *int
@@ -328,6 +325,7 @@ func (w *Workspace) AdminEmailAddresses(db *gorm.DB) ([]struct {
 			INNER JOIN admins a
 			ON wa.admin_id = a.id
 			WHERE wa.workspace_id = ?
+			AND wa.role = 'ADMIN'
 			AND NOT EXISTS (
 				SELECT *
 				FROM email_opt_outs eoo
@@ -341,17 +339,20 @@ func (w *Workspace) AdminEmailAddresses(db *gorm.DB) ([]struct {
 }
 
 type WorkspaceAdmin struct {
-	AdminID     int        `gorm:"primaryKey"`
-	WorkspaceID int        `gorm:"primaryKey"`
-	CreatedAt   time.Time  `json:"created_at" deep:"-"`
-	UpdatedAt   time.Time  `json:"updated_at" deep:"-"`
-	DeletedAt   *time.Time `json:"deleted_at" deep:"-"`
-	Role        *string    `json:"role" gorm:"default:ADMIN"`
+	AdminID     int           `gorm:"primaryKey"`
+	WorkspaceID int           `gorm:"primaryKey"`
+	CreatedAt   time.Time     `json:"created_at" deep:"-"`
+	UpdatedAt   time.Time     `json:"updated_at" deep:"-"`
+	DeletedAt   *time.Time    `json:"deleted_at" deep:"-"`
+	Role        *string       `json:"role" gorm:"default:ADMIN"`
+	ProjectIds  pq.Int32Array `gorm:"type:integer[]"`
 }
 
 type WorkspaceAdminRole struct {
-	Admin *Admin
-	Role  string
+	WorkspaceId int
+	Admin       *Admin
+	Role        string
+	ProjectIds  []int
 }
 
 type WorkspaceInviteLink struct {
@@ -361,6 +362,7 @@ type WorkspaceInviteLink struct {
 	InviteeRole    *string
 	ExpirationDate *time.Time
 	Secret         *string
+	ProjectIds     pq.Int32Array `gorm:"type:integer[]"`
 }
 
 type WorkspaceAccessRequest struct {
@@ -386,11 +388,11 @@ type Project struct {
 	FrontTokenExpiresAt *time.Time
 	BillingEmail        *string
 	Secret              *string    `json:"-"`
-	Admins              []Admin    `gorm:"many2many:project_admins;"`
 	TrialEndDate        *time.Time `json:"trial_end_date"`
 	// Manual monthly session limit override
 	MonthlySessionLimit *int
 	WorkspaceID         int
+	Workspace           *Workspace
 	FreeTier            bool           `gorm:"default:false"`
 	ExcludedUsers       pq.StringArray `json:"excluded_users" gorm:"type:text[]"`
 	ErrorFilters        pq.StringArray `gorm:"type:text[]"`
@@ -424,7 +426,7 @@ const (
 )
 
 type SetupEvent struct {
-	ID        int                  `gorm:"primary_key;type:serial" json:"id" deep:"-"`
+	ID        int                  `gorm:"primary_key;type:integer;autoIncrement" json:"id" deep:"-"`
 	CreatedAt time.Time            `json:"created_at" deep:"-"`
 	ProjectID int                  `gorm:"uniqueIndex:idx_project_id_type"`
 	Type      MarkBackendSetupType `gorm:"uniqueIndex:idx_project_id_type"`
@@ -452,12 +454,11 @@ type ProjectFilterSettings struct {
 
 type AllWorkspaceSettings struct {
 	Model
-	WorkspaceID   int  `gorm:"uniqueIndex"`
-	AIApplication bool `gorm:"default:true"`
-	AIInsights    bool `gorm:"default:false"`
+	WorkspaceID    int  `gorm:"uniqueIndex"`
+	AIApplication  bool `gorm:"default:true"`
+	AIInsights     bool `gorm:"default:false"`
+	AIQueryBuilder bool `gorm:"default:false"`
 
-	// store embeddings for errors in this workspace
-	ErrorEmbeddingsWrite bool `gorm:"default:false"`
 	// use embeddings to group errors in this workspace
 	ErrorEmbeddingsGroup bool `gorm:"default:true"`
 	// use embeddings to tag error groups in this workspace
@@ -466,14 +467,22 @@ type AllWorkspaceSettings struct {
 	ErrorEmbeddingsThreshold  float64 `gorm:"default:0.2"`
 	ReplaceAssets             bool    `gorm:"default:false"`
 	StoreIP                   bool    `gorm:"default:false"`
-	EnableSessionExport       bool    `gorm:"default:false"`
-	EnableIngestSampling      bool    `gorm:"default:false"`
-	EnableUnlistedSharing     bool    `gorm:"default:true"`
-	EnableNetworkTraces       bool    `gorm:"default:true"`
-	EnableBillingLimits       bool    `gorm:"default:false"` // old plans grandfathered in to true
-	EnableDataDeletion        bool    `gorm:"default:true"`
 	CanShowBillingIssueBanner bool    `gorm:"default:true"`
-	EnableGrafanaDashboard    bool    `gorm:"default:false"`
+
+	EnableUnlimitedDashboards bool `gorm:"default:false"`
+	EnableUnlimitedProjects   bool `gorm:"default:false"`
+	EnableUnlimitedRetention  bool `gorm:"default:false"`
+	EnableUnlimitedSeats      bool `gorm:"default:false"`
+
+	EnableBillingLimits      bool `gorm:"default:false"` // old plans grandfathered in to true
+	EnableGrafanaDashboard   bool `gorm:"default:false"`
+	EnableIngestSampling     bool `gorm:"default:false"`
+	EnableProjectLevelAccess bool `gorm:"default:false"`
+	EnableSessionExport      bool `gorm:"default:false"`
+
+	EnableDataDeletion    bool `gorm:"default:true"`
+	EnableNetworkTraces   bool `gorm:"default:true"`
+	EnableUnlistedSharing bool `gorm:"default:true"`
 }
 
 type HasSecret interface {
@@ -621,6 +630,23 @@ func (u *Workspace) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
+func (s *Session) BeforeCreate(tx *gorm.DB) (err error) {
+	if s.LastUserInteractionTime.IsZero() {
+		s.LastUserInteractionTime = time.UnixMilli(0)
+	}
+	return
+}
+
+func (s *SystemConfiguration) BeforeCreate(tx *gorm.DB) (err error) {
+	if s.ErrorFilters == nil {
+		s.ErrorFilters = pq.StringArray{"ENOENT.*", "connect ECONNREFUSED.*"}
+	}
+	if s.IgnoredFiles == nil {
+		s.IgnoredFiles = pq.StringArray{".*/node_modules/.*", ".*/go/pkg/mod/.*", ".*/site-packages/.*"}
+	}
+	return
+}
+
 type Admin struct {
 	Model
 	Name                      *string
@@ -637,7 +663,6 @@ type Admin struct {
 	PhotoURL                  *string          `json:"photo_url"`
 	UID                       *string          `gorm:"uniqueIndex"`
 	Organizations             []Organization   `gorm:"many2many:organization_admins;"`
-	Projects                  []Project        `gorm:"many2many:project_admins;"`
 	SessionComments           []SessionComment `gorm:"many2many:session_comment_admins;"`
 	ErrorComments             []ErrorComment   `gorm:"many2many:error_comment_admins;"`
 	Workspaces                []Workspace      `gorm:"many2many:workspace_admins;"`
@@ -682,8 +707,8 @@ type Session struct {
 	Fingerprint int  `json:"fingerprint"`
 	// User provided identifier (see IdentifySession)
 	Identifier string  `json:"identifier"`
-	ProjectID  int     `json:"project_id" gorm:"index:idx_project_id_email"`
-	Email      *string `json:"email" gorm:"index:idx_project_id_email"`
+	ProjectID  int     `json:"project_id"`
+	Email      *string `json:"email"`
 	// Location data based off user ip (see InitializeSession)
 	IP        string  `json:"ip"`
 	City      string  `json:"city"`
@@ -702,6 +727,7 @@ type Session struct {
 	HasUnloaded bool `gorm:"default:false"`
 	// Tells us if the session has been parsed by a worker.
 	Processed           *bool `json:"processed"`
+	HasComments         bool  `json:"has_comments" gorm:"default:false"`
 	HasRageClicks       *bool `json:"has_rage_clicks"`
 	HasErrors           *bool `json:"has_errors"`
 	HasOutOfOrderEvents bool  `gorm:"default:false"`
@@ -714,12 +740,12 @@ type Session struct {
 	Environment    string   `json:"environment"`
 	AppVersion     *string  `json:"app_version"`
 	ServiceName    string
-	UserObject     JSONB  `json:"user_object" sql:"type:jsonb"`
+	UserObject     JSONB  `json:"user_object" gorm:"type:jsonb"`
 	UserProperties string `json:"user_properties"`
 	// Whether this is the first session created by this user.
 	FirstTime               *bool      `json:"first_time" gorm:"default:false"`
 	PayloadUpdatedAt        *time.Time `json:"payload_updated_at"`
-	LastUserInteractionTime time.Time  `json:"last_user_interaction_time" gorm:"default:TIMESTAMP 'epoch'"`
+	LastUserInteractionTime time.Time  `json:"last_user_interaction_time"`
 	// Set if the last payload was a beacon; cleared on the next non-beacon payload
 	BeaconTime *time.Time `json:"beacon_time"`
 	// Custom properties
@@ -734,7 +760,7 @@ type Session struct {
 	// The version of Highlight's Firstload.
 	FirstloadVersion string `json:"firstload_version"`
 	// The client configuration that the end-user sets up. This is used for debugging purposes.
-	ClientConfig *string `json:"client_config" sql:"type:jsonb"`
+	ClientConfig *string `json:"client_config" gorm:"type:jsonb"`
 	// Determines whether this session should be viewable. This enforces billing.
 	WithinBillingQuota *bool `json:"within_billing_quota" gorm:"default:true"`
 	// Used for shareable links. No authentication is needed if IsPublic is true
@@ -830,30 +856,7 @@ func (r *ResourcesObject) Contents() string {
 }
 
 type SearchParams struct {
-	UserProperties          []*UserProperty `json:"user_properties"`
-	ExcludedProperties      []*UserProperty `json:"excluded_properties"`
-	TrackProperties         []*UserProperty `json:"track_properties"`
-	ExcludedTrackProperties []*UserProperty `json:"excluded_track_properties"`
-	DateRange               *DateRange      `json:"date_range"`
-	LengthRange             *LengthRange    `json:"length_range"`
-	Browser                 *string         `json:"browser"`
-	OS                      *string         `json:"os"`
-	Environments            []*string       `json:"environments"`
-	AppVersions             []*string       `json:"app_versions"`
-	DeviceID                *string         `json:"device_id"`
-	VisitedURL              *string         `json:"visited_url"`
-	Referrer                *string         `json:"referrer"`
-	Identified              bool            `json:"identified"`
-	HideViewed              bool            `json:"hide_viewed"`
-	FirstTime               bool            `json:"first_time"`
-	ShowLiveSessions        bool            `json:"show_live_sessions"`
-	Query                   *string         `json:"query"`
-}
-type Segment struct {
-	Model
-	Name      *string
-	Params    *string `json:"params"`
-	ProjectID int     `json:"project_id"`
+	Query *string `json:"query"`
 }
 
 type DailySessionCount struct {
@@ -875,20 +878,6 @@ type DailyErrorCount struct {
 	Count     int64      `json:"count"`
 	ProjectID int        `json:"project_id"`
 	ErrorType string     `gorm:"default:FRONTEND"`
-}
-
-func (s *SearchParams) GormDataType() string {
-	out, err := json.Marshal(s)
-	if err != nil {
-		return ""
-	}
-	return string(out)
-}
-
-func (s *SearchParams) GormValue(ctx context.Context, db *gorm.DB) clause.Expr {
-	return clause.Expr{
-		SQL: fmt.Sprintf("ST_PointFromText(%v)", s.GormDataType()),
-	}
 }
 
 type DateRange struct {
@@ -942,7 +931,7 @@ type Metric struct {
 }
 
 type MetricGroup struct {
-	ID        int `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID        int `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	GroupName string
 	SessionID int
 	ProjectID int
@@ -994,32 +983,18 @@ type ErrorResults struct {
 	TotalCount  int64
 }
 
-type ErrorSearchParams struct {
-	DateRange  *DateRange              `json:"date_range"`
-	Browser    *string                 `json:"browser"`
-	OS         *string                 `json:"os"`
-	VisitedURL *string                 `json:"visited_url"`
-	Event      *string                 `json:"event"`
-	State      *modelInputs.ErrorState `json:"state"`
-	Query      *string                 `json:"query"`
-}
-type ErrorSegment struct {
-	Model
-	Name      *string
-	Params    *string `json:"params"`
-	ProjectID int     `json:"project_id"`
-}
 type ErrorGroupingMethod string
 
 const (
 	ErrorGroupingMethodClassic             ErrorGroupingMethod = "Classic"
 	ErrorGroupingMethodAdaEmbeddingV2      ErrorGroupingMethod = "AdaV2"
 	ErrorGroupingMethodGteLargeEmbeddingV2 ErrorGroupingMethod = "thenlper/gte-large"
+	ErrorGroupingMethodGteLargeEmbeddingV3 ErrorGroupingMethod = "thenlper/gte-large.v3"
 )
 
 type ErrorObject struct {
 	Model
-	ID                      int  `gorm:"primary_key;type:serial;index:idx_error_group_id_id,priority:2,option:CONCURRENTLY" json:"id" deep:"-"`
+	ID                      int  `gorm:"primary_key;type:integer;autoIncrement;index:idx_error_group_id_id,priority:2,option:CONCURRENTLY" json:"id" deep:"-"`
 	ProjectID               int  `json:"project_id"`
 	SessionID               *int `gorm:"type:integer"`
 	TraceID                 *string
@@ -1139,8 +1114,16 @@ type ErrorField struct {
 	ErrorGroups []ErrorGroup `gorm:"many2many:error_group_fields;"`
 }
 
+type ErrorGroupEmbeddings struct {
+	Model
+	ProjectID         int `gorm:"uniqueIndex:idx_project_id_error_group_id"`
+	ErrorGroupID      int `gorm:"uniqueIndex:idx_project_id_error_group_id"`
+	Count             int
+	GteLargeEmbedding Vector `gorm:"type:vector(1024)"` // 1024 dimensions in the thenlper/gte-large model
+}
+
 type LogAdminsView struct {
-	ID       int       `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID       int       `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	ViewedAt time.Time `gorm:"default:NOW()"`
 	AdminID  int       `gorm:"primaryKey"`
 }
@@ -1253,6 +1236,7 @@ type CommentSlackThread struct {
 
 type SessionInterval struct {
 	Model
+	ID              int64  `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	SessionSecureID string `gorm:"index" json:"secure_id"`
 	StartTime       time.Time
 	EndTime         time.Time
@@ -1267,7 +1251,7 @@ type TimelineIndicatorEvent struct {
 	Timestamp       float64
 	Type            int
 	SID             float64
-	Data            JSONB `json:"data" sql:"type:jsonb"`
+	Data            JSONB `json:"data" gorm:"type:jsonb"`
 }
 
 type RageClickEvent struct {
@@ -1294,6 +1278,13 @@ type SavedAsset struct {
 	HashVal     string `gorm:"index:idx_project_id_hash_val"`
 }
 
+type ProjectAssetTransform struct {
+	ProjectID         int    `gorm:"primary_key:not null"`
+	SourceScheme      string `gorm:"primary_key:not null"`
+	DestinationScheme string
+	DestinationHost   string
+}
+
 type VercelIntegrationConfig struct {
 	WorkspaceID     int `gorm:"uniqueIndex:idx_workspace_id_vercel_project_id;index"`
 	ProjectID       int
@@ -1309,15 +1300,16 @@ type IntegrationWorkspaceMapping struct {
 }
 
 type IntegrationProjectMapping struct {
-	IntegrationType modelInputs.IntegrationType `gorm:"uniqueIndex:idx_integration_project_mapping_project_id_integration_type"`
+	// idx_integration_project_mapping_integration_type_external_id is used to find a project for a given integration by its external id
+	IntegrationType modelInputs.IntegrationType `gorm:"uniqueIndex:idx_integration_project_mapping_project_id_integration_type;index:idx_integration_project_mapping_integration_type_external_id"`
 	ProjectID       int                         `gorm:"uniqueIndex:idx_integration_project_mapping_project_id_integration_type"`
-	ExternalID      string
+	ExternalID      string                      `gorm:"index:idx_integration_project_mapping_integration_type_external_id"`
 }
 
 type OAuthClientStore struct {
 	ID        string         `gorm:"primary_key;default:uuid_generate_v4()"`
 	CreatedAt time.Time      `json:"created_at" deep:"-"`
-	Secret    string         `gorm:"uniqueIndex;not null;default:uuid_generate_v4()"`
+	Secret    string         `gorm:"uniqueIndex;not null"`
 	Domains   pq.StringArray `gorm:"not null;type:text[]"`
 	AppName   string
 
@@ -1374,11 +1366,11 @@ type UserJourneyStep struct {
 }
 
 type SystemConfiguration struct {
-	Active            bool `gorm:"primary_key;default:true"`
+	Active            bool `gorm:"primary_key"`
 	MaintenanceStart  time.Time
 	MaintenanceEnd    time.Time
-	ErrorFilters      pq.StringArray `gorm:"type:text[];default:'{\"ENOENT.*\", \"connect ECONNREFUSED.*\"}'"`
-	IgnoredFiles      pq.StringArray `gorm:"type:text[];default:'{\".*\\/node_modules\\/.*\", \".*\\/go\\/pkg\\/mod\\/.*\", \".*\\/site-packages\\/.*\"}'"`
+	ErrorFilters      pq.StringArray `gorm:"type:text[]"`
+	IgnoredFiles      pq.StringArray `gorm:"type:text[]"`
 	MainWorkers       int            `gorm:"default:64"`
 	LogsWorkers       int            `gorm:"default:1"`
 	LogsFlushSize     int            `gorm:"type:bigint;default:1000"`
@@ -1405,36 +1397,53 @@ type Retryable struct {
 	Type        RetryableType
 	PayloadType string
 	PayloadID   string
-	Payload     JSONB `sql:"type:jsonb"`
+	Payload     JSONB `gorm:"type:jsonb"`
 	Error       string
+}
+
+type Graph struct {
+	Model
+	VisualizationID   int `gorm:"index"`
+	Type              string
+	Title             string
+	ProductType       modelInputs.ProductType
+	Query             string
+	Metric            string
+	FunctionType      modelInputs.MetricAggregator
+	GroupByKey        *string
+	BucketByKey       *string
+	BucketCount       *int
+	Limit             *int
+	LimitFunctionType *modelInputs.MetricAggregator
+	LimitMetric       *string
+	Display           *string
+	NullHandling      *string
+}
+
+type Visualization struct {
+	Model
+	ProjectID        int `gorm:"index"`
+	Name             string
+	UpdatedByAdminId *int
+	UpdatedByAdmin   *Admin        `gorm:"foreignKey:UpdatedByAdminId"`
+	GraphIds         pq.Int32Array `gorm:"type:integer[]"`
+	Graphs           []Graph
+}
+
+type VisualizationsResponse struct {
+	Count   int
+	Results []Visualization
 }
 
 func SetupDB(ctx context.Context, dbName string) (*gorm.DB, error) {
 	var (
-		host     = os.Getenv("PSQL_HOST")
-		port     = os.Getenv("PSQL_PORT")
-		username = os.Getenv("PSQL_USER")
-		password = os.Getenv("PSQL_PASSWORD")
+		host     = env.Config.SQLHost
+		port     = env.Config.SQLPort
+		username = env.Config.SQLUser
+		password = env.Config.SQLPassword
 		sslmode  = "disable"
 	)
 
-	databaseURL, ok := os.LookupEnv("DATABASE_URL")
-	if ok {
-		re, err := regexp.Compile(`(?m)^(?:postgres://)([^:]*)(?::)([^@]*)(?:@)([^:]*)(?::)([^/]*)(?:/)(.*)`)
-		if err != nil {
-			log.WithContext(ctx).Error(e.Wrap(err, "failed to compile regex"))
-		} else {
-			matched := re.FindAllStringSubmatch(databaseURL, -1)
-			if len(matched) > 0 && len(matched[0]) > 5 {
-				username = matched[0][1]
-				password = matched[0][2]
-				host = matched[0][3]
-				port = matched[0][4]
-				dbName = matched[0][5]
-				sslmode = "require"
-			}
-		}
-	}
 	log.WithContext(ctx).Printf("setting up db @ %s\n", host)
 	psqlConf := fmt.Sprintf(
 		"host=%s port=%s user=%s dbname=%s password=%s sslmode=%s",
@@ -1447,13 +1456,9 @@ func SetupDB(ctx context.Context, dbName string) (*gorm.DB, error) {
 
 	var err error
 
-	logLevel := logger.Silent
-	if os.Getenv("HIGHLIGHT_DEBUG_MODE") == "blame-GARAGE-spike-typic-neckline-santiago-tore-keep-becalm-preach-fiber-pomade-escheat-crone-tasmania" {
-		logLevel = logger.Info
-	}
 	DB, err = gorm.Open(postgres.Open(psqlConf), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
-		Logger:                                   logger.Default.LogMode(logLevel),
+		Logger:                                   logger.Default.LogMode(logger.Silent),
 		PrepareStmt:                              true,
 		SkipDefaultTransaction:                   true,
 		CreateBatchSize:                          5000, // Postgres only allows 65535 parameters per insert - this would allow 5000 records with 13 inserted fields each.
@@ -1500,8 +1505,6 @@ func MigrateDB(ctx context.Context, DB *gorm.DB) (bool, error) {
 	if err := DB.Exec(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`).Error; err != nil {
 		return false, e.Wrap(err, "failed to configure uuid extension")
 	}
-
-	time.Sleep(10 * time.Second)
 
 	if err := DB.AutoMigrate(
 		Models...,
@@ -1662,58 +1665,6 @@ func MigrateDB(ctx context.Context, DB *gorm.DB) (bool, error) {
 		return false, e.Wrap(err, "Error setting session id sequence to 30000000")
 	}
 
-	if err := DB.Exec(`
-		CREATE TABLE IF NOT EXISTS error_object_embeddings_partitioned
-		(LIKE error_object_embeddings INCLUDING DEFAULTS INCLUDING IDENTITY)
-		PARTITION BY LIST (project_id);
-	`).Error; err != nil {
-		return false, e.Wrap(err, "Error creating error_object_embeddings_partitioned")
-	}
-
-	var lastVal int
-	if err := DB.Raw("SELECT coalesce(max(id), 1) FROM projects").Scan(&lastVal).Error; err != nil {
-		return false, e.Wrap(err, "Error selecting max project id")
-	}
-
-	var lastCreatedPart int
-	// ignore errors - an error means that there are no partitions, so we can safely use the zero-value.
-	DB.Raw("select split_part(relname, '_', 5) from pg_stat_all_tables where relname like 'error_object_embeddings_partitioned%' order by relid desc limit 1").Scan(&lastCreatedPart)
-
-	endPart := lastVal + 1000
-	if IsDevOrTestEnv() {
-		// limit the number of partitions created in dev or test to limit disk usage
-		endPart = lastVal + 10
-	}
-	if IsTestEnv() {
-		// create a 0 partition for tests
-		lastCreatedPart = -1
-	}
-
-	// Make sure partitions are created for the next N projects, starting with the next partition needed
-	for i := lastCreatedPart + 1; i < endPart; i++ {
-		if err := DB.Exec(fmt.Sprintf(`
-			CREATE TABLE IF NOT EXISTS error_object_embeddings_partitioned_%d
-			(LIKE error_object_embeddings_partitioned INCLUDING DEFAULTS INCLUDING IDENTITY);
-		`, i)).Error; err != nil {
-			return false, e.Wrapf(err, "Error creating partitioned error_object_embeddings for index %d", i)
-		}
-
-		if err := DB.Exec(fmt.Sprintf(`
-			CREATE INDEX ON error_object_embeddings_partitioned_%d
-			USING ivfflat (gte_large_embedding vector_l2_ops) WITH (lists = 1000);
-		`, i)).Error; err != nil {
-			return false, e.Wrapf(err, "Error creating index error_object_embeddings for index %d", i)
-		}
-
-		// in case this partition was already attached by a previous failed migration, this will fail.
-		// ignore errors
-		DB.Exec(fmt.Sprintf(`
-			ALTER TABLE error_object_embeddings_partitioned
-			ATTACH PARTITION error_object_embeddings_partitioned_%d
-			FOR VALUES IN ('%d');
-		`, i, i))
-	}
-
 	// Create sequence for session_fields.id manually. This started as a join
 	// table with no primary key. We use our own sequence to prevent assigning a
 	// value to old records.
@@ -1762,6 +1713,19 @@ func MigrateDB(ctx context.Context, DB *gorm.DB) (bool, error) {
 	// in case gorm still sets a default / not null constraint
 	DB.Exec(`alter table error_groups alter column error_tag_id drop default`)
 	DB.Exec(`alter table error_groups alter column error_tag_id drop not null`)
+
+	if err := DB.Exec(`
+		DO $$
+			BEGIN
+				IF EXISTS
+					(SELECT * FROM information_schema.columns WHERE table_name = 'o_auth_client_stores' AND column_default IS NULL AND column_name = 'secret')
+				THEN
+					ALTER TABLE o_auth_client_stores ALTER COLUMN secret SET DEFAULT uuid_generate_v4();
+				END IF;
+		END $$;
+	`).Error; err != nil {
+		return false, err
+	}
 
 	log.WithContext(ctx).Printf("Finished running DB migrations.\n")
 
@@ -1891,7 +1855,7 @@ func (e *ErrorGroup) GetSlackAttachment(attachment *slack.Attachment) error {
 	errorType := e.Type
 	errorState := e.State
 
-	frontendURL := os.Getenv("REACT_APP_FRONTEND_URI")
+	frontendURL := env.Config.FrontendUri
 	errorURL := fmt.Sprintf("%s/%d/errors/%s", frontendURL, e.ProjectID, e.SecureID)
 
 	fields := []*slack.TextBlockObject{
@@ -1929,7 +1893,7 @@ func (s *Session) GetSlackAttachment(attachment *slack.Attachment) error {
 	sessionTotalDuration := formatDuration(time.Duration(s.Length * 10e5).Round(time.Second))
 	sessionDateStr := fmt.Sprintf("<!date^%d^{date} {time}|%s>", s.CreatedAt.Unix(), s.CreatedAt.Format(time.RFC1123))
 
-	frontendURL := os.Getenv("REACT_APP_FRONTEND_URI")
+	frontendURL := env.Config.FrontendUri
 	sessionURL := fmt.Sprintf("%s/%d/sessions/%s", frontendURL, s.ProjectID, s.SecureID)
 	sessionImg := ""
 	userProps, err := s.GetUserProperties()
@@ -1976,6 +1940,36 @@ func (s *Session) GetUserProperties() (map[string]string, error) {
 }
 
 type Alert struct {
+	Model
+	ProjectID         int
+	MetricId          string
+	Name              string
+	ProductType       modelInputs.ProductType
+	FunctionType      modelInputs.MetricAggregator
+	FunctionColumn    *string
+	Query             *string
+	GroupByKey        *string
+	Disabled          bool                `gorm:"default:false"`
+	LastAdminToEditID int                 `gorm:"last_admin_to_edit_id"`
+	Destinations      []*AlertDestination `gorm:"foreignKey:AlertID"`
+
+	// fields for threshold alert
+	BelowThreshold    *bool
+	ThresholdValue    *float64
+	ThresholdWindow   *int
+	ThresholdCooldown *int
+}
+
+type AlertDestination struct {
+	Model
+	AlertID         int
+	DestinationType modelInputs.AlertDestinationType
+	TypeID          string
+	TypeName        string
+	Authorization   *string // webhooks may have this
+}
+
+type AlertDeprecated struct {
 	ProjectID            int
 	ExcludedEnvironments *string
 	CountThreshold       int
@@ -1992,13 +1986,14 @@ type Alert struct {
 
 type ErrorAlert struct {
 	Model
-	Alert
+	AlertDeprecated
 	RegexGroups *string
+	Query       string
 	AlertIntegrations
 }
 
 type ErrorAlertEvent struct {
-	ID            int64 `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID            int64 `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	ErrorAlertID  int   `gorm:"index:idx_error_alert_event"`
 	ErrorObjectID int   `gorm:"index:idx_error_alert_event"`
 	SentAt        time.Time
@@ -2019,13 +2014,11 @@ func SendBillingNotifications(ctx context.Context, db *gorm.DB, mailClient *send
 		Active:      true,
 	}
 	if err := db.Create(&history).Error; err != nil {
-		if err != nil {
-			var pgErr *pgconn.PgError
-			// An active BillingEmailHistory may already exist -
-			// in this case, don't send users another email.
-			if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-				return nil
-			}
+		var pgErr *pgconn.PgError
+		// An active BillingEmailHistory may already exist -
+		// in this case, don't send users another email.
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil
 		}
 		return e.Wrap(err, "error creating BillingEmailHistory")
 	}
@@ -2064,7 +2057,7 @@ func (obj *ErrorAlert) GetRegexGroups() ([]*string, error) {
 
 type SessionAlert struct {
 	Model
-	Alert
+	AlertDeprecated
 	TrackProperties *string
 	UserProperties  *string
 	ExcludeRules    *string
@@ -2072,7 +2065,7 @@ type SessionAlert struct {
 }
 
 type SessionAlertEvent struct {
-	ID              int64  `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID              int64  `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	SessionAlertID  int    `gorm:"index:idx_session_alert_event"`
 	SessionSecureID string `gorm:"index:idx_session_alert_event"`
 	SentAt          time.Time
@@ -2094,14 +2087,14 @@ type Service struct {
 
 type LogAlert struct {
 	Model
-	Alert
+	AlertDeprecated
 	Query          string
 	BelowThreshold bool
 	AlertIntegrations
 }
 
 type LogAlertEvent struct {
-	ID         int64     `gorm:"primary_key;type:bigserial" json:"id" deep:"-"`
+	ID         int64     `gorm:"primary_key;type:bigint;autoIncrement" json:"id" deep:"-"`
 	LogAlertID int       `gorm:"index:idx_log_alert_event"`
 	Query      string    `gorm:"index:idx_log_alert_event"`
 	StartDate  time.Time `gorm:"index:idx_log_alert_event"`
@@ -2117,7 +2110,7 @@ type SavedSegment struct {
 	ProjectID  int                                `gorm:"index:idx_saved_segment,priority:1" json:"project_id"`
 }
 
-func (obj *Alert) GetExcludedEnvironments() ([]*string, error) {
+func (obj *AlertDeprecated) GetExcludedEnvironments() ([]*string, error) {
 	if obj == nil {
 		return nil, e.New("empty session alert object for excluded environments")
 	}
@@ -2132,7 +2125,7 @@ func (obj *Alert) GetExcludedEnvironments() ([]*string, error) {
 	return sanitizedExcludedEnvironments, nil
 }
 
-func (obj *Alert) GetChannelsToNotify() ([]*modelInputs.SanitizedSlackChannel, error) {
+func (obj *AlertDeprecated) GetChannelsToNotify() ([]*modelInputs.SanitizedSlackChannel, error) {
 	if obj == nil {
 		return nil, e.New("empty session alert object for channels to notify")
 	}
@@ -2147,11 +2140,11 @@ func (obj *Alert) GetChannelsToNotify() ([]*modelInputs.SanitizedSlackChannel, e
 	return sanitizedChannels, nil
 }
 
-func (obj *Alert) GetName() string {
+func (obj *AlertDeprecated) GetName() string {
 	return obj.Name
 }
 
-func (obj *Alert) GetEmailsToNotify() ([]*string, error) {
+func (obj *AlertDeprecated) GetEmailsToNotify() ([]*string, error) {
 	if obj == nil {
 		return nil, e.New("empty session alert object for emails to notify")
 	}
@@ -2161,7 +2154,7 @@ func (obj *Alert) GetEmailsToNotify() ([]*string, error) {
 	return emailsToNotify, err
 }
 
-func (obj *Alert) GetDailyErrorEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
+func (obj *AlertDeprecated) GetDailyErrorEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
 	var dailyAlerts []*int64
 	if err := db.Raw(`
 		SELECT COUNT(e.id)
@@ -2182,7 +2175,7 @@ func (obj *Alert) GetDailyErrorEventFrequency(db *gorm.DB, id int) ([]*int64, er
 	return dailyAlerts, nil
 }
 
-func (obj *Alert) GetDailySessionEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
+func (obj *AlertDeprecated) GetDailySessionEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
 	var dailyAlerts []*int64
 	if err := db.Raw(`
 		SELECT COUNT(e.id)
@@ -2203,7 +2196,7 @@ func (obj *Alert) GetDailySessionEventFrequency(db *gorm.DB, id int) ([]*int64, 
 	return dailyAlerts, nil
 }
 
-func (obj *Alert) GetDailyLogEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
+func (obj *AlertDeprecated) GetDailyLogEventFrequency(db *gorm.DB, id int) ([]*int64, error) {
 	var dailyAlerts []*int64
 	if err := db.Raw(`
 		SELECT COUNT(e.id)
@@ -2377,7 +2370,7 @@ func SendWelcomeSlackMessage(ctx context.Context, obj IAlert, input *SendWelcome
 		slackClient = slack.New(*input.Workspace.SlackAccessToken)
 	}
 
-	frontendURL := os.Getenv("REACT_APP_FRONTEND_URI")
+	frontendURL := env.Config.FrontendUri
 	alertUrl := fmt.Sprintf("%s/%d/%s/%d", frontendURL, input.Project.Model.ID, input.URLSlug, input.ID)
 	if !input.IncludeEditLink {
 		alertUrl = ""
@@ -2446,12 +2439,16 @@ func SendWelcomeSlackMessage(ctx context.Context, obj IAlert, input *SendWelcome
 	return nil
 }
 
-type TableConfig[TReservedKey ~string] struct {
+type TableConfig struct {
 	TableName        string
 	BodyColumn       string
+	SeverityColumn   string
 	AttributesColumn string
-	KeysToColumns    map[TReservedKey]string
-	ReservedKeys     []TReservedKey
-	SelectColumns    []string
-	DefaultFilter    string
+	// AttributesList set when AttributesColumn is an array of k,v pairs of attributes
+	AttributesList bool
+	KeysToColumns  map[string]string
+	ReservedKeys   []string
+	SelectColumns  []string
+	DefaultFilter  string
+	IgnoredFilters map[string]bool
 }

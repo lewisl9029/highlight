@@ -15,6 +15,7 @@ import { JSNestContent } from './backend/js/nestjs'
 import { JSNodeContent } from './backend/js/nodejs'
 import { JStRPCContent } from './backend/js/trpc'
 import { OTLPErrorMonitoringContent } from './backend/otlp'
+import { PHPOtherContent } from './backend/php/other'
 import { PythonAWSContext } from './backend/python/aws'
 import { PythonAzureContext } from './backend/python/azure'
 import { PythonDjangoContext } from './backend/python/django'
@@ -24,9 +25,10 @@ import { PythonGCPContext } from './backend/python/gcp'
 import { PythonOtherContext } from './backend/python/other'
 import { RubyOtherContent } from './backend/ruby/other'
 import { RubyRailsContent } from './backend/ruby/rails'
-import { RustOtherContent } from './backend/rust/other'
 import { RustActixContent } from './backend/rust/actix'
+import { RustOtherContent } from './backend/rust/other'
 import { AngularContent } from './frontend/angular'
+import { ElectronContext } from './frontend/electron'
 import { GatsbyContent } from './frontend/gatsby'
 import { NextContent } from './frontend/next'
 import { OtherContext } from './frontend/other'
@@ -40,6 +42,7 @@ import { FluentForwardContent } from './logging/fluentd'
 import { GoFiberLogContent } from './logging/go/fiber'
 import { GoOtherLogContent } from './logging/go/other'
 import { HostingFlyIOLogContent } from './logging/hosting/fly-io'
+import { HostingHerokuLogContent } from './logging/hosting/heroku'
 import { HostingRenderLogContent } from './logging/hosting/render'
 import { HostingVercelLogContent } from './logging/hosting/vercel'
 import { HTTPContent } from './logging/http'
@@ -50,21 +53,25 @@ import { JSOtherLogContent } from './logging/js/other'
 import { JSPinoHTTPJSONLogContent } from './logging/js/pino'
 import { JSWinstonHTTPJSONLogContent } from './logging/js/winston'
 import { OTLPLoggingContent } from './logging/otlp'
+import { PHPOtherLogContent } from './logging/php/other'
 import { PythonLoguruLogContent } from './logging/python/loguru'
 import { PythonOtherLogContent } from './logging/python/other'
 import { RubyOtherLogContent } from './logging/ruby/other'
 import { RubyRailsLogContent } from './logging/ruby/rails'
-import { RustOtherLogContent } from './logging/rust/other'
 import { RustActixLogContent } from './logging/rust/actix'
+import { RustOtherLogContent } from './logging/rust/other'
 import { SyslogContent } from './logging/syslog'
 import { SystemdContent } from './logging/systemd'
 import { DevDeploymentContent } from './self-host/dev-deploy'
 import { SelfHostContent } from './self-host/self-host'
+import { DotNetOTLPTracingContent } from './traces/dot-net'
+import { DotNet4OTLPTracingContent } from './traces/dot-net-4'
 import { GoTracesContent } from './traces/go/go'
 import { GormTracesContent } from './traces/go/gorm'
 import { JSManualTracesContent } from './traces/node-js/manual'
 import { NextJsTracesContent } from './traces/node-js/nextjs'
 import { OTLPTracesContent } from './traces/otlp'
+import { PHPTracesContent } from './traces/php'
 import { PythonAWSTracesContent } from './traces/python/aws'
 import { PythonAzureTracesContent } from './traces/python/azure'
 import { PythonDjangoTracesContent } from './traces/python/django'
@@ -72,6 +79,7 @@ import { PythonFastAPITracesContent } from './traces/python/fastapi'
 import { PythonFlaskTracesContent } from './traces/python/flask'
 import { PythonGCPTracesContent } from './traces/python/gcp'
 import { PythonManualTracesContent } from './traces/python/manual'
+import { PythonAITracesContent } from './traces/python/python-ai'
 import { PythonLibrariesTracesContent } from './traces/python/python-libraries'
 import { RustTracesContent } from './traces/rust'
 
@@ -108,6 +116,7 @@ export type QuickStartStep = {
 
 export enum QuickStartType {
 	Angular = 'angular',
+	Electron = 'electron',
 	React = 'react',
 	Remix = 'remix',
 	SvelteKit = 'svelte-kit',
@@ -126,6 +135,7 @@ export enum QuickStartType {
 	PythonAzureFn = 'azure-functions',
 	PythonGCPFn = 'google-cloud-functions',
 	PythonLibraries = 'python-libraries',
+	PythonAI = 'python-ai',
 	GoGqlgen = 'gqlgen',
 	GoFiber = 'fiber',
 	GoChi = 'chi',
@@ -161,7 +171,10 @@ export enum QuickStartType {
 	HostingVercel = 'vercel',
 	HostingFlyIO = 'fly-io',
 	HostingRender = 'render',
+	HostingHeroku = 'heroku',
 	OTLP = 'otlp',
+	OTLPDotNet = 'dot-net',
+	OTLPDotNet4 = 'dot-net-4',
 }
 
 export const quickStartContent = {
@@ -181,6 +194,7 @@ export const quickStartContent = {
 			[QuickStartType.Vue]: VueContent,
 			[QuickStartType.SvelteKit]: SvelteKitContent,
 			[QuickStartType.Gatsby]: GatsbyContent,
+			[QuickStartType.Electron]: ElectronContext,
 			[QuickStartType.Other]: OtherContext,
 		},
 	},
@@ -250,10 +264,26 @@ export const quickStartContent = {
 			logoUrl: siteUrl('/images/quickstart/java.svg'),
 			[QuickStartType.JavaOther]: JavaOtherContent,
 		},
+		php: {
+			title: 'PHP',
+			subtitle:
+				'Select your PHP framework to install error monitoring for your application.',
+			logoUrl: siteUrl('/images/quickstart/php.svg'),
+			[QuickStartType.Other]: PHPOtherContent,
+		},
+		dotnet: {
+			title: 'C# .NET',
+			subtitle: 'ASP C# .NET Applications',
+			logoUrl: siteUrl('/images/quickstart/dotnet.svg'),
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
+		},
 		otlp: {
 			title: 'OpenTelemetry',
 			subtitle: 'OpenTelemetry Protocol (OTLP)',
 			[QuickStartType.OTLP]: OTLPErrorMonitoringContent,
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
 		},
 	},
 	'backend-logging': {
@@ -322,6 +352,13 @@ export const quickStartContent = {
 			logoUrl: siteUrl('/images/quickstart/java.svg'),
 			[QuickStartType.JavaOther]: JavaOtherLogContent,
 		},
+		php: {
+			title: 'PHP',
+			subtitle:
+				'Select your PHP framework to install error monitoring for your application.',
+			logoUrl: siteUrl('/images/quickstart/php.svg'),
+			[QuickStartType.Other]: PHPOtherLogContent,
+		},
 		hosting: {
 			title: 'Cloud Hosting Provider',
 			subtitle:
@@ -329,11 +366,21 @@ export const quickStartContent = {
 			[QuickStartType.HostingVercel]: HostingVercelLogContent,
 			[QuickStartType.HostingFlyIO]: HostingFlyIOLogContent,
 			[QuickStartType.HostingRender]: HostingRenderLogContent,
+			[QuickStartType.HostingHeroku]: HostingHerokuLogContent,
+		},
+		dotnet: {
+			title: 'C# .NET',
+			subtitle: 'ASP C# .NET Applications',
+			logoUrl: siteUrl('/images/quickstart/dotnet.svg'),
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
 		},
 		otlp: {
 			title: 'OpenTelemetry',
 			subtitle: 'OpenTelemetry Protocol (OTLP)',
 			[QuickStartType.OTLP]: OTLPLoggingContent,
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
 		},
 	},
 	traces: {
@@ -371,11 +418,27 @@ export const quickStartContent = {
 			[QuickStartType.PythonFlask]: PythonFlaskTracesContent,
 			[QuickStartType.PythonGCPFn]: PythonGCPTracesContent,
 			[QuickStartType.PythonLibraries]: PythonLibrariesTracesContent,
+			[QuickStartType.PythonAI]: PythonAITracesContent,
+		},
+		php: {
+			title: 'PHP',
+			subtitle: 'Install tracing in your PHP application.',
+			logoUrl: siteUrl('/images/quickstart/php.svg'),
+			[QuickStartType.Other]: PHPTracesContent,
+		},
+		dotnet: {
+			title: 'C# .NET',
+			subtitle: 'ASP C# .NET Applications',
+			logoUrl: siteUrl('/images/quickstart/dotnet.svg'),
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
 		},
 		otlp: {
 			title: 'OpenTelemetry',
 			subtitle: 'OpenTelemetry Protocol (OTLP)',
 			[QuickStartType.OTLP]: OTLPTracesContent,
+			[QuickStartType.OTLPDotNet]: DotNetOTLPTracingContent,
+			[QuickStartType.OTLPDotNet4]: DotNet4OTLPTracingContent,
 		},
 		rust: {
 			title: 'Rust',

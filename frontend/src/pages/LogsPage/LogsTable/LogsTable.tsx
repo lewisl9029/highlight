@@ -2,7 +2,7 @@ import { ApolloError } from '@apollo/client'
 import { Button } from '@components/Button'
 import {
 	CustomColumnPopover,
-	LogCustomColumn,
+	SerializedColumn,
 } from '@components/CustomColumnPopover'
 import { AdditionalFeedResults } from '@components/FeedResults/FeedResults'
 import { Link } from '@components/Link'
@@ -31,23 +31,23 @@ import {
 	flexRender,
 	getCoreRowModel,
 	getExpandedRowModel,
+	Row,
 	useReactTable,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { isEqual } from 'lodash'
 import React, { Key, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
 	ColumnHeader,
 	CustomColumnHeader,
 } from '@/components/CustomColumnHeader'
+import { findMatchingAttributes } from '@/components/JsonViewer/utils'
 import { SearchExpression } from '@/components/Search/Parser/listener'
-import { parseSearch } from '@/components/Search/utils'
 import { LogEdge, ProductType } from '@/graph/generated/schemas'
-import { findMatchingLogAttributes } from '@/pages/LogsPage/utils'
+import { MAX_LOGS } from '@/pages/LogsPage/useGetLogs'
 import analytics from '@/util/analytics'
 
-import { LogDetails, LogValue } from './LogDetails'
+import { LogDetails } from './LogDetails'
 import * as styles from './LogsTable.css'
 
 type Props = {
@@ -117,16 +117,18 @@ export const LogsTable = (props: Props) => {
 type LogsTableInnerProps = {
 	loadingAfter: boolean
 	logEdges: LogEdgeWithResources[]
-	query: string
 	selectedCursor: string | undefined
+	query: string
+	queryParts: SearchExpression[]
 	fetchMoreWhenScrolled: (target: HTMLDivElement) => void
 	// necessary for loading most recent loads
 	moreLogs?: number
 	bodyHeight: string
 	clearMoreLogs?: () => void
 	handleAdditionalLogsDateChange?: () => void
-	selectedColumns?: LogCustomColumn[]
-	setSelectedColumns?: (columns: LogCustomColumn[]) => void
+	selectedColumns?: SerializedColumn[]
+	setSelectedColumns?: (columns: SerializedColumn[]) => void
+	pollingExpired?: boolean
 }
 
 const LOADING_AFTER_HEIGHT = 28
@@ -134,9 +136,11 @@ const LOADING_AFTER_HEIGHT = 28
 const LogsTableInner = ({
 	logEdges,
 	loadingAfter,
-	query,
 	selectedCursor,
+	query,
+	queryParts,
 	moreLogs,
+	pollingExpired,
 	bodyHeight,
 	clearMoreLogs,
 	handleAdditionalLogsDateChange,
@@ -146,9 +150,10 @@ const LogsTableInner = ({
 }: LogsTableInnerProps) => {
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const enableFetchMoreLogs =
-		!!moreLogs && !!clearMoreLogs && !!handleAdditionalLogsDateChange
+		(!!moreLogs || pollingExpired) &&
+		!!clearMoreLogs &&
+		!!handleAdditionalLogsDateChange
 
-	const { queryParts } = parseSearch(query)
 	const [expanded, setExpanded] = useState<ExpandedState>({})
 
 	const columnHelper = createColumnHelper<LogEdge>()
@@ -178,7 +183,9 @@ const LogsTableInner = ({
 			}),
 		)
 
-		selectedColumns.forEach((column) => {
+		selectedColumns.forEach((column, index) => {
+			const first = index === 0
+
 			gridColumns.push(column.size)
 			columnHeaders.push({
 				id: column.id,
@@ -186,14 +193,23 @@ const LogsTableInner = ({
 				showActions: !!setSelectedColumns,
 			})
 
-			// @ts-ignore
-			const accessor = columnHelper.accessor(`node.${column.accessKey}`, {
+			const accessorFn =
+				column.id in HIGHLIGHT_STANDARD_COLUMNS
+					? HIGHLIGHT_STANDARD_COLUMNS[column.id].accessor
+					: (`node.logAttributes.${column.id}` as `node.logAttributes.${string}`)
+
+			const columnType =
+				column.id in HIGHLIGHT_STANDARD_COLUMNS
+					? HIGHLIGHT_STANDARD_COLUMNS[column.id].type
+					: 'string'
+
+			const accessor = columnHelper.accessor(accessorFn, {
 				cell: ({ row, getValue }) => {
-					const ColumnRenderer =
-						ColumnRenderers[column.type] || ColumnRenderers.string
+					const ColumnRenderer = ColumnRenderers[columnType]
 
 					return (
 						<ColumnRenderer
+							first={first}
 							key={column.id}
 							row={row}
 							getValue={getValue}
@@ -201,6 +217,7 @@ const LogsTableInner = ({
 						/>
 					)
 				},
+				id: column.id,
 			})
 
 			columns.push(accessor)
@@ -218,7 +235,9 @@ const LogsTableInner = ({
 						selectedColumns={selectedColumns}
 						setSelectedColumns={setSelectedColumns}
 						standardColumns={HIGHLIGHT_STANDARD_COLUMNS}
-						attributePrefix="logAttributes"
+						attributeAccessor={(row: LogEdge) =>
+							row.node.logAttributes
+						}
 					/>
 				),
 			})
@@ -229,7 +248,8 @@ const LogsTableInner = ({
 			columnHeaders,
 			columns,
 		}
-	}, [columnHelper, queryParts, selectedColumns, setSelectedColumns])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [queryParts, selectedColumns, setSelectedColumns])
 
 	const table = useReactTable({
 		data: logEdges,
@@ -330,12 +350,14 @@ const LogsTableInner = ({
 					<Table.Row>
 						<Box width="full">
 							<AdditionalFeedResults
-								more={moreLogs}
+								maxResults={MAX_LOGS}
+								more={moreLogs ?? 0}
 								type="logs"
 								onClick={() => {
 									clearMoreLogs()
 									handleAdditionalLogsDateChange()
 								}}
+								pollingExpired={pollingExpired ?? false}
 							/>
 						</Box>
 					</Table.Row>
@@ -389,7 +411,7 @@ export const IconCollapsed: React.FC = () => (
 )
 
 type LogsTableRowProps = {
-	row: any
+	row: Row<LogEdgeWithResources>
 	rowVirtualizer: any
 	expanded: boolean
 	virtualRowKey: Key
@@ -397,127 +419,78 @@ type LogsTableRowProps = {
 	gridColumns: string[]
 }
 
-const LogsTableRow = React.memo<LogsTableRowProps>(
-	({
-		row,
-		rowVirtualizer,
-		expanded,
-		virtualRowKey,
-		queryParts,
-		gridColumns,
-	}) => {
-		const attributesRow = (row: any) => {
-			const log = row.original.node
-			const rowExpanded = row.getIsExpanded()
-
-			const matchedAttributes = findMatchingLogAttributes(queryParts, {
-				...log.logAttributes,
-				environment: log.environment,
-				level: log.level,
-				message: log.message,
-				secure_session_id: log.secureSessionID,
-				service_name: log.serviceName,
-				service_version: log.serviceVersion,
-				source: log.source,
-				span_id: log.spanID,
-				trace_id: log.traceID,
-			})
-			const hasAttributes = Object.entries(matchedAttributes).length > 0
-
-			return (
-				<Table.Row
-					selected={expanded}
-					className={styles.attributesRow}
-					gridColumns={['32px', '1fr']}
-				>
-					{(rowExpanded || hasAttributes) && (
-						<>
-							<Table.Cell py="4" />
-							<Table.Cell py="4" borderTop="dividerWeak">
-								{!rowExpanded && (
-									<Box display="flex" flexWrap="wrap">
-										{Object.entries(matchedAttributes).map(
-											(
-												[key, { match, value }],
-												index,
-											) => {
-												return (
-													<>
-														{index > 0 && (
-															<Box
-																display="flex"
-																alignItems="center"
-																pr="8"
-															>
-																<Text
-																	weight="bold"
-																	color="weak"
-																>
-																	;
-																</Text>
-															</Box>
-														)}
-														<LogValue
-															key={key}
-															label={key}
-															value={value}
-															queryKey={key}
-															queryMatch={match}
-															queryParts={
-																queryParts
-															}
-															hideActions
-														/>
-													</>
-												)
-											},
-										)}
-									</Box>
-								)}
-								<LogDetails
-									matchedAttributes={matchedAttributes}
-									row={row}
-									queryParts={queryParts}
-								/>
-							</Table.Cell>
-						</>
-					)}
-				</Table.Row>
-			)
-		}
+const LogsTableRow: React.FC<LogsTableRowProps> = ({
+	row,
+	rowVirtualizer,
+	expanded,
+	virtualRowKey,
+	queryParts,
+	gridColumns,
+}) => {
+	const attributesRow = (row: LogsTableRowProps['row']) => {
+		const log = row.original.node
+		const rowExpanded = row.getIsExpanded()
 
 		return (
-			<div
-				key={virtualRowKey}
-				data-index={virtualRowKey}
-				ref={rowVirtualizer.measureElement}
+			<Table.Row
+				selected={expanded}
+				className={styles.attributesRow}
+				gridColumns={['32px', '1fr']}
 			>
-				<Table.Row
-					gridColumns={gridColumns}
-					onClick={row.getToggleExpandedHandler()}
-					selected={expanded}
-					className={styles.dataRow}
-				>
-					{row.getVisibleCells().map((cell: any) => {
-						return (
-							<React.Fragment key={cell.column.id}>
-								{flexRender(
-									cell.column.columnDef.cell,
-									cell.getContext(),
+				{rowExpanded && (
+					<>
+						<Table.Cell py="4" />
+						<Table.Cell py="4" borderTop="dividerWeak">
+							<LogDetails
+								matchedAttributes={findMatchingAttributes(
+									queryParts,
+									{
+										...log.logAttributes,
+										environment: log.environment,
+										level: log.level,
+										message: log.message,
+										secure_session_id: log.secureSessionID,
+										service_name: log.serviceName,
+										service_version: log.serviceVersion,
+										source: log.source,
+										span_id: log.spanID,
+										trace_id: log.traceID,
+									},
 								)}
-							</React.Fragment>
-						)
-					})}
-				</Table.Row>
-				{attributesRow(row)}
-			</div>
+								row={row}
+								queryParts={queryParts}
+							/>
+						</Table.Cell>
+					</>
+				)}
+			</Table.Row>
 		)
-	},
-	(prevProps, nextProps) => {
-		return (
-			prevProps.expanded === nextProps.expanded &&
-			prevProps.virtualRowKey === nextProps.virtualRowKey &&
-			isEqual(prevProps.gridColumns, nextProps.gridColumns)
-		)
-	},
-)
+	}
+
+	return (
+		<div
+			key={virtualRowKey}
+			data-index={virtualRowKey}
+			ref={rowVirtualizer.measureElement}
+		>
+			<Table.Row
+				gridColumns={gridColumns}
+				onClick={row.getToggleExpandedHandler()}
+				selected={expanded}
+				className={styles.dataRow}
+			>
+				{row.getVisibleCells().map((cell: any) => {
+					return (
+						<React.Fragment key={cell.column.id}>
+							{flexRender(
+								cell.column.columnDef.cell,
+								cell.getContext(),
+							)}
+						</React.Fragment>
+					)
+				})}
+			</Table.Row>
+			{attributesRow(row)}
+		</div>
+	)
+}

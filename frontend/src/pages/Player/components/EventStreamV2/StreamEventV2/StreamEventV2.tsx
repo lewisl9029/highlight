@@ -1,4 +1,4 @@
-import { EventType } from '@highlight-run/rrweb'
+import { toast } from '@components/Toaster'
 import { colors } from '@highlight-run/ui/colors'
 import {
 	Badge,
@@ -13,7 +13,7 @@ import { getEventRenderDetails } from '@pages/Player/StreamElement/StreamElement
 import { getTimelineEventDisplayName } from '@pages/Player/utils/utils'
 import { playerTimeToSessionAbsoluteTime } from '@util/session/utils'
 import { MillisToMinutesAndSeconds } from '@util/time'
-import { message } from 'antd'
+import { EventType } from 'rrweb'
 
 import * as styles from './StreamEventV2.css'
 
@@ -62,25 +62,25 @@ export const EVENT_TYPES_TO_COLORS: {
 }
 
 export const StreamEventV2 = function ({
-	e,
+	event,
 	start,
 	isCurrent,
 	onGoToHandler,
 }: {
-	e: HighlightEvent
+	event: HighlightEvent
 	start: number
 	isCurrent: boolean
-	onGoToHandler: (event: string) => void
+	onGoToHandler: () => void
 	isFirstCard: boolean
 }) {
 	const { pause } = useReplayerContext()
 	const { showPlayerAbsoluteTime } = usePlayerConfiguration()
-	const timeSinceStart = Math.max(e?.timestamp - start, 0)
-	const details = getEventRenderDetails(e)
+	const timeSinceStart = Math.max(event?.timestamp - start, 0)
+	const details = getEventRenderDetails(event)
 	const displayName = getTimelineEventDisplayName(details.title || '')
 	const shouldShowTimestamp =
-		e.type === EventType.Custom &&
-		!EVENT_TYPES_TO_NOT_RENDER_TIME.includes(e.data.tag)
+		event.type === EventType.Custom &&
+		!EVENT_TYPES_TO_NOT_RENDER_TIME.includes(event.data.tag)
 	return (
 		<Box px="8" cursor="pointer">
 			<Box
@@ -88,11 +88,10 @@ export const StreamEventV2 = function ({
 				onClick={(e) => {
 					// Stopping the event from propagating up to the parent button. This is to allow the element to stay opened when the user clicks on the GoToButton. Without this the element would close.
 					e.stopPropagation()
-					// Sets the current event as null. It will be reset as the player continues.
-					onGoToHandler('')
+					onGoToHandler()
 					pause(timeSinceStart)
 
-					message.success(
+					toast.success(
 						`Changed player time showing you ${
 							details.title
 						} at ${MillisToMinutesAndSeconds(timeSinceStart)}`,
@@ -133,7 +132,7 @@ export const StreamEventV2 = function ({
 								onClick={(e) => {
 									e.stopPropagation()
 									pause(timeSinceStart)
-									message.success(
+									toast.success(
 										`Changed player time showing you ${
 											details.title
 										} at ${MillisToMinutesAndSeconds(

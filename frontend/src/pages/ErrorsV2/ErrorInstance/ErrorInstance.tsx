@@ -6,9 +6,13 @@ import JsonViewer from '@components/JsonViewer/JsonViewer'
 import LoadingBox from '@components/LoadingBox'
 import {
 	GetErrorInstanceDocument,
-	useGetErrorInstanceQuery,
+	useGetErrorInstanceLazyQuery,
 } from '@graph/hooks'
-import { ErrorObjectFragment, GetErrorGroupQuery } from '@graph/operations'
+import {
+	ErrorObjectFragment,
+	GetErrorGroupQuery,
+	GetErrorInstanceQuery,
+} from '@graph/operations'
 import {
 	Badge,
 	Box,
@@ -24,7 +28,6 @@ import { useProjectId } from '@hooks/useProjectId'
 import ErrorStackTrace from '@pages/ErrorsV2/ErrorStackTrace/ErrorStackTrace'
 import { GitHubEnhancementSettings } from '@pages/ErrorsV2/GitHubEnhancementSettings/GitHubEnhancementSettings'
 import {
-	getDisplayName,
 	getDisplayNameAndField,
 	getIdentifiedUserProfileImage,
 	getUserProperties,
@@ -32,16 +35,12 @@ import {
 import analytics from '@util/analytics'
 import { loadSession } from '@util/preload'
 import { useParams } from '@util/react-router/useParams'
-import { copyToClipboard, validateEmail } from '@util/string'
-import {
-	buildQueryParams,
-	buildQueryStateString,
-	buildQueryURLString,
-} from '@util/url/params'
+import { copyToClipboard } from '@util/string'
 import moment from 'moment'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { useSearchContext } from '@/components/Search/SearchContext'
 import { useGetWorkspaceSettingsQuery } from '@/graph/generated/hooks'
 import ErrorBodyText from '@/pages/ErrorsV2/ErrorBody/components/ErrorBodyText'
 import { AiErrorSuggestion } from '@/pages/ErrorsV2/ErrorInstance/AiErrorSuggestion'
@@ -53,7 +52,6 @@ import { RelatedSession } from '@/pages/ErrorsV2/ErrorInstance/RelatedSession'
 import { RelatedTrace } from '@/pages/ErrorsV2/ErrorInstance/RelatedTrace'
 import { SeeAllInstances } from '@/pages/ErrorsV2/ErrorInstance/SeeAllInstances'
 import { isSessionAvailable } from '@/pages/ErrorsV2/ErrorInstance/utils'
-import { useSearchContext } from '@/pages/Sessions/SearchContext/SearchContext'
 import { useApplicationContext } from '@/routers/AppRouter/context/ApplicationContext'
 
 const MAX_USER_PROPERTIES = 4
@@ -72,50 +70,70 @@ export const ErrorInstance: React.FC<Props> = ({ errorGroup }) => {
 	const client = useApolloClient()
 	const { currentWorkspace } = useApplicationContext()
 	const [displayGitHubSettings, setDisplayGitHubSettings] = useState(false)
+	const { query, startDate, endDate } = useSearchContext()
 
 	const { data: workspaceSettingsData } = useGetWorkspaceSettingsQuery({
 		variables: { workspace_id: String(currentWorkspace?.id) },
 		skip: !currentWorkspace?.id,
 	})
 
-	const { loading, error, data } = useGetErrorInstanceQuery({
-		variables: {
-			error_group_secure_id: String(errorGroup?.secure_id),
-			error_object_id,
-		},
-		onCompleted: (data) => {
-			const previousErrorObjectId = data?.error_instance?.previous_id
-			const nextErrorObjectId = data?.error_instance?.next_id
+	const [getErrorInstance, { error, data, loading, called }] =
+		useGetErrorInstanceLazyQuery()
 
-			// Prefetch the next/previous error objects so they are in the cache.
-			// Using client directly because the lazy query had issues with canceling
-			// multiple requests: https://github.com/apollographql/apollo-client/issues/9755
-			if (previousErrorObjectId) {
-				client.query({
-					query: GetErrorInstanceDocument,
-					variables: {
-						error_group_secure_id: String(errorGroup?.secure_id),
-						error_object_id: previousErrorObjectId,
+	useEffect(() => {
+		getErrorInstance({
+			variables: {
+				error_group_secure_id: String(errorGroup?.secure_id),
+				error_object_id,
+				params: {
+					query,
+					date_range: {
+						start_date: startDate!.toISOString(),
+						end_date: endDate!.toISOString(),
 					},
-				})
-			}
+				},
+			},
+			onCompleted: (data) => {
+				const previousErrorObjectId = data?.error_instance?.previous_id
+				const nextErrorObjectId = data?.error_instance?.next_id
 
-			if (nextErrorObjectId) {
-				client.query({
-					query: GetErrorInstanceDocument,
-					variables: {
-						error_group_secure_id: String(errorGroup?.secure_id),
-						error_object_id: nextErrorObjectId,
-					},
-				})
-			}
+				// Prefetch the next/previous error objects so they are in the cache.
+				// Using client directly because the lazy query had issues with canceling
+				// multiple requests: https://github.com/apollographql/apollo-client/issues/9755
+				if (previousErrorObjectId) {
+					client.query({
+						query: GetErrorInstanceDocument,
+						variables: {
+							error_group_secure_id: String(
+								errorGroup?.secure_id,
+							),
+							error_object_id: previousErrorObjectId,
+						},
+					})
+				}
 
-			// Prefetch session data.
-			if (data?.error_instance?.error_object?.session) {
-				loadSession(data.error_instance.error_object.session.secure_id)
-			}
-		},
-	})
+				if (nextErrorObjectId) {
+					client.query({
+						query: GetErrorInstanceDocument,
+						variables: {
+							error_group_secure_id: String(
+								errorGroup?.secure_id,
+							),
+							error_object_id: nextErrorObjectId,
+						},
+					})
+				}
+
+				// Prefetch session data.
+				if (data?.error_instance?.error_object?.session) {
+					loadSession(
+						data.error_instance.error_object.session.secure_id,
+					)
+				}
+			},
+		})
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [error_object_id, errorGroup?.secure_id])
 
 	useEffect(
 		() =>
@@ -125,7 +143,7 @@ export const ErrorInstance: React.FC<Props> = ({ errorGroup }) => {
 		[error_object_id],
 	)
 
-	if (loading) {
+	if (!called || loading) {
 		return (
 			<Box mt="10">
 				<LoadingBox />
@@ -150,31 +168,19 @@ export const ErrorInstance: React.FC<Props> = ({ errorGroup }) => {
 
 	return (
 		<Box id="error-instance-container">
-			<Stack direction="row" my="12">
-				<Stack direction="row" flexGrow={1}>
+			<Stack direction="row" my="12" alignItems="center">
+				<Stack direction="row" flexGrow={1} alignItems="center">
 					<SeeAllInstances data={data} />
 					<PreviousNextInstance data={data} />
 				</Stack>
-				<Stack direction="row" gap="4">
+				<Stack direction="row" gap="4" alignItems="center">
 					<RelatedSession data={data} />
 					<RelatedLogs data={data} />
 					<RelatedTrace data={data} />
 				</Stack>
 			</Stack>
 
-			<Box py="12" px="16" mb="40" border="secondary" borderRadius="8">
-				<Box
-					mb="8"
-					display="flex"
-					gap="6"
-					alignItems="center"
-					color="weak"
-				>
-					<IconSolidCode />
-					<Text color="moderate">Instance Error Body</Text>
-				</Box>
-				<ErrorBodyText errorBody={errorInstance.error_object.event} />
-			</Box>
+			<ErrorInstanceBody errorInstance={errorInstance} />
 
 			{workspaceSettingsData?.workspaceSettings?.ai_application && (
 				<Box display="flex" flexDirection="column" mb="40">
@@ -190,6 +196,48 @@ export const ErrorInstance: React.FC<Props> = ({ errorGroup }) => {
 				</Box>
 			)}
 
+			<ErrorInstanceInfo
+				errorGroup={errorGroup}
+				errorInstance={errorInstance}
+			/>
+
+			<ErrorInstanceStackTrace
+				displayGitHubSettings={displayGitHubSettings}
+				errorInstance={errorInstance}
+				setDisplayGitHubSettings={setDisplayGitHubSettings}
+			/>
+		</Box>
+	)
+}
+
+export const ErrorInstanceBody: React.FC<{
+	errorInstance: GetErrorInstanceQuery['error_instance']
+}> = ({ errorInstance }) => {
+	if (!errorInstance) {
+		return null
+	}
+
+	return (
+		<Box py="12" px="16" mb="40" border="secondary" borderRadius="8">
+			<Box mb="8" display="flex" gap="6" alignItems="center" color="weak">
+				<IconSolidCode />
+				<Text color="moderate">Instance Error Body</Text>
+			</Box>
+			<ErrorBodyText errorBody={errorInstance.error_object.event} />
+		</Box>
+	)
+}
+
+export const ErrorInstanceInfo: React.FC<{
+	errorGroup: Props['errorGroup']
+	errorInstance: GetErrorInstanceQuery['error_instance']
+}> = ({ errorGroup, errorInstance }) => {
+	if (!errorGroup || !errorInstance) {
+		return null
+	}
+
+	return (
+		<>
 			<Box
 				display="flex"
 				flexDirection={{ mobile: 'column', desktop: 'row' }}
@@ -217,48 +265,7 @@ export const ErrorInstance: React.FC<Props> = ({ errorGroup }) => {
 						</Box>
 					</>
 				)}
-
-			{(errorInstance.error_object.stack_trace !== '' &&
-				errorInstance.error_object.stack_trace !== 'null') ||
-			errorInstance.error_object.structured_stack_trace?.length ? (
-				displayGitHubSettings ? (
-					<GitHubEnhancementSettings
-						onClose={() => setDisplayGitHubSettings(false)}
-						errorObject={errorInstance.error_object}
-					/>
-				) : (
-					<>
-						<Stack
-							direction="row"
-							justifyContent="space-between"
-							alignItems="center"
-						>
-							<Text size="large" weight="bold" color="strong">
-								Stacktrace
-							</Text>
-							{errorInstance.error_object?.type === 'Backend' && (
-								<Button
-									kind="secondary"
-									emphasis="medium"
-									trackingId="errorInstanceGithubEnhancementSetup"
-									iconLeft={<IconSolidCog size={12} />}
-									onClick={() =>
-										setDisplayGitHubSettings(true)
-									}
-								>
-									Setup GitHub-enhanced stacktraces
-								</Button>
-							)}
-						</Stack>
-						<Box mt="12">
-							<ErrorStackTrace
-								errorObject={errorInstance.error_object}
-							/>
-						</Box>
-					</>
-				)
-			) : null}
-		</Box>
+		</>
 	)
 }
 
@@ -368,23 +375,22 @@ const User: React.FC<{
 	const { projectId } = useProjectId()
 	const { isLoggedIn } = useAuthContext()
 	const [truncated, setTruncated] = useState(true)
+	const [displayName, field] = getDisplayNameAndField(errorObject?.session)
 
-	const { setSearchQuery } = useSearchContext()
-	const setUserSessionIdentifier = useCallback(() => {
-		if (!errorObject?.session) return
+	const searchQuery = useMemo(() => {
+		if (errorObject?.session?.identifier && field !== null) {
+			return `${field}=${displayName}`
+		} else if (errorObject?.session?.fingerprint) {
+			return `device_id=${errorObject?.session.fingerprint}`
+		}
 
-		const displayName = getDisplayName(errorObject?.session)
-		const userParam = validateEmail(displayName) ? 'email' : 'identifier'
-
-		setSearchQuery((query) => {
-			const qp = buildQueryParams({ query }, true)
-			qp.rules = qp.rules.filter((r) => !r[0].startsWith('user_'))
-			return buildQueryStateString({
-				query: JSON.stringify(qp),
-				[`user_${userParam}`]: displayName,
-			})
-		})
-	}, [errorObject?.session, setSearchQuery])
+		return ''
+	}, [
+		displayName,
+		errorObject?.session?.fingerprint,
+		errorObject?.session?.identifier,
+		field,
+	])
 
 	const userDetailsBox = (
 		<Box pb="12">
@@ -406,7 +412,6 @@ const User: React.FC<{
 	const userProperties = getUserProperties(
 		errorObject?.session?.user_properties,
 	)
-	const [displayName, field] = getDisplayNameAndField(errorObject?.session)
 	const avatarImage = getIdentifiedUserProfileImage(errorObject?.session)
 	const userDisplayPropertyKeys = Object.keys(userProperties)
 		.filter((k) => k !== 'avatar')
@@ -460,22 +465,9 @@ const User: React.FC<{
 									return
 								}
 
-								const searchParams: any = {}
-								if (
-									errorObject?.session?.identifier &&
-									field !== null
-								) {
-									searchParams[`user_${field}`] = displayName
-								} else if (errorObject?.session?.fingerprint) {
-									searchParams.device_id = String(
-										errorObject?.session.fingerprint,
-									)
-								}
-
-								setUserSessionIdentifier()
 								navigate({
 									pathname: `/${projectId}/sessions`,
-									search: buildQueryURLString(searchParams),
+									search: `query=${searchQuery}`,
 								})
 							}}
 							trackingId="error_all-sessions-for-user_click"
@@ -583,5 +575,60 @@ const User: React.FC<{
 				{errorObject && <ErrorBoundaryFeedback data={errorObject} />}
 			</Box>
 		</Box>
+	)
+}
+
+export const ErrorInstanceStackTrace: React.FC<{
+	displayGitHubSettings: boolean
+	errorInstance: GetErrorInstanceQuery['error_instance']
+	setDisplayGitHubSettings: (value: boolean) => void
+}> = ({ displayGitHubSettings, errorInstance, setDisplayGitHubSettings }) => {
+	if (!errorInstance) {
+		return null
+	}
+
+	return (
+		<>
+			{(errorInstance.error_object.stack_trace !== '' &&
+				errorInstance.error_object.stack_trace !== 'null') ||
+			errorInstance.error_object.structured_stack_trace?.length ? (
+				displayGitHubSettings ? (
+					<GitHubEnhancementSettings
+						onClose={() => setDisplayGitHubSettings(false)}
+						errorObject={errorInstance.error_object}
+					/>
+				) : (
+					<>
+						<Stack
+							direction="row"
+							justifyContent="space-between"
+							alignItems="center"
+						>
+							<Text size="large" weight="bold" color="strong">
+								Stacktrace
+							</Text>
+							{errorInstance.error_object?.type === 'Backend' && (
+								<Button
+									kind="secondary"
+									emphasis="medium"
+									trackingId="errorInstanceGithubEnhancementSetup"
+									iconLeft={<IconSolidCog size={12} />}
+									onClick={() =>
+										setDisplayGitHubSettings(true)
+									}
+								>
+									Setup GitHub-enhanced stacktraces
+								</Button>
+							)}
+						</Stack>
+						<Box mt="12">
+							<ErrorStackTrace
+								errorObject={errorInstance.error_object}
+							/>
+						</Box>
+					</>
+				)
+			) : null}
+		</>
 	)
 }

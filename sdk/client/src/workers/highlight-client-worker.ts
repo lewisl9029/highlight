@@ -1,5 +1,6 @@
 import {
 	AsyncEventsMessage,
+	AsyncEventsResponse,
 	FeedbackMessage,
 	HighlightClientWorkerParams,
 	HighlightClientWorkerResponse,
@@ -7,6 +8,7 @@ import {
 	MessageType,
 	MetricsMessage,
 	PropertiesMessage,
+	PropertyType,
 } from './types'
 import stringify from 'json-stringify-safe'
 import {
@@ -25,6 +27,7 @@ import {
 import { Logger } from '../logger'
 import { MetricCategory } from '../types/client'
 import { compressSync, strToU8 } from 'fflate'
+import { UPLOAD_TIMEOUT } from '../constants/sessions'
 
 export interface HighlightClientRequestWorker {
 	postMessage: (message: HighlightClientWorkerParams) => void
@@ -147,7 +150,6 @@ function stringifyProperties(
 			errors,
 			resourcesString,
 			webSocketEventsString,
-			isBeacon,
 			hasSessionUnloaded,
 			highlightLogs,
 		} = msg
@@ -161,7 +163,7 @@ function stringifyProperties(
 			resources: resourcesString,
 			web_socket_events: webSocketEventsString,
 			errors,
-			is_beacon: isBeacon,
+			is_beacon: false,
 			has_session_unloaded: hasSessionUnloaded,
 		}
 		if (highlightLogs) {
@@ -171,6 +173,37 @@ function stringifyProperties(
 		const buf = strToU8(JSON.stringify(payload))
 		const compressed = compressSync(buf)
 		const compressedBase64 = await bufferToBase64(compressed)
+
+		const response: AsyncEventsResponse = {
+			type: MessageType.AsyncEvents,
+			id,
+			eventsSize: buf.length,
+			compressedSize: compressedBase64.length,
+		}
+
+		logger.log(
+			`Pushing payload: ${JSON.stringify(
+				{
+					sessionSecureID,
+					id,
+					firstSID: Math.min(
+						...(payload.events.events
+							.map((e) => e?._sid)
+							.filter((sid) => !!sid) as number[]),
+					),
+					eventsLength: payload.events.events.length,
+					messagesLength: messages.length,
+					resourcesLength: resourcesString.length,
+					webSocketLength: webSocketEventsString.length,
+					errorsLength: errors.length,
+					bufLength: buf.length,
+					compressedLength: compressed.length,
+					compressedBase64Length: compressedBase64.length,
+				},
+				undefined,
+				2,
+			)}`,
+		)
 
 		const pushPayload = graphqlSDK.PushPayloadCompressed({
 			session_secure_id: sessionSecureID,
@@ -186,14 +219,42 @@ function stringifyProperties(
 			// clear batched payload before yielding for network request
 			metricsPayload.splice(0)
 		}
-		await Promise.all([pushPayload, pushMetrics])
+
+		let requestStart: number = performance.now()
+		const int = setInterval(() => {
+			if (
+				requestStart &&
+				performance.now() - requestStart > UPLOAD_TIMEOUT
+			) {
+				console.warn(
+					`Uploading pushPayload took too long, stopping recording to avoid OOM.`,
+				)
+				clearInterval(int)
+
+				worker.postMessage({
+					response: {
+						type: MessageType.Stop,
+						requestStart,
+						asyncEventsResponse: response,
+					},
+				})
+
+				processPropertiesMessage({
+					type: MessageType.Properties,
+					propertiesObject: { stopReason: 'Push Payload Timeout' },
+					propertyType: { type: 'track' },
+				})
+			}
+		}, 100)
+		try {
+			await Promise.all([pushPayload, pushMetrics])
+		} finally {
+			requestStart = 0
+			clearInterval(int)
+		}
+
 		worker.postMessage({
-			response: {
-				type: MessageType.AsyncEvents,
-				id,
-				eventsSize: buf.length,
-				compressedSize: compressedBase64.length,
-			},
+			response,
 		})
 	}
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
 // Option applies a configuration to the given config.
@@ -59,7 +59,7 @@ func (hook *Hook) Fire(entry *logrus.Entry) error {
 		ctx = context.TODO()
 	}
 
-	span, _ := highlight.StartTraceWithTimestamp(ctx, "highlight.go.log", entry.Time, []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindClient)})
+	span, _ := highlight.StartTraceWithTimestamp(ctx, highlight.LogrusSpanName, entry.Time, []trace.SpanStartOption{trace.WithSpanKind(trace.SpanKindClient)})
 	defer highlight.EndTrace(span)
 
 	msg := entry.Message

@@ -8,8 +8,6 @@ import { HighlightClassOptions } from '../index'
 import stringify from 'json-stringify-safe'
 import { DEFAULT_URL_BLOCKLIST } from './network-listener/utils/network-sanitizer'
 import {
-	Request,
-	Response,
 	RequestResponsePair,
 	WebSocketEvent,
 	WebSocketRequest,
@@ -25,6 +23,7 @@ import {
 export class FirstLoadListeners {
 	disableConsoleRecording: boolean
 	reportConsoleErrors: boolean
+	enablePromisePatch: boolean
 	consoleMethodsToRecord: ConsoleMethods[]
 	listeners: (() => void)[]
 	errors: ErrorMessage[]
@@ -45,6 +44,7 @@ export class FirstLoadListeners {
 	networkBodyKeysToRedact: string[] | undefined
 	networkBodyKeysToRecord: string[] | undefined
 	networkHeaderKeysToRecord: string[] | undefined
+	lastNetworkRequestTimestamp: number
 	urlBlocklist!: string[]
 	requestResponseSanitizer?: (
 		pair: RequestResponsePair,
@@ -54,12 +54,14 @@ export class FirstLoadListeners {
 		this.options = options
 		this.disableConsoleRecording = !!options.disableConsoleRecording
 		this.reportConsoleErrors = options.reportConsoleErrors ?? false
+		this.enablePromisePatch = options.enablePromisePatch ?? true
 		this.consoleMethodsToRecord = options.consoleMethodsToRecord || [
 			...ALL_CONSOLE_METHODS,
 		]
 		this.listeners = []
 		this.errors = []
 		this.messages = []
+		this.lastNetworkRequestTimestamp = 0
 	}
 
 	isListening() {
@@ -120,18 +122,26 @@ export class FirstLoadListeners {
 			)
 		}
 		this.listeners.push(
-			ErrorListener((e: ErrorMessage) => {
-				if (
-					ERRORS_TO_IGNORE.includes(e.event) ||
-					ERROR_PATTERNS_TO_IGNORE.some((pattern) =>
-						e.event.includes(pattern),
-					)
-				) {
-					return
-				}
-				highlightThis.errors.push(e)
-			}),
+			ErrorListener(
+				(e: ErrorMessage) => {
+					if (
+						ERRORS_TO_IGNORE.includes(e.event) ||
+						ERROR_PATTERNS_TO_IGNORE.some((pattern) =>
+							e.event.includes(pattern),
+						)
+					) {
+						return
+					}
+					highlightThis.errors.push(e)
+				},
+				{ enablePromisePatch: this.enablePromisePatch },
+			),
 		)
+		if (this.options.enableOtelTracing) {
+			import('@highlight-run/client/src/otel').then(({ shutdown }) => {
+				this.listeners.push(shutdown)
+			})
+		}
 		FirstLoadListeners.setupNetworkListener(this, this.options)
 	}
 
@@ -283,13 +293,17 @@ export class FirstLoadListeners {
 			const offset = (recordingStartTime - documentTimeOrigin) * 2
 
 			httpResources = httpResources
-				.filter((r) =>
-					shouldNetworkRequestBeRecorded(
+				.filter((r) => {
+					if (r.responseEnd < sThis.lastNetworkRequestTimestamp) {
+						return false
+					}
+
+					return shouldNetworkRequestBeRecorded(
 						r.name,
 						sThis._backendUrl,
 						sThis.tracingOrigins,
-					),
-				)
+					)
+				})
 				.map((resource) => {
 					return {
 						...resource.toJSON(),
@@ -298,6 +312,10 @@ export class FirstLoadListeners {
 						offsetFetchStart: resource.fetchStart - offset,
 					}
 				})
+
+			sThis.lastNetworkRequestTimestamp =
+				httpResources.at(-1)?.responseEnd ||
+				sThis.lastNetworkRequestTimestamp
 
 			if (sThis.enableRecordingNetworkContents) {
 				const sanitizeOptions = {

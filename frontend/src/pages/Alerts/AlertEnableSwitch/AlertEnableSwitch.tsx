@@ -1,5 +1,7 @@
 import Switch from '@components/Switch/Switch'
+import { toast } from '@components/Toaster'
 import {
+	useUpdateAlertDisabledMutation,
 	useUpdateErrorAlertIsDisabledMutation,
 	useUpdateLogAlertIsDisabledMutation,
 	useUpdateMetricMonitorIsDisabledMutation,
@@ -8,7 +10,6 @@ import {
 import { namedOperations } from '@graph/operations'
 import { ALERT_TYPE } from '@pages/Alerts/Alerts'
 import { useParams } from '@util/react-router/useParams'
-import { message } from 'antd'
 import React, { useState } from 'react'
 
 export const AlertEnableSwitch: React.FC<
@@ -23,13 +24,13 @@ export const AlertEnableSwitch: React.FC<
 	const [updateMetricMonitorIsDisabled] =
 		useUpdateMetricMonitorIsDisabledMutation()
 	const [updateLogAlertIsDisabled] = useUpdateLogAlertIsDisabledMutation()
+	const [updateAlertDisabled] = useUpdateAlertDisabledMutation()
 
 	const onChange = async () => {
 		setLoading(true)
 		const isDisabled = !disabled
 
 		const type = record.configuration.type
-		console.log(record)
 
 		const requestBody = {
 			refetchQueries: [namedOperations.Query.GetAlertsPagePayload],
@@ -80,15 +81,25 @@ export const AlertEnableSwitch: React.FC<
 					},
 				})
 				break
+			case ALERT_TYPE.Dynamic:
+				await updateAlertDisabled({
+					...requestBody,
+					variables: {
+						alert_id: record.id,
+						project_id: project_id!,
+						disabled: isDisabled,
+					},
+				})
+				break
 			default:
 				throw new Error(`Unsupported alert type: ${type}`)
 		}
 
-		message.success(
+		toast.success(
 			isDisabled
-				? `Disabled "${record.Name}"`
-				: `Enabled "${record.Name}"`,
-			5,
+				? `Disabled "${record.name || record.Name}"`
+				: `Enabled "${record.name || record.Name}"`,
+			{ duration: 5000 },
 		)
 
 		setDisabled(isDisabled)

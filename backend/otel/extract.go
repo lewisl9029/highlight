@@ -3,6 +3,8 @@ package otel
 import (
 	"context"
 	"fmt"
+	"github.com/highlight-run/highlight/backend/env"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,14 +13,13 @@ import (
 	model "github.com/highlight-run/highlight/backend/model"
 	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
 	"github.com/highlight-run/highlight/backend/public-graph/graph"
-	"github.com/highlight-run/highlight/backend/util"
 	"github.com/highlight/highlight/sdk/highlight-go"
 	hlog "github.com/highlight/highlight/sdk/highlight-go/log"
 	e "github.com/pkg/errors"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/plog"
 	"go.opentelemetry.io/collector/pdata/ptrace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
 var ExternalHighlightData = e.New("dropping otel data from external highlight instance")
@@ -70,12 +71,15 @@ func newExtractedFields() *extractedFields {
 }
 
 type extractFieldsParams struct {
+	headers   http.Header
 	resource  *pcommon.Resource
 	span      *ptrace.Span
 	event     *ptrace.SpanEvent
 	scopeLogs *plog.ScopeLogs
 	logRecord *plog.LogRecord
 	curTime   time.Time
+
+	herokuProjectExtractor func(context.Context, string) (string, int)
 }
 
 func extractFields(ctx context.Context, params extractFieldsParams) (*extractedFields, error) {
@@ -113,6 +117,14 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 					"Attributes": link.Attributes().AsRaw(),
 				}
 			}
+		} else {
+			fields.events = []map[string]any{
+				{
+					"Timestamp":  params.event.Timestamp().AsTime(),
+					"Name":       params.event.Name(),
+					"Attributes": params.event.Attributes().AsRaw(),
+				},
+			}
 		}
 	}
 
@@ -129,15 +141,26 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 		fields.timestamp = params.logRecord.Timestamp().AsTime()
 		fields.logSeverity = params.logRecord.SeverityText()
 		logAttributes = params.logRecord.Attributes().AsRaw()
-		// this could be a log record from syslog, with a projectID token prefix. ie:
-		// 1jdkoe52 <1>1 2023-07-27T05:43:22.401882Z render render-log-endpoint-test 1 render-log-endpoint-test - Render test log
 		fields.logBody = params.logRecord.Body().Str()
 		if len(fields.logBody) > 0 {
+			// this could be a log record from syslog, with a projectID token prefix. ie:
+			// render
+			// 1jdkoe52 <1>1 2023-07-27T05:43:22.401882Z render render-log-endpoint-test 1 render-log-endpoint-test - Render test log
+			// heroku
+			// 119 <40>1 2012-11-30T06:45:26+00:00 d.XXXXXX heroku 1 web.3 - test message
 			if fields.logBody[0] != '<' {
 				parts := strings.SplitN(fields.logBody, " <", 2)
 				if len(parts) == 2 {
 					fields.projectID = parts[0]
 					fields.logBody = "<" + parts[1]
+				}
+			}
+
+			// process potential syslog message
+			extractSyslog(fields)
+			if fields.attrs["app_name"] == "heroku" {
+				if params.herokuProjectExtractor != nil {
+					fields.projectID, fields.projectIDInt = params.herokuProjectExtractor(ctx, fields.attrs["hostname"])
 				}
 			}
 		}
@@ -166,17 +189,13 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 	}
 
 	for k, v := range originalAttrs {
-		for key, value := range hlog.FormatLogAttributes(ctx, k, v) {
+		for key, value := range hlog.FormatLogAttributes(k, v) {
 			if v != "" {
 				fields.attrs[key] = value
 			}
 		}
 	}
 
-	// process potential syslog message
-	if len(fields.logBody) > 0 && fields.logBody[0] == '<' {
-		extractSyslog(fields)
-	}
 	// process potential systemd message
 	if params.logRecord != nil && params.logRecord.Body().Type().String() == "Map" {
 		if m := params.logRecord.Body().Map().AsRaw(); len(m) > 0 {
@@ -194,6 +213,10 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 		delete(fields.attrs, highlight.ProjectIDAttribute)
 	}
 
+	if val := params.headers.Get(highlight.ProjectIDHeader); val != "" {
+		fields.projectID = val
+	}
+
 	if val, ok := fields.attrs[highlight.DeprecatedSessionIDAttribute]; ok {
 		fields.sessionID = val
 		delete(fields.attrs, highlight.DeprecatedSessionIDAttribute)
@@ -209,11 +232,23 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 		delete(fields.attrs, highlight.RequestIDAttribute)
 	}
 
+	if val, ok := fields.attrs[highlight.LogSeverityDefaultAttribute]; ok {
+		fields.logSeverity = val
+		delete(fields.attrs, highlight.LogSeverityDefaultAttribute)
+	}
+	if val, ok := fields.attrs[highlight.LogSeverityLegacyAttribute]; ok {
+		fields.logSeverity = val
+		delete(fields.attrs, highlight.LogSeverityLegacyAttribute)
+	}
 	if val, ok := fields.attrs[highlight.LogSeverityAttribute]; ok {
 		fields.logSeverity = val
 		delete(fields.attrs, highlight.LogSeverityAttribute)
 	}
 
+	if val, ok := fields.attrs[highlight.LogMessageLegacyAttribute]; ok {
+		fields.logMessage = val
+		delete(fields.attrs, highlight.LogMessageLegacyAttribute)
+	}
 	if val, ok := fields.attrs[highlight.LogMessageAttribute]; ok {
 		fields.logMessage = val
 		delete(fields.attrs, highlight.LogMessageAttribute)
@@ -291,7 +326,7 @@ func extractFields(ctx context.Context, params extractFieldsParams) (*extractedF
 	var err error
 	fields.projectIDInt, err = projectToInt(fields.projectID)
 
-	if fields.projectIDInt == 1 && util.IsProduction() {
+	if fields.projectIDInt == 1 && env.IsProduction() {
 		if fields.serviceName == "all" || fields.serviceName == "" {
 			fields.external = true
 			fields.attrs["service.external"] = "true"

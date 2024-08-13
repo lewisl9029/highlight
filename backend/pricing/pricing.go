@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"os"
+	"github.com/highlight-run/highlight/backend/env"
 	"strings"
 	"time"
 
@@ -14,7 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/marketplacemetering"
 	"github.com/aws/aws-sdk-go-v2/service/marketplacemetering/types"
 	"github.com/aws/smithy-go/ptr"
-	"github.com/stripe/stripe-go/v76"
+	"github.com/google/uuid"
+	"github.com/stripe/stripe-go/v78"
 
 	"github.com/highlight-run/highlight/backend/redis"
 	"github.com/highlight-run/highlight/backend/store"
@@ -24,7 +25,6 @@ import (
 	"github.com/samber/lo"
 	"github.com/sendgrid/sendgrid-go"
 	log "github.com/sirupsen/logrus"
-	"github.com/stripe/stripe-go/v76/client"
 	"gorm.io/gorm"
 
 	"github.com/highlight-run/highlight/backend/clickhouse"
@@ -298,16 +298,6 @@ var ProductPrices = map[backend.PlanType]map[model.PricingProductType]ProductPri
 	},
 }
 
-var StandardTest = []backend.RetentionPeriod{
-	backend.RetentionPeriodSixMonths,
-	backend.RetentionPeriodTwelveMonths,
-	backend.RetentionPeriodTwoYears,
-}
-
-func GetWorkspaceMembersMeter(DB *gorm.DB, workspaceID int) int64 {
-	return DB.WithContext(context.TODO()).Model(&model.Workspace{Model: model.Model{ID: workspaceID}}).Association("Admins").Count()
-}
-
 func GetSessions7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (float64, error) {
 	var avg float64
 	if err := DB.WithContext(ctx).Raw(`
@@ -322,34 +312,38 @@ func GetSessions7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhou
 	return avg, nil
 }
 
-func GetWorkspaceSessionsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (int64, error) {
-	meterSpan, _ := util.StartSpanFromContext(ctx, "pricing.GetWorkspaceSessionsMeter",
+func GetWorkspaceSessionsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, redisClient *redis.Client, workspace *model.Workspace) (int64, error) {
+	meterSpan, _ := util.StartSpanFromContext(ctx, "GetWorkspaceSessionsMeter",
 		util.ResourceName("GetWorkspaceSessionsMeter"),
 		util.Tag("workspace_id", workspace.ID))
 	defer meterSpan.Finish()
 
-	var meter int64
-	if err := DB.WithContext(ctx).Raw(`
-		WITH materialized_rows AS (
+	res, err := redis.CachedEval(ctx, redisClient, fmt.Sprintf(`workspace-sessions-meter-%d`, workspace.ID), time.Minute, time.Hour, func() (*int64, error) {
+		var meter int64
+		if err := DB.WithContext(ctx).Raw(`
+		WITH billing_start AS (
+			SELECT COALESCE(next_invoice_date - interval '1 month', billing_period_start, date_trunc('month', now(), 'UTC'))
+			FROM workspaces
+			WHERE id=@workspace_id
+		),
+		billing_end AS (
+			SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
+			FROM workspaces
+			WHERE id=@workspace_id
+		),
+		materialized_rows AS (
 			SELECT count, date
 			FROM daily_session_counts_view
 			WHERE project_id in (SELECT id FROM projects WHERE workspace_id=@workspace_id)
-			AND date >= (
-				SELECT COALESCE(next_invoice_date - interval '1 month', billing_period_start, date_trunc('month', now(), 'UTC'))
-				FROM workspaces
-				WHERE id=@workspace_id)
-			AND date < (
-				SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
-				FROM workspaces
-				WHERE id=@workspace_id))
+			AND date >= (SELECT * FROM billing_start)
+			AND date < (SELECT * FROM billing_end)
+		),
+		start_date as (SELECT COALESCE(MAX(date), (SELECT * from billing_start)) FROM materialized_rows)
 		SELECT SUM(count) as currentPeriodSessionCount from (
 			SELECT COUNT(*) FROM sessions
 			WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=@workspace_id)
-			AND created_at >= (SELECT MAX(date) FROM materialized_rows)
-			AND created_at < (
-			SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
-			FROM workspaces
-			WHERE id=@workspace_id)
+			AND created_at >= (SELECT * FROM start_date)
+			AND created_at < (SELECT * FROM billing_end)
 			AND excluded <> true
 			AND within_billing_quota
 			AND (active_length >= 1000 OR (active_length is null and length >= 1000))
@@ -357,10 +351,12 @@ func GetWorkspaceSessionsMeter(ctx context.Context, DB *gorm.DB, ccClient *click
 			UNION ALL SELECT COALESCE(SUM(count), 0) FROM materialized_rows
 			WHERE date < (SELECT MAX(date) FROM materialized_rows)
 		) a`, sql.Named("workspace_id", workspace.ID)).
-		Scan(&meter).Error; err != nil {
-		return 0, e.Wrap(err, "error querying for session meter")
-	}
-	return meter, nil
+			Scan(&meter).Error; err != nil {
+			return nil, e.Wrap(err, "error querying for session meter")
+		}
+		return &meter, nil
+	})
+	return pointy.Int64Value(res, 0), err
 }
 
 func GetErrors7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (float64, error) {
@@ -377,41 +373,47 @@ func GetErrors7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhouse
 	return avg, nil
 }
 
-func GetWorkspaceErrorsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (int64, error) {
-	meterSpan, _ := util.StartSpanFromContext(ctx, "pricing.GetWorkspaceErrorsMeter",
+func GetWorkspaceErrorsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, redisClient *redis.Client, workspace *model.Workspace) (int64, error) {
+	meterSpan, _ := util.StartSpanFromContext(ctx, "GetWorkspaceErrorsMeter",
 		util.ResourceName("GetWorkspaceErrorsMeter"),
 		util.Tag("workspace_id", workspace.ID))
 	defer meterSpan.Finish()
 
-	var meter int64
-	if err := DB.WithContext(ctx).Raw(`
-		WITH materialized_rows AS (
+	res, err := redis.CachedEval(ctx, redisClient, fmt.Sprintf(`workspace-errors-meter-%d`, workspace.ID), time.Minute, time.Hour, func() (*int64, error) {
+		var meter int64
+		if err := DB.WithContext(ctx).Raw(`
+		WITH billing_start AS (
+			SELECT COALESCE(next_invoice_date - interval '1 month', billing_period_start, date_trunc('month', now(), 'UTC'))
+			FROM workspaces
+			WHERE id=@workspace_id
+		),
+		billing_end AS (
+			SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
+			FROM workspaces
+			WHERE id=@workspace_id
+		),
+		materialized_rows AS (
 			SELECT count, date
 			FROM daily_error_counts_view
 			WHERE project_id in (SELECT id FROM projects WHERE workspace_id=@workspace_id)
-			AND date >= (
-				SELECT COALESCE(next_invoice_date - interval '1 month', billing_period_start, date_trunc('month', now(), 'UTC'))
-				FROM workspaces
-				WHERE id=@workspace_id)
-			AND date < (
-				SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
-				FROM workspaces
-				WHERE id=@workspace_id))
-		SELECT SUM(count) as currentPeriodErrorsCount from (
+			AND date >= (SELECT * FROM billing_start)
+			AND date < (SELECT * FROM billing_end)
+		),
+		start_date as (SELECT COALESCE(MAX(date), (SELECT * from billing_start)) FROM materialized_rows)
+		SELECT SUM(count) as currentPeriodErrorCount from (
 			SELECT COUNT(*) FROM error_objects
 			WHERE project_id IN (SELECT id FROM projects WHERE workspace_id=@workspace_id)
-			AND created_at >= (SELECT MAX(date) FROM materialized_rows)
-			AND created_at < (
-				SELECT COALESCE(next_invoice_date, billing_period_end, date_trunc('month', now(), 'UTC') + interval '1 month')
-				FROM workspaces
-				WHERE id=@workspace_id)
+			AND created_at >= (SELECT * FROM start_date)
+			AND created_at < (SELECT * FROM billing_end)
 			UNION ALL SELECT COALESCE(SUM(count), 0) FROM materialized_rows
 			WHERE date < (SELECT MAX(date) FROM materialized_rows)
 		) a`, sql.Named("workspace_id", workspace.ID)).
-		Scan(&meter).Error; err != nil {
-		return 0, e.Wrap(err, "error querying for session meter")
-	}
-	return meter, nil
+			Scan(&meter).Error; err != nil {
+			return nil, e.Wrap(err, "error querying for error meter")
+		}
+		return &meter, nil
+	})
+	return pointy.Int64Value(res, 0), err
 }
 
 func get7DayAverageImpl(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace, productType model.PricingProductType) (float64, error) {
@@ -481,7 +483,7 @@ func GetLogs7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.C
 	return get7DayAverageImpl(ctx, DB, ccClient, workspace, model.PricingProductTypeLogs)
 }
 
-func GetWorkspaceLogsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (int64, error) {
+func GetWorkspaceLogsMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, redis *redis.Client, workspace *model.Workspace) (int64, error) {
 	return getWorkspaceMeterImpl(ctx, DB, ccClient, workspace, model.PricingProductTypeLogs)
 }
 
@@ -489,7 +491,7 @@ func GetTraces7DayAverage(ctx context.Context, DB *gorm.DB, ccClient *clickhouse
 	return get7DayAverageImpl(ctx, DB, ccClient, workspace, model.PricingProductTypeTraces)
 }
 
-func GetWorkspaceTracesMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, workspace *model.Workspace) (int64, error) {
+func GetWorkspaceTracesMeter(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, redis *redis.Client, workspace *model.Workspace) (int64, error) {
 	return getWorkspaceMeterImpl(ctx, DB, ccClient, workspace, model.PricingProductTypeTraces)
 }
 
@@ -542,6 +544,8 @@ func ProductToBasePriceCents(productType model.PricingProductType, planType back
 
 func RetentionMultiplier(retentionPeriod backend.RetentionPeriod) float64 {
 	switch retentionPeriod {
+	case backend.RetentionPeriodSevenDays:
+		return 1
 	case backend.RetentionPeriodThirtyDays:
 		return 1
 	case backend.RetentionPeriodThreeMonths:
@@ -581,11 +585,11 @@ func IncludedAmount(planType backend.PlanType, productType model.PricingProductT
 
 func FromPriceID(priceID string) backend.PlanType {
 	switch priceID {
-	case os.Getenv("BASIC_PLAN_PRICE_ID"):
+	case env.Config.PricingBasicPriceID:
 		return backend.PlanTypeBasic
-	case os.Getenv("STARTUP_PLAN_PRICE_ID"):
+	case env.Config.PricingStartupPriceID:
 		return backend.PlanTypeStartup
-	case os.Getenv("ENTERPRISE_PLAN_PRICE_ID"):
+	case env.Config.PricingEnterprisePriceID:
 		return backend.PlanTypeEnterprise
 	}
 	return backend.PlanTypeFree
@@ -677,7 +681,7 @@ func GetProductMetadata(price *stripe.Price) (*model.PricingProductType, *backen
 // Products are too nested in the Subscription model to be added through the API
 // This method calls the Stripe ListProducts API and replaces each product id in the
 // subscriptions with the full product data.
-func FillProducts(stripeClient *client.API, subscriptions []*stripe.Subscription) {
+func FillProducts(pricingClient *Client, subscriptions []*stripe.Subscription) {
 	productListParams := &stripe.ProductListParams{}
 	for _, subscription := range subscriptions {
 		for _, subscriptionItem := range subscription.Items.Data {
@@ -688,7 +692,7 @@ func FillProducts(stripeClient *client.API, subscriptions []*stripe.Subscription
 	productsById := map[string]*stripe.Product{}
 	if len(productListParams.IDs) > 0 {
 		// Loop over each product in the subscription
-		products := stripeClient.Products.List(productListParams).ProductList().Data
+		products := pricingClient.Products.List(productListParams).ProductList().Data
 		for _, product := range products {
 			productsById[product.ID] = product
 		}
@@ -705,7 +709,7 @@ func FillProducts(stripeClient *client.API, subscriptions []*stripe.Subscription
 }
 
 // Returns the Stripe Prices for the associated tier and interval
-func GetStripePrices(stripeClient *client.API, workspace *model.Workspace, productTier backend.PlanType, interval model.PricingSubscriptionInterval, unlimitedMembers bool, sessionsRetention *backend.RetentionPeriod, errorsRetention *backend.RetentionPeriod) (map[model.PricingProductType]*stripe.Price, error) {
+func GetStripePrices(pricingClient *Client, workspace *model.Workspace, productTier backend.PlanType, interval model.PricingSubscriptionInterval, unlimitedMembers bool, sessionsRetention *backend.RetentionPeriod, errorsRetention *backend.RetentionPeriod) (map[model.PricingProductType]*stripe.Price, error) {
 	// Default to the `RetentionPeriodThreeMonths` prices for customers grandfathered into 6 month retention
 	sessionsRetentionPeriod := backend.RetentionPeriodThreeMonths
 	if sessionsRetention != nil {
@@ -726,20 +730,7 @@ func GetStripePrices(stripeClient *client.API, workspace *model.Workspace, produ
 
 	priceListParams := stripe.PriceListParams{}
 	priceListParams.LookupKeys = []*string{&baseLookupKey, &sessionsLookupKey, &membersLookupKey, &errorsLookupKey, &logsLookupKey, &tracesLookupKey}
-	prices := stripeClient.Prices.List(&priceListParams).PriceList().Data
-
-	// Validate that we received exactly 1 response for each lookup key
-	expected := len(priceListParams.LookupKeys)
-	actual := len(prices)
-	if expected != actual {
-		searchedKeys := lo.Map(priceListParams.LookupKeys, func(key *string, _ int) string {
-			return *key
-		})
-		foundKeys := lo.Map(prices, func(price *stripe.Price, _ int) string {
-			return price.LookupKey
-		})
-		return nil, e.Errorf("expected %d prices, received %d; searched %#v, found %#v", expected, actual, searchedKeys, foundKeys)
-	}
+	prices := pricingClient.Prices.List(&priceListParams).PriceList().Data
 
 	priceMap := map[model.PricingProductType]*stripe.Price{}
 	for _, price := range prices {
@@ -767,7 +758,7 @@ func GetStripePrices(stripeClient *client.API, workspace *model.Workspace, produ
 		model.PricingProductTypeTraces:   workspace.StripeTracesOveragePriceID,
 	} {
 		if priceID != nil {
-			price, err := stripeClient.Prices.Get(*priceID, &stripe.PriceParams{})
+			price, err := pricingClient.Prices.Get(*priceID, &stripe.PriceParams{})
 			if err != nil {
 				return nil, err
 			}
@@ -775,32 +766,38 @@ func GetStripePrices(stripeClient *client.API, workspace *model.Workspace, produ
 		}
 	}
 
-	if len(priceMap) != expected {
-		return nil, e.New("one or more prices was not found")
+	expected := len(priceListParams.LookupKeys)
+	actual := len(priceMap)
+	if actual != expected {
+		searchedKeys := lo.Map(priceListParams.LookupKeys, func(key *string, _ int) string {
+			return *key
+		})
+		foundProducts := lo.Keys(priceMap)
+		return nil, e.Errorf("expected %d prices, received %d; searched %#v, found %#v", expected, actual, searchedKeys, foundProducts)
 	}
 
 	return priceMap, nil
 }
 
 type Worker struct {
-	db           *gorm.DB
-	redis        *redis.Client
-	store        *store.Store
-	ccClient     *clickhouse.Client
-	stripeClient *client.API
-	awsmpClient  *marketplacemetering.Client
-	mailClient   *sendgrid.Client
+	db            *gorm.DB
+	redis         *redis.Client
+	store         *store.Store
+	ccClient      *clickhouse.Client
+	awsmpClient   *marketplacemetering.Client
+	mailClient    *sendgrid.Client
+	pricingClient *Client
 }
 
-func NewWorker(db *gorm.DB, redis *redis.Client, store *store.Store, ccClient *clickhouse.Client, stripeClient *client.API, awsmpClient *marketplacemetering.Client, mailClient *sendgrid.Client) *Worker {
+func NewWorker(db *gorm.DB, redis *redis.Client, store *store.Store, ccClient *clickhouse.Client, pricingClient *Client, awsmpClient *marketplacemetering.Client, mailClient *sendgrid.Client) *Worker {
 	return &Worker{
-		db:           db,
-		redis:        redis,
-		store:        store,
-		ccClient:     ccClient,
-		stripeClient: stripeClient,
-		awsmpClient:  awsmpClient,
-		mailClient:   mailClient,
+		db:            db,
+		redis:         redis,
+		store:         store,
+		ccClient:      ccClient,
+		pricingClient: pricingClient,
+		awsmpClient:   awsmpClient,
+		mailClient:    mailClient,
 	}
 }
 
@@ -843,90 +840,147 @@ func (w *Worker) ReportAWSMPUsages(ctx context.Context, usages AWSCustomerUsages
 	}
 }
 
+type overageConfig struct {
+	MaxCostCents          func(*model.Workspace) *int
+	Meter                 func(ctx context.Context, DB *gorm.DB, ccClient *clickhouse.Client, redisClient *redis.Client, workspace *model.Workspace) (int64, error)
+	RetentionPeriod       func(*model.Workspace) backend.RetentionPeriod
+	Included              func(*model.Workspace) int64
+	OverageEmail          email.EmailType
+	OverageEmailThreshold int64
+}
+
+var ProductTypeToQuotaConfig = map[model.PricingProductType]overageConfig{
+	model.PricingProductTypeSessions: {
+		func(w *model.Workspace) *int { return w.SessionsMaxCents },
+		GetWorkspaceSessionsMeter,
+		func(w *model.Workspace) backend.RetentionPeriod {
+			if w.RetentionPeriod == nil {
+				return backend.RetentionPeriodThreeMonths
+			}
+			return *w.RetentionPeriod
+		},
+		func(w *model.Workspace) int64 {
+			limit := IncludedAmount(backend.PlanType(w.PlanTier), model.PricingProductTypeSessions)
+			if w.MonthlySessionLimit != nil {
+				limit = int64(*w.MonthlySessionLimit)
+			}
+			return limit
+		},
+		email.BillingSessionOverage,
+		1000,
+	},
+	model.PricingProductTypeErrors: {
+		func(w *model.Workspace) *int { return w.ErrorsMaxCents },
+		GetWorkspaceErrorsMeter,
+		func(w *model.Workspace) backend.RetentionPeriod {
+			if w.ErrorsRetentionPeriod == nil {
+				return backend.RetentionPeriodThreeMonths
+			}
+			return *w.ErrorsRetentionPeriod
+		},
+		func(w *model.Workspace) int64 {
+			limit := IncludedAmount(backend.PlanType(w.PlanTier), model.PricingProductTypeErrors)
+			if w.MonthlyErrorsLimit != nil {
+				limit = int64(*w.MonthlyErrorsLimit)
+			}
+			return limit
+		},
+		email.BillingErrorsOverage,
+		1000,
+	},
+	model.PricingProductTypeLogs: {
+		func(w *model.Workspace) *int { return w.LogsMaxCents },
+		GetWorkspaceLogsMeter,
+		func(w *model.Workspace) backend.RetentionPeriod {
+			if w.LogsRetentionPeriod == nil {
+				return backend.RetentionPeriodThirtyDays
+			}
+			return *w.LogsRetentionPeriod
+		},
+		func(w *model.Workspace) int64 {
+			limit := IncludedAmount(backend.PlanType(w.PlanTier), model.PricingProductTypeLogs)
+			if w.MonthlyLogsLimit != nil {
+				limit = int64(*w.MonthlyLogsLimit)
+			}
+			return limit
+		},
+		email.BillingLogsOverage,
+		1_000_000,
+	},
+	model.PricingProductTypeTraces: {
+		func(w *model.Workspace) *int { return w.TracesMaxCents },
+		GetWorkspaceTracesMeter,
+		func(w *model.Workspace) backend.RetentionPeriod {
+			if w.TracesRetentionPeriod == nil {
+				return backend.RetentionPeriodThirtyDays
+			}
+			return *w.TracesRetentionPeriod
+		},
+		func(w *model.Workspace) int64 {
+			limit := IncludedAmount(backend.PlanType(w.PlanTier), model.PricingProductTypeTraces)
+			if w.MonthlyTracesLimit != nil {
+				limit = int64(*w.MonthlyTracesLimit)
+			}
+			return limit
+		},
+		email.BillingTracesOverage,
+		1_000_000,
+	},
+}
+
 func (w *Worker) CalculateOverages(ctx context.Context, workspaceID int) (WorkspaceOverages, error) {
-	var workspace model.Workspace
-	if err := w.db.WithContext(ctx).Model(&workspace).Where("id = ?", workspaceID).Take(&workspace).Error; err != nil {
+	var workspace *model.Workspace
+	var err error
+	if workspace, err = w.store.GetWorkspace(ctx, workspaceID); err != nil {
 		return nil, e.Wrap(err, "error querying workspace")
 	}
 
 	var usage = make(WorkspaceOverages)
 	// Update members overage
-	membersMeter := GetWorkspaceMembersMeter(w.db, workspaceID)
+	membersMeter, err := w.store.GetWorkspaceAdminCount(ctx, workspaceID)
+	if err != nil {
+		return nil, e.Wrap(err, "failed to query workspace admins meter")
+	}
 	membersLimit := TypeToMemberLimit(backend.PlanType(workspace.PlanTier), workspace.UnlimitedMembers)
 	if membersLimit != nil && workspace.MonthlyMembersLimit != nil {
 		membersLimit = pointy.Int64(int64(*workspace.MonthlyMembersLimit))
 	}
-	usage[model.PricingProductTypeMembers] = calculateOverage(&workspace, membersLimit, membersMeter)
+	usage[model.PricingProductTypeMembers] = calculateOverage(workspace, membersLimit, membersMeter)
 
-	// Update sessions overage
-	sessionsMeter, err := GetWorkspaceSessionsMeter(ctx, w.db, w.ccClient, &workspace)
-	if err != nil {
-		return nil, e.Wrap(err, "BILLING_ERROR error getting sessions meter")
+	for product, cfg := range ProductTypeToQuotaConfig {
+		meter, err := cfg.Meter(ctx, w.db, w.ccClient, w.redis, workspace)
+		if err != nil {
+			return nil, e.Wrapf(err, "BILLING_ERROR error getting %s meter", product)
+		}
+		included := cfg.Included(workspace)
+		usage[product] = calculateOverage(workspace, &included, meter)
+		if meter > included+cfg.OverageEmailThreshold {
+			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, cfg.OverageEmail, workspace); err != nil {
+				log.WithContext(ctx).Error(e.Wrap(err, "failed to send billing notifications"))
+			}
+		}
 	}
-	sessionsLimit := IncludedAmount(backend.PlanType(workspace.PlanTier), model.PricingProductTypeSessions)
-	if workspace.MonthlySessionLimit != nil {
-		sessionsLimit = int64(*workspace.MonthlySessionLimit)
-	}
-	usage[model.PricingProductTypeSessions] = calculateOverage(&workspace, &sessionsLimit, sessionsMeter)
-
-	// Update errors overage
-	errorsMeter, err := GetWorkspaceErrorsMeter(ctx, w.db, w.ccClient, &workspace)
-	if err != nil {
-		return nil, e.Wrap(err, "BILLING_ERROR error getting errors meter")
-	}
-	errorsLimit := IncludedAmount(backend.PlanType(workspace.PlanTier), model.PricingProductTypeErrors)
-	if workspace.MonthlyErrorsLimit != nil {
-		errorsLimit = int64(*workspace.MonthlyErrorsLimit)
-	}
-	usage[model.PricingProductTypeErrors] = calculateOverage(&workspace, &errorsLimit, errorsMeter)
-
-	// Update logs overage
-	logsMeter, err := GetWorkspaceLogsMeter(ctx, w.db, w.ccClient, &workspace)
-	if err != nil {
-		return nil, e.Wrap(err, "BILLING_ERROR error getting errors meter")
-	}
-	logsLimit := IncludedAmount(backend.PlanType(workspace.PlanTier), model.PricingProductTypeLogs)
-	if workspace.MonthlyLogsLimit != nil {
-		logsLimit = int64(*workspace.MonthlyLogsLimit)
-	}
-	usage[model.PricingProductTypeLogs] = calculateOverage(&workspace, &logsLimit, logsMeter)
-
-	// Update traces overage
-	tracesMeter, err := GetWorkspaceTracesMeter(ctx, w.db, w.ccClient, &workspace)
-	if err != nil {
-		return nil, e.Wrap(err, "BILLING_ERROR error getting traces meter")
-	}
-	tracesLimit := IncludedAmount(backend.PlanType(workspace.PlanTier), model.PricingProductTypeTraces)
-	if workspace.MonthlyTracesLimit != nil {
-		tracesLimit = int64(*workspace.MonthlyTracesLimit)
-	}
-	usage[model.PricingProductTypeTraces] = calculateOverage(&workspace, &tracesLimit, tracesMeter)
-
 	return usage, nil
 }
 
 func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
-	var workspace model.Workspace
-	if err := w.db.WithContext(ctx).Model(&workspace).Where("id = ?", workspaceID).Take(&workspace).Error; err != nil {
+	var workspace *model.Workspace
+	var err error
+	if workspace, err = w.store.GetWorkspace(ctx, workspaceID); err != nil {
 		return e.Wrap(err, "error querying workspace")
 	}
-	var projects []model.Project
-	if err := w.db.WithContext(ctx).Model(&model.Project{}).Where("workspace_id = ?", workspaceID).Find(&projects).Error; err != nil {
-		return e.Wrap(err, "error querying projects in workspace")
-	}
-	workspace.Projects = projects
 
 	// If the trial end date is recent (within the past 7 days) or it hasn't ended yet
 	// The 7 day check is to avoid sending emails to customers whose trials ended long ago
 	if workspace.TrialEndDate != nil && workspace.TrialEndDate.After(time.Now().AddDate(0, 0, -7)) {
 		if workspace.TrialEndDate.Before(time.Now()) {
 			// If the trial has ended, send an email
-			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingHighlightTrialEnded, &workspace); err != nil {
+			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingHighlightTrialEnded, workspace); err != nil {
 				log.WithContext(ctx).Error(e.Wrap(err, "failed to send billing notifications"))
 			}
 		} else if workspace.TrialEndDate.Before(time.Now().AddDate(0, 0, 7)) {
 			// If the trial is ending within 7 days, send an email
-			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingHighlightTrial7Days, &workspace); err != nil {
+			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingHighlightTrial7Days, workspace); err != nil {
 				log.WithContext(ctx).Error(e.Wrap(err, "failed to send billing notifications"))
 			}
 		}
@@ -948,7 +1002,7 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 	customerParams.AddExpand("subscriptions")
 	customerParams.AddExpand("subscriptions.data.discount")
 	customerParams.AddExpand("subscriptions.data.discount.coupon")
-	c, err := w.stripeClient.Customers.Get(*workspace.StripeCustomerID, customerParams)
+	c, err := w.pricingClient.Customers.Get(*workspace.StripeCustomerID, customerParams)
 	if err != nil {
 		return e.Wrap(err, "couldn't retrieve stripe customer data")
 	}
@@ -960,7 +1014,7 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 	}
 
 	subscriptions := c.Subscriptions.Data
-	FillProducts(w.stripeClient, subscriptions)
+	FillProducts(w.pricingClient, subscriptions)
 
 	subscription := subscriptions[0]
 
@@ -991,22 +1045,22 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 		subscriptionEnd := time.Unix(subscription.Discount.End, 0)
 		if subscriptionEnd.Before(time.Now().AddDate(0, 0, 3)) {
 			// If the Stripe trial is ending within 3 days, send an email
-			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingStripeTrial3Days, &workspace); err != nil {
+			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingStripeTrial3Days, workspace); err != nil {
 				log.WithContext(ctx).Error(e.Wrap(err, "BILLING_ERROR failed to send billing notifications"))
 			}
 		} else if subscriptionEnd.Before(time.Now().AddDate(0, 0, 7)) {
 			// If the Stripe trial is ending within 7 days, send an email
-			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingStripeTrial7Days, &workspace); err != nil {
+			if err := model.SendBillingNotifications(ctx, w.db, w.mailClient, email.BillingStripeTrial7Days, workspace); err != nil {
 				log.WithContext(ctx).Error(e.Wrap(err, "BILLING_ERROR failed to send billing notifications"))
 			}
 		}
 	}
 
-	// For annual subscriptions, set PendingInvoiceItemInterval to 'month' if not set
-	if interval == model.PricingSubscriptionIntervalAnnual &&
-		subscription.PendingInvoiceItemInterval != nil &&
-		subscription.PendingInvoiceItemInterval.Interval != stripe.SubscriptionPendingInvoiceItemIntervalIntervalMonth {
-		updated, err := w.stripeClient.Subscriptions.Update(subscription.ID, &stripe.SubscriptionParams{
+	// For non-monthly subscriptions, set PendingInvoiceItemInterval to 'month' if not set
+	// so that overage is reported via monthly invoice items.
+	if interval != model.PricingSubscriptionIntervalMonthly && (subscription.PendingInvoiceItemInterval == nil || subscription.PendingInvoiceItemInterval.Interval != stripe.SubscriptionPendingInvoiceItemIntervalIntervalMonth) {
+		log.WithContext(ctx).WithField("workspaceID", workspaceID).Info("configuring monthly invoices for non-monthly subscription")
+		updated, err := w.pricingClient.Subscriptions.Update(subscription.ID, &stripe.SubscriptionParams{
 			PendingInvoiceItemInterval: &stripe.SubscriptionPendingInvoiceItemIntervalParams{
 				Interval: stripe.String(string(stripe.SubscriptionPendingInvoiceItemIntervalIntervalMonth)),
 			},
@@ -1017,7 +1071,7 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 
 		if updated.NextPendingInvoiceItemInvoice != 0 {
 			timestamp := time.Unix(updated.NextPendingInvoiceItemInvoice, 0)
-			if err := w.db.WithContext(ctx).Model(&workspace).Where("id = ?", workspaceID).
+			if err := w.db.WithContext(ctx).Model(workspace).Where("id = ?", workspaceID).
 				Updates(&model.Workspace{
 					NextInvoiceDate: &timestamp,
 				}).Error; err != nil {
@@ -1026,7 +1080,7 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 		}
 	}
 
-	prices, err := GetStripePrices(w.stripeClient, &workspace, *productTier, interval, workspace.UnlimitedMembers, workspace.RetentionPeriod, workspace.ErrorsRetentionPeriod)
+	prices, err := GetStripePrices(w.pricingClient, workspace, *productTier, interval, workspace.UnlimitedMembers, workspace.RetentionPeriod, workspace.ErrorsRetentionPeriod)
 	if err != nil {
 		return e.Wrap(err, "BILLING_ERROR cannot report usage - failed to get Stripe prices")
 	}
@@ -1036,16 +1090,12 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 		Subscription: &subscription.ID,
 	}
 
-	invoice, err := w.stripeClient.Invoices.Upcoming(invoiceParams)
+	invoice, err := w.pricingClient.Invoices.Upcoming(invoiceParams)
 	// Cancelled subscriptions have no upcoming invoice - we can skip these since we won't
 	// be charging any overage for their next billing period.
 	if err != nil {
-		if err.Error() == string(stripe.ErrorCodeInvoiceUpcomingNone) {
-			return nil
-		} else {
-			log.WithContext(ctx).Error(err)
-			return e.Wrap(err, "BILLING_ERROR cannot report usage - failed to retrieve upcoming invoice for customer "+c.ID)
-		}
+		log.WithContext(ctx).WithField("workspaceID", workspaceID).WithError(err).Warn("workspace has no invoice upcoming, will not report overage")
+		return nil
 	}
 
 	invoiceLinesParams := &stripe.InvoiceUpcomingLinesParams{
@@ -1054,7 +1104,7 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 	}
 	invoiceLinesParams.AddExpand("data.price.product")
 
-	i := w.stripeClient.Invoices.UpcomingLines(invoiceLinesParams)
+	i := w.pricingClient.Invoices.UpcomingLines(invoiceLinesParams)
 	if err = i.Err(); err != nil {
 		return e.Wrap(err, "BILLING_ERROR cannot report usage - failed to retrieve invoice lines for customer "+c.ID)
 	}
@@ -1097,11 +1147,11 @@ func (w *Worker) reportStripeUsage(ctx context.Context, workspaceID int) error {
 	}
 	log.WithContext(ctx).WithField("invoiceLinesLen", len(invoiceLines)).Infof("STRIPE_INTEGRATION_INFO found invoice lines %d %+v", len(invoiceLines), invoiceLines)
 
-	billingIssue, err := w.GetBillingIssue(ctx, &workspace, c, subscription, invoice)
+	billingIssue, err := w.GetBillingIssue(ctx, workspace, c, subscription, invoice)
 	if err != nil {
 		log.WithContext(ctx).WithError(err).WithField("customer", c.ID).Error("BILLING_ERROR failed to get billing issue status")
 	} else {
-		w.ProcessBillingIssue(ctx, &workspace, billingIssue)
+		w.ProcessBillingIssue(ctx, workspace, billingIssue)
 	}
 
 	overages, err := w.CalculateOverages(ctx, workspaceID)
@@ -1163,7 +1213,7 @@ func (w *Worker) GetBillingIssue(ctx context.Context, workspace *model.Workspace
 	}
 
 	// check for valid CC to make sure customer is valid
-	i := w.stripeClient.PaymentMethods.List(&stripe.PaymentMethodListParams{Customer: pointy.String(customer.ID)})
+	i := w.pricingClient.PaymentMethods.List(&stripe.PaymentMethodListParams{Customer: pointy.String(customer.ID)})
 	if err := i.Err(); err != nil {
 		return "", err
 	}
@@ -1243,7 +1293,7 @@ func calculateOverage(workspace *model.Workspace, limit *int64, meter int64) int
 
 func (w *Worker) AddOrUpdateOverageItem(newPrice *stripe.Price, invoiceLine *stripe.InvoiceLineItem, customer *stripe.Customer, subscription *stripe.Subscription, overage int64) error {
 	// if the price is a metered recurring subscription, use subscription items and usage records
-	if newPrice.Recurring != nil && newPrice.Recurring.UsageType == stripe.PriceRecurringUsageTypeMetered {
+	if newPrice.Recurring != nil {
 		var subscriptionItemID string
 		// if the subscription item doesn't create for this price, create it
 		if invoiceLine == nil || invoiceLine.SubscriptionItem.ID == "" {
@@ -1251,8 +1301,8 @@ func (w *Worker) AddOrUpdateOverageItem(newPrice *stripe.Price, invoiceLine *str
 				Subscription: &subscription.ID,
 				Price:        &newPrice.ID,
 			}
-			params.SetIdempotencyKey(subscription.ID + ":" + newPrice.ID + ":item")
-			subscriptionItem, err := w.stripeClient.SubscriptionItems.New(params)
+			params.SetIdempotencyKey(subscription.ID + ":" + newPrice.ID + ":item:" + uuid.New().String())
+			subscriptionItem, err := w.pricingClient.SubscriptionItems.New(params)
 			if err != nil {
 				return e.Wrapf(err, "BILLING_ERROR failed to add invoice item for usage record item; invoiceLine=%+v, priceID=%s, subscriptionID=%s", invoiceLine, newPrice.ID, subscription.ID)
 			}
@@ -1266,12 +1316,12 @@ func (w *Worker) AddOrUpdateOverageItem(newPrice *stripe.Price, invoiceLine *str
 			Action:           stripe.String("set"),
 			Quantity:         stripe.Int64(overage),
 		}
-		if _, err := w.stripeClient.UsageRecords.New(params); err != nil {
+		if _, err := w.pricingClient.UsageRecords.New(params); err != nil {
 			return e.Wrap(err, "BILLING_ERROR failed to add usage record item")
 		}
 	} else {
 		if invoiceLine != nil {
-			if _, err := w.stripeClient.InvoiceItems.Update(invoiceLine.InvoiceItem.ID, &stripe.InvoiceItemParams{
+			if _, err := w.pricingClient.InvoiceItems.Update(invoiceLine.InvoiceItem.ID, &stripe.InvoiceItemParams{
 				Price:    &newPrice.ID,
 				Quantity: stripe.Int64(overage),
 			}); err != nil {
@@ -1284,8 +1334,8 @@ func (w *Worker) AddOrUpdateOverageItem(newPrice *stripe.Price, invoiceLine *str
 				Price:        &newPrice.ID,
 				Quantity:     stripe.Int64(overage),
 			}
-			params.SetIdempotencyKey(customer.ID + ":" + subscription.ID + ":" + newPrice.ID)
-			if _, err := w.stripeClient.InvoiceItems.New(params); err != nil {
+			params.SetIdempotencyKey(customer.ID + ":" + subscription.ID + ":" + newPrice.ID + ":" + uuid.New().String())
+			if _, err := w.pricingClient.InvoiceItems.New(params); err != nil {
 				return e.Wrap(err, "BILLING_ERROR failed to add invoice item")
 			}
 		}
@@ -1312,7 +1362,9 @@ func (w *Worker) ReportAllUsage(ctx context.Context) {
 		if workspace.AWSMarketplaceCustomer != nil {
 			usage, err := w.CalculateOverages(ctx, workspace.ID)
 			if err != nil {
-				log.WithContext(ctx).Error(e.Wrapf(err, "error calculating aws overages for workspace %d", workspace.ID))
+				log.WithContext(ctx).
+					WithField("workspaceID", workspace.ID).
+					Error(e.Wrapf(err, "error calculating aws overages for workspace %d", workspace.ID))
 			} else {
 				awsWorkspaceUsages[workspace.ID] = AWSCustomerUsage{workspace.AWSMarketplaceCustomer, usage}
 				log.WithContext(ctx).
@@ -1321,7 +1373,9 @@ func (w *Worker) ReportAllUsage(ctx context.Context) {
 					Info("reporting aws mp overages")
 			}
 		} else if err := w.reportStripeUsage(ctx, workspace.ID); err != nil {
-			log.WithContext(ctx).Error(e.Wrapf(err, "error reporting stripe usage for workspace %d", workspace.ID))
+			log.WithContext(ctx).
+				WithField("workspaceID", workspace.ID).
+				Error(e.Wrapf(err, "error reporting stripe usage for workspace %d", workspace.ID))
 		}
 	}
 	w.ReportAWSMPUsages(ctx, awsWorkspaceUsages)

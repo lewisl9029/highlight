@@ -1,11 +1,5 @@
-import {
-	Badge,
-	Box,
-	IconSolidAcademicCap,
-	Stack,
-	Table,
-	Text,
-} from '@highlight-run/ui/components'
+import { Box, Callout, Stack, Table, Text } from '@highlight-run/ui/components'
+import { TraceColumnRenderers } from '@pages/Traces/CustomColumns/renderers'
 import useLocalStorage from '@rehooks/local-storage'
 import {
 	ColumnDef,
@@ -16,25 +10,43 @@ import {
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { isEqual } from 'lodash'
-import React, { Key, useMemo, useRef } from 'react'
+import React, { Key, useCallback, useEffect, useMemo, useRef } from 'react'
+import { StringParam, useQueryParam } from 'use-query-params'
 
 import {
 	ColumnHeader,
 	CustomColumnHeader,
 } from '@/components/CustomColumnHeader'
-import { CustomColumnPopover } from '@/components/CustomColumnPopover'
+import {
+	CustomColumnPopover,
+	DEFAULT_COLUMN_SIZE,
+	SerializedColumn,
+} from '@/components/CustomColumnPopover'
 import { AdditionalFeedResults } from '@/components/FeedResults/FeedResults'
 import { LinkButton } from '@/components/LinkButton'
 import LoadingBox from '@/components/LoadingBox'
+import {
+	RelatedTrace,
+	useRelatedResource,
+} from '@/components/RelatedResources/hooks'
+import {
+	SORT_COLUMN,
+	SORT_DIRECTION,
+	useSearchContext,
+} from '@/components/Search/SearchContext'
 import { DEFAULT_INPUT_HEIGHT } from '@/components/Search/SearchForm/SearchForm'
-import { ProductType, TraceEdge } from '@/graph/generated/schemas'
-import { useParams } from '@/util/react-router/useParams'
+import {
+	ProductType,
+	SortDirection,
+	TraceEdge,
+} from '@/graph/generated/schemas'
+import { MAX_TRACES } from '@/pages/Traces/useGetTraces'
+import { useTracesIntegration } from '@/util/integrated'
 
 import {
 	DEFAULT_TRACE_COLUMNS,
 	HIGHLIGHT_STANDARD_COLUMNS,
 } from './CustomColumns/columns'
-import { ColumnRenderers } from './CustomColumns/renderers'
 
 type Props = {
 	loading: boolean
@@ -45,6 +57,7 @@ type Props = {
 	fetchMoreWhenScrolled: (target: HTMLDivElement) => void
 	loadingAfter: boolean
 	textAreaRef: React.RefObject<HTMLTextAreaElement>
+	pollingExpired: boolean
 }
 
 const LOADING_AFTER_HEIGHT = 28
@@ -54,6 +67,7 @@ const LOAD_BEFORE_HEIGHT = 28
 export const TracesList: React.FC<Props> = ({
 	loading,
 	numMoreTraces,
+	pollingExpired,
 	traceEdges,
 	handleAdditionalTracesDateChange,
 	resetMoreTraces,
@@ -61,16 +75,81 @@ export const TracesList: React.FC<Props> = ({
 	loadingAfter,
 	textAreaRef,
 }) => {
-	const { span_id } = useParams<{ span_id?: string }>()
+	const { query } = useSearchContext()
+	const { integrated } = useTracesIntegration()
+	const { resource } = useRelatedResource()
+	const trace = resource as RelatedTrace
+	const [selectedColumns, setSelectedColumns] = useLocalStorage<
+		SerializedColumn[]
+	>(`highlight-traces-table-columns`, DEFAULT_TRACE_COLUMNS)
+	const [windowSize, setWindowSize] = useLocalStorage(
+		'highlight-traces-window-size',
+		window.innerWidth,
+	)
 
-	const [selectedColumns, setSelectedColumns] = useLocalStorage(
-		`highlight-traces-table-columns`,
-		DEFAULT_TRACE_COLUMNS,
+	// track the window size
+	useEffect(() => {
+		if (!!setSelectedColumns) {
+			const handleResize = () => {
+				setWindowSize(window.innerWidth)
+			}
+
+			window.addEventListener('resize', handleResize)
+
+			return () => {
+				window.removeEventListener('resize', handleResize)
+			}
+		}
+	}, [setSelectedColumns, setWindowSize])
+
+	// reset columns when window size changes
+	useEffect(() => {
+		if (!!setSelectedColumns) {
+			const newSelectedColumns = selectedColumns.map((column) => ({
+				...column,
+				size:
+					HIGHLIGHT_STANDARD_COLUMNS[column.id]?.size ??
+					DEFAULT_COLUMN_SIZE,
+			}))
+
+			setSelectedColumns(newSelectedColumns)
+		}
+
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [windowSize])
+
+	const [sortColumn, setSortColumn] = useQueryParam(SORT_COLUMN, StringParam)
+	const [sortDirection, setSortDirection] = useQueryParam(
+		SORT_DIRECTION,
+		StringParam,
+	)
+
+	const handleSort = useCallback(
+		(column: string, direction?: SortDirection | null) => {
+			if (
+				column === sortColumn &&
+				(direction === null || sortDirection === SortDirection.Asc)
+			) {
+				setSortColumn(undefined)
+				setSortDirection(undefined)
+			} else {
+				const nextDirection =
+					direction ??
+					(column === sortColumn &&
+					sortDirection === SortDirection.Desc
+						? SortDirection.Asc
+						: SortDirection.Desc)
+
+				setSortColumn(column)
+				setSortDirection(nextDirection)
+			}
+		},
+		[setSortColumn, setSortDirection, sortColumn, sortDirection],
 	)
 
 	const bodyRef = useRef<HTMLDivElement>(null)
 	const enableFetchMoreTraces =
-		!!numMoreTraces &&
+		(!!numMoreTraces || pollingExpired) &&
 		!!resetMoreTraces &&
 		!!handleAdditionalTracesDateChange
 
@@ -79,7 +158,7 @@ export const TracesList: React.FC<Props> = ({
 	const columnData = useMemo(() => {
 		const gridColumns: string[] = []
 		const columnHeaders: ColumnHeader[] = []
-		const columns: ColumnDef<TraceEdge, any>[] = []
+		const columns: ColumnDef<TraceEdge, string>[] = []
 
 		selectedColumns.forEach((column, index) => {
 			const first = index === 0
@@ -89,13 +168,25 @@ export const TracesList: React.FC<Props> = ({
 				id: column.id,
 				component: column.label,
 				showActions: true,
+				onSort: (direction?: SortDirection | null) => {
+					handleSort(column.id, direction)
+				},
 			})
 
-			// @ts-ignore
-			const accessor = columnHelper.accessor(`node.${column.accessKey}`, {
+			const accessorFn =
+				column.id in HIGHLIGHT_STANDARD_COLUMNS
+					? HIGHLIGHT_STANDARD_COLUMNS[column.id].accessor
+					: (`node.traceAttributes.${column.id}` as `node.traceAttributes.${string}`)
+
+			const columnType =
+				column.id in HIGHLIGHT_STANDARD_COLUMNS
+					? HIGHLIGHT_STANDARD_COLUMNS[column.id].type
+					: 'string'
+
+			const accessor = columnHelper.accessor(accessorFn, {
+				id: column.id,
 				cell: ({ row, getValue }) => {
-					const ColumnRenderer =
-						ColumnRenderers[column.type] || ColumnRenderers.string
+					const ColumnRenderer = TraceColumnRenderers[columnType]
 
 					return (
 						<ColumnRenderer
@@ -103,6 +194,7 @@ export const TracesList: React.FC<Props> = ({
 							row={row}
 							getValue={getValue}
 							first={first}
+							queryParts={[]}
 						/>
 					)
 				},
@@ -122,7 +214,9 @@ export const TracesList: React.FC<Props> = ({
 					selectedColumns={selectedColumns}
 					setSelectedColumns={setSelectedColumns}
 					standardColumns={HIGHLIGHT_STANDARD_COLUMNS}
-					attributePrefix="traceAttributes"
+					attributeAccessor={(row: TraceEdge) =>
+						row.node.traceAttributes
+					}
 				/>
 			),
 		})
@@ -132,7 +226,7 @@ export const TracesList: React.FC<Props> = ({
 			columnHeaders,
 			columns,
 		}
-	}, [columnHelper, selectedColumns, setSelectedColumns])
+	}, [columnHelper, handleSort, selectedColumns, setSelectedColumns])
 
 	const table = useReactTable({
 		data: traceEdges,
@@ -184,53 +278,79 @@ export const TracesList: React.FC<Props> = ({
 		}, 0)
 	}
 
-	if (loading) {
-		return <LoadingBox />
-	}
+	const hasQuery = query.trim() !== ''
 
-	if (!traceEdges.length) {
+	if (!loading && !traceEdges.length) {
 		return (
-			<Box px="12" py="8">
-				<Box
-					border="secondary"
-					borderRadius="6"
-					display="flex"
-					flexDirection="row"
-					gap="6"
-					p="8"
-					alignItems="center"
-					width="full"
-				>
-					<Box alignSelf="flex-start">
-						<Badge
-							size="medium"
-							shape="basic"
-							variant="gray"
-							iconStart={<IconSolidAcademicCap size="12" />}
-						/>
-					</Box>
-					<Stack gap="12" flexGrow={1} style={{ padding: '5px 0' }}>
-						<Text color="strong" weight="bold" size="small">
-							Set up traces
-						</Text>
-						<Text color="moderate">
-							No traces found. Have you finished setting up
-							tracing in your app yet?
-						</Text>
-					</Stack>
+			<Box m="8">
+				<Callout>
+					<Stack
+						direction={{ desktop: 'row', mobile: 'column' }}
+						justifyContent={{
+							desktop: 'space-between',
+							mobile: 'flex-start',
+						}}
+						align={{ desktop: 'center', mobile: 'flex-start' }}
+					>
+						{!integrated ? (
+							<>
+								<Stack gap="12" my="6">
+									<Text weight="bold" size="medium">
+										Set up traces
+									</Text>
+									<Text color="moderate">
+										No traces found. Have you finished
+										setting up tracing in your app yet?
+									</Text>
+								</Stack>
 
-					<Box alignSelf="center" display="flex">
-						<LinkButton
-							to="https://www.highlight.io/docs/getting-started/native-opentelemetry/tracing"
-							kind="primary"
-							size="small"
-							trackingId="tracing-empty-state_learn-more-setup"
-							target="_blank"
-						>
-							Learn more
-						</LinkButton>
-					</Box>
-				</Box>
+								<LinkButton
+									to="https://www.highlight.io/docs/getting-started/native-opentelemetry/tracing"
+									kind="primary"
+									size="small"
+									trackingId="tracing-empty-state_learn-more-setup"
+									target="_blank"
+								>
+									Learn more
+								</LinkButton>
+							</>
+						) : (
+							<>
+								<Stack gap="12" my="6">
+									<Text weight="bold" size="medium">
+										No traces found
+									</Text>
+									<Text color="moderate">
+										{hasQuery ? (
+											<>
+												No traces found for the current
+												search query. Try using a more
+												generic search query, removing
+												filters, or updating the time
+												range to see more traces.
+											</>
+										) : (
+											<>
+												No traces found. Try updating
+												your time range to see more
+												traces.
+											</>
+										)}
+									</Text>
+								</Stack>
+
+								<LinkButton
+									trackingId="traces-empty-state_specification-docs"
+									kind="secondary"
+									to="https://www.highlight.io/docs/general/product-features/general-features/search"
+									target="_blank"
+								>
+									View search docs
+								</LinkButton>
+							</>
+						)}
+					</Stack>
+				</Callout>
 			</Box>
 		)
 	}
@@ -247,6 +367,8 @@ export const TracesList: React.FC<Props> = ({
 							setSelectedColumns={setSelectedColumns!}
 							standardColumns={HIGHLIGHT_STANDARD_COLUMNS}
 							trackingIdPrefix="TracesTableColumn"
+							sortColumn={sortColumn}
+							sortDirection={sortDirection}
 						/>
 					))}
 				</Table.Row>
@@ -254,59 +376,68 @@ export const TracesList: React.FC<Props> = ({
 					<Table.Row>
 						<Box width="full">
 							<AdditionalFeedResults
-								more={numMoreTraces}
+								maxResults={MAX_TRACES}
+								more={numMoreTraces ?? 0}
 								type="traces"
 								onClick={() => {
 									resetMoreTraces()
 									handleAdditionalTracesDateChange()
 								}}
+								pollingExpired={pollingExpired}
 							/>
 						</Box>
 					</Table.Row>
 				)}
 			</Table.Head>
-			<Table.Body
-				ref={bodyRef}
-				height="full"
-				overflowY="auto"
-				onScroll={handleFetchMoreWhenScrolled}
-				style={{
-					height: `calc(100% - ${otherElementsHeight}px)`,
-				}}
-				hiddenScroll
-			>
-				{paddingTop > 0 && <Box style={{ height: paddingTop }} />}
-				{virtualRows.map((virtualRow) => {
-					const row = rows[virtualRow.index]
-					const isSelected = row.original.node.spanID === span_id
+			{loading ? (
+				<LoadingBox />
+			) : (
+				<Table.Body
+					ref={bodyRef}
+					height="full"
+					overflowY="auto"
+					onScroll={handleFetchMoreWhenScrolled}
+					style={{
+						height: `calc(100% - ${otherElementsHeight}px)`,
+					}}
+					hiddenScroll
+				>
+					{paddingTop > 0 && <Box style={{ height: paddingTop }} />}
+					{virtualRows.map((virtualRow) => {
+						const row = rows[virtualRow.index]
+						const isSelected =
+							row.original.node.spanID === trace?.spanID
 
-					return (
-						<TracesTableRow
-							key={virtualRow.key}
-							row={row}
-							rowVirtualizer={rowVirtualizer}
-							virtualRowKey={virtualRow.key}
-							isSelected={isSelected}
-							gridColumns={columnData.gridColumns}
-							selectedColumnsIds={selectedColumns.map(
-								(c) => c.id,
-							)}
-						/>
-					)
-				})}
+						return (
+							<TracesTableRow
+								key={virtualRow.key}
+								row={row}
+								rowVirtualizer={rowVirtualizer}
+								virtualRowKey={virtualRow.key}
+								isSelected={isSelected}
+								gridColumns={columnData.gridColumns}
+								selectedColumnsIds={selectedColumns.map(
+									(c) => c.id,
+								)}
+							/>
+						)
+					})}
 
-				{paddingBottom > 0 && <Box style={{ height: paddingBottom }} />}
+					{paddingBottom > 0 && (
+						<Box style={{ height: paddingBottom }} />
+					)}
 
-				{loadingAfter && (
-					<Box
-						style={{
-							height: `${LOADING_AFTER_HEIGHT}px`,
-						}}
-					>
-						<LoadingBox />
-					</Box>
-				)}
-			</Table.Body>
+					{loadingAfter && (
+						<Box
+							style={{
+								height: `${LOADING_AFTER_HEIGHT}px`,
+							}}
+						>
+							<LoadingBox />
+						</Box>
+					)}
+				</Table.Body>
+			)}
 		</Table>
 	)
 }

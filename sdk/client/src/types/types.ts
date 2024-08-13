@@ -1,3 +1,4 @@
+import type { Context, Span, SpanOptions } from '@opentelemetry/api'
 import {
 	ConsoleMethods,
 	DebugOptions,
@@ -5,6 +6,7 @@ import {
 	NetworkRecordingOptions,
 	SessionShortcutOptions,
 } from './client.js'
+import { ErrorMessageType } from './shared-types'
 
 export declare interface Metadata {
 	[key: string]: string | boolean | number
@@ -58,6 +60,15 @@ export declare type SamplingStrategy = {
 	 * Time (in milliseconds) to wait before the initial snapshot of canvas/video elements.
 	 */
 	canvasInitialSnapshotDelay?: number
+	/**
+	 * Settings for canvas data serialization. Defaults to {"image/webp", 0.9} for browsers
+	 * that support WebP and {"image/jpeg", 0.6} for others. Can be overridden to any type
+	 * or quality value supported by [`toDataURL`](http://mdn.io/toDataURL).
+	 */
+	dataUrlOptions?: Partial<{
+		type: string
+		quality: number
+	}>
 }
 
 export declare type HighlightOptions = {
@@ -66,11 +77,6 @@ export declare type HighlightOptions = {
 	 * @private
 	 */
 	debug?: boolean | DebugOptions
-	/**
-	 * Do not use this.
-	 * @private
-	 */
-	scriptUrl?: string
 	/**
 	 * Specifies where to send Highlight session data.
 	 * You should not have to set this unless you are running an on-premise instance.
@@ -167,6 +173,12 @@ export declare type HighlightOptions = {
 	 */
 	enablePerformanceRecording?: boolean
 	/**
+	 * Specifies whether window.Promise should be patched
+	 * to record the stack trace of promise rejections.
+	 * @default true
+	 */
+	enablePromisePatch?: boolean
+	/**
 	 * Configure the recording sampling options, eg. how frequently we record canvas updates.
 	 */
 	samplingStrategy?: SamplingStrategy
@@ -216,6 +228,14 @@ export declare type HighlightOptions = {
 	 * are not available (ie. Figma plugins).
 	 */
 	sendMode?: 'webworker' | 'local'
+	/**
+	 * Specifies whether to enable OpenTelemetry tracing on the client.
+	 */
+	enableOtelTracing?: boolean
+	/**
+	 * OTLP endpoint for OpenTelemetry tracing.
+	 */
+	otlpEndpoint?: string
 }
 
 export declare interface HighlightPublicInterface {
@@ -248,6 +268,97 @@ export declare interface HighlightPublicInterface {
 	 */
 	metrics: (metrics: Metric[]) => void
 	/**
+	 * Starts a new span for tracing in Highlight. The span will be ended when the
+	 * callback function returns.
+	 *
+	 * @example
+	 * ```typescript
+	 * H.startSpan('span-name', callbackFn)
+	 * ```
+	 * @example
+	 * ```typescript
+	 * H.startSpan('span-name', options, callbackFn)
+	 * ```
+	 * @example
+	 * ```typescript
+	 * H.startSpan('span-name', options, context, callbackFn)
+	 * ```
+	 * @example
+	 * ```typescript
+	 * H.startSpan('span-name', async (span) => {
+	 *   span.setAttribute('key', 'value')
+	 *   await someAsyncFunction()
+	 * })
+	 * ```
+	 *
+	 * @param name The name of the span.
+	 * @param options Options for the span.
+	 * @param context The context for the span.
+	 * @param callbackFn The function to run in the span.
+	 */
+	startSpan: {
+		<F extends (span?: Span) => ReturnType<F>>(
+			name: string,
+			fn: F,
+		): ReturnType<F>
+		<F extends (span?: Span) => ReturnType<F>>(
+			name: string,
+			options: SpanOptions,
+			fn: F,
+		): ReturnType<F>
+		<F extends (span?: Span) => ReturnType<F>>(
+			name: string,
+			options: SpanOptions,
+			context: Context,
+			fn: F,
+		): ReturnType<F>
+	}
+	/**
+	 * Starts a new span for tracing in Highlight. The span will be ended when the
+	 * `end()` is called on the span. It returns whatever is returned from the
+	 * callback function.
+	 *
+	 * @example
+	 * ```typescript
+	 * H.startManualSpan('span-name', options, (span) => {
+	 *   span.addEvent('event-name', { key: 'value' })
+	 *   span.setAttribute('key', 'value')
+	 *   await someAsyncFunction()
+	 *   span.end()
+	 * })
+	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * const span = H.startManualSpan('span-name', (s) => s)
+	 * span.addEvent('event-name', { key: 'value' })
+	 * await someAsyncFunction()
+	 * span.end()
+	 * ```
+	 *
+	 * @param name The name of the span.
+	 * @param options Options for the span.
+	 * @param context The context for the span.
+	 * @param fn The function to run in the span.
+	 */
+	startManualSpan: {
+		<F extends (span: Span) => ReturnType<F>>(
+			name: string,
+			fn: F,
+		): ReturnType<F>
+		<F extends (span: Span) => ReturnType<F>>(
+			name: string,
+			options: SpanOptions,
+			fn: F,
+		): ReturnType<F>
+		<F extends (span: Span) => ReturnType<F>>(
+			name: string,
+			options: SpanOptions,
+			context: Context,
+			fn: F,
+		): ReturnType<F>
+	}
+	/**
 	 * Calling this method will report an error in Highlight and map it to the current session being recorded.
 	 * A common use case for `H.error` is calling it right outside of an error boundary.
 	 * @see {@link https://docs.highlight.run/grouping-errors} for more information.
@@ -257,6 +368,20 @@ export declare interface HighlightPublicInterface {
 		message?: string,
 		payload?: { [key: string]: string },
 	) => void
+	/**
+	 * Calling this method will report an error in Highlight
+	 * while allowing additional attributes to be sent over as metadata.
+	 * @see {consumeError} for more information.
+	 */
+	consume: (
+		error: Error,
+		opts: {
+			message?: string
+			payload?: object
+			source?: string
+			type?: ErrorMessageType
+		},
+	) => void
 	getSessionURL: () => Promise<string>
 	getSessionDetails: () => Promise<SessionDetails>
 	start: (options?: StartOptions) => void
@@ -265,7 +390,8 @@ export declare interface HighlightPublicInterface {
 	onHighlightReady: (
 		func: () => void | Promise<void>,
 		options?: OnHighlightReadyOptions,
-	) => Promise<void>
+	) => void
+	getRecordingState: () => 'NotRecording' | 'Recording'
 	options: HighlightOptions | undefined
 	/**
 	 * Calling this will add a feedback comment to the session.

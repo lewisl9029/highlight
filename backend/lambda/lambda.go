@@ -10,17 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/highlight-run/highlight/backend/env"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/hashicorp/go-retryablehttp"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/highlight-run/highlight/backend/lambda-functions/sessionInsights/utils"
 	"github.com/highlight-run/highlight/backend/model"
 	modelInputs "github.com/highlight-run/highlight/backend/private-graph/graph/model"
-	"github.com/highlight-run/highlight/backend/util"
-
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/pkg/errors"
 )
 
@@ -135,7 +135,7 @@ func (s *Client) GetActivityGraph(ctx context.Context, eventCounts string) (*htt
 func (s *Client) GetSessionInsight(ctx context.Context, projectID int, sessionID int) (*http.Response, error) {
 	var req *retryablehttp.Request
 
-	if util.IsDevEnv() {
+	if env.IsDevEnv() {
 		localReq := s.GetSessionInsightRequest(ctx, "http://localhost:8765/session/insight", 1, 232563428)
 		res, localServerErr := s.HTTPClient.Do(localReq.Request)
 		if localServerErr != nil {
@@ -169,14 +169,24 @@ func (s *Client) GetSessionInsightRequest(ctx context.Context, url string, proje
 type ReactEmailTemplate string
 
 const (
+	// deprecated emails
 	ReactEmailTemplateErrorAlert      ReactEmailTemplate = "error-alert"
 	ReactEmailTemplateLogAlert        ReactEmailTemplate = "log-alert"
 	ReactEmailTemplateNewSessionAlert ReactEmailTemplate = "new-session-alert"
 	ReactEmailTemplateNewUserAlert    ReactEmailTemplate = "new-user-alert"
 	ReactEmailTemplateRageClickAlert  ReactEmailTemplate = "rage-click-alert"
-	ReactEmailTemplateSessionInsights ReactEmailTemplate = "session-insights"
 	ReactEmailTemplateTrackEventAlert ReactEmailTemplate = "track-event-properties-alert"
 	ReactEmailTemplateTrackUserAlert  ReactEmailTemplate = "track-user-properties-alert"
+	// new alert emails
+	ReactEmailTemplateSessionsAlert ReactEmailTemplate = "sessions-alert"
+	ReactEmailTemplateErrorsAlert   ReactEmailTemplate = "errors-alert"
+	ReactEmailTemplateLogsAlert     ReactEmailTemplate = "logs-alert"
+	ReactEmailTemplateTracesAlert   ReactEmailTemplate = "traces-alert"
+	ReactEmailTemplateMetricsAlert  ReactEmailTemplate = "metrics-alert"
+	// session insights
+	ReactEmailTemplateSessionInsights ReactEmailTemplate = "session-insights"
+	// notifications
+	ReactEmailTemplateAlertUpsert ReactEmailTemplate = "alert-upsert"
 )
 
 func (s *Client) GetSessionInsightEmailHtml(ctx context.Context, toEmail string, unsubscribeUrl string, data utils.SessionInsightsData) (string, error) {

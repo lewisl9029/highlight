@@ -90,7 +90,7 @@
 					{
 						"name": "antd",
 						"importNames": ["Tabs"],
-						"message": "Please use Tabs from /src/components/Tab instead."
+						"message": "Please use Tabs from @highlight-run/ui/components instead."
 					},
 					{
 						"name": "antd",
@@ -115,7 +115,7 @@
 					{
 						"name": "antd",
 						"importNames": ["InputNumber"],
-						"message": "Please use InputNumber from /src/components/InputNumber instead."
+						"message": "Please use Form.Input with type='number' from @highlight-run/ui/components instead."
 					},
 					{
 						"name": "react-router",
@@ -135,6 +135,16 @@
 						"name": "@highlight-run/ui",
 						"importNames": ["Button"],
 						"message": "Please use Button from @components/Button instead."
+					},
+					{
+						"name": "react-use",
+						"importNames": ["useLocalStorage"],
+						"message": "Please use @rehooks/local-storage instead."
+					},
+					{
+						"name": "antd",
+						"importNames": ["message"],
+						"message": "Please use the toast function from @components/Toaster instead."
 					}
 				],
 				"patterns": [

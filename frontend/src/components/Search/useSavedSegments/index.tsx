@@ -1,3 +1,4 @@
+import { toast } from '@components/Toaster'
 import { SavedSegmentEntityType } from '@graph/schemas'
 import { colors } from '@highlight-run/ui/colors'
 import {
@@ -14,7 +15,6 @@ import {
 	Text,
 } from '@highlight-run/ui/components'
 import { vars } from '@highlight-run/ui/vars'
-import { message } from 'antd'
 import { forEach } from 'lodash'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -43,7 +43,7 @@ enum SegmentModalState {
 
 type UseSavedSegmentsProps = {
 	query: string
-	entityType?: 'Log' | 'Trace'
+	entityType?: SavedSegmentEntityType
 	projectId: string
 	setQuery: (query?: string) => void
 }
@@ -70,7 +70,7 @@ export const useSavedSegments = ({
 		useGetSavedSegmentsQuery({
 			variables: {
 				project_id: projectId!,
-				entity_type: entityType as SavedSegmentEntityType,
+				entity_type: entityType!,
 			},
 			skip: !projectId || !entityType,
 		})
@@ -123,7 +123,9 @@ export const useSavedSegments = ({
 				},
 			})
 				.then(() => {
-					message.success(`Updated '${selectedSegment!.name}'`, 5)
+					toast.success(`Updated '${selectedSegment!.name}'`, {
+						duration: 5000,
+					})
 					selectSegment({
 						id: selectedSegment.id,
 						name: selectedSegment.name,
@@ -131,7 +133,7 @@ export const useSavedSegments = ({
 					})
 				})
 				.catch(() => {
-					message.error('Error updating segment!', 5)
+					toast.error('Error updating segment!', { duration: 5000 })
 				})
 		}
 	}, [

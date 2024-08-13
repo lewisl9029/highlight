@@ -1,3 +1,8 @@
+import { toast } from '@components/Toaster'
+import {
+	AppLoadingState,
+	useAppLoadingContext,
+} from '@context/AppLoadingContext'
 import {
 	useGetCommentTagsForProjectQuery,
 	useGetWorkspaceAdminsByProjectIdLazyQuery,
@@ -24,6 +29,12 @@ import {
 } from './ButtonsHelper'
 
 export const Buttons = () => {
+	const { setLoadingState } = useAppLoadingContext()
+
+	useEffect(() => {
+		setLoadingState(AppLoadingState.LOADED)
+	}, [setLoadingState])
+
 	const [hasError, setHasError] = useState(false)
 	const [showWebSocket, setShowWebSocket] = useState(false)
 	const [email, setEmail] = useState('')
@@ -256,6 +267,14 @@ export const Buttons = () => {
 						}}
 					>
 						Console Error
+					</button>
+					<button
+						className={commonStyles.submitButton}
+						onClick={() => {
+							toast.success('Event has been created')
+						}}
+					>
+						Toast
 					</button>
 					<button
 						className={commonStyles.submitButton}

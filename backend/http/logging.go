@@ -14,7 +14,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
-	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	"go.opentelemetry.io/otel/trace"
 
 	model2 "github.com/highlight-run/highlight/backend/model"
@@ -252,7 +252,7 @@ func HandlePinoLogs(w http.ResponseWriter, r *http.Request, lgJson []byte, logs 
 			if has := map[string]bool{"level": true, "time": true, "msg": true}[k]; has {
 				continue
 			}
-			for key, value := range hlog.FormatLogAttributes(r.Context(), k, v) {
+			for key, value := range hlog.FormatLogAttributes(k, v) {
 				lg.Attributes[key] = value
 			}
 		}
@@ -295,26 +295,27 @@ func HandleJSONLog(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for k, v := range lgAttrs {
-			for key, value := range hlog.FormatLogAttributes(r.Context(), k, v) {
+			for key, value := range hlog.FormatLogAttributes(k, v) {
 				lg.Attributes[key] = value
 			}
 		}
 
-		attributes := make(map[string]string)
-		for _, k := range []string{
-			LogDrainProjectHeader,
-			LogDrainServiceHeader,
-		} {
-			value := r.Header.Get(k)
-			attributes[k] = value
-		}
-		projectID, err := model2.FromVerboseID(attributes[LogDrainProjectHeader])
+		var projectID int
+		var serviceName string
+
+		projectID, serviceName, err = getQueryStringParams(r)
 		if err != nil {
-			log.WithContext(r.Context()).WithError(err).WithField("projectVerboseID", attributes[LogDrainProjectHeader]).Error("failed to parse highlight project id from http logs request")
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			if projectID, err = model2.FromVerboseID(r.Header.Get(LogDrainProjectHeader)); err != nil {
+				log.WithContext(r.Context()).WithError(err).WithField("projectVerboseID", r.Header.Get(LogDrainProjectHeader)).Error("failed to parse highlight project id from http logs request")
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if svc := r.Header.Get(LogDrainServiceHeader); svc != "" {
+				serviceName = svc
+			}
 		}
-		lg.Attributes[string(semconv.ServiceNameKey)] = attributes[LogDrainServiceHeader]
+
+		lg.Attributes[string(semconv.ServiceNameKey)] = serviceName
 		if err := hlog.SubmitHTTPLog(r.Context(), tracer, projectID, lg); err != nil {
 			log.WithContext(r.Context()).WithError(err).Error("failed to submit log")
 			http.Error(w, err.Error(), http.StatusBadRequest)

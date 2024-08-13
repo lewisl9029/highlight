@@ -18,7 +18,7 @@ import { IntegrationStatus } from '@/graph/generated/schemas'
 const POLL_INTERVAL_MS = 5000
 
 export const useIntegratedLocalStorage = (
-	projectId: string,
+	projectId: string | number,
 	area: 'client' | 'server' | 'logs' | 'alerts' | 'team' | 'traces',
 ) => {
 	return useLocalStorage<LocalStorageIntegrationData>(
@@ -327,8 +327,10 @@ export const useTeamIntegration = () => {
 		skip: !projectId,
 	})
 	const { data, startPolling, stopPolling } = useGetWorkspaceAdminsQuery({
-		variables: { workspace_id: projectData?.workspace?.id ?? '' },
-		skip: localStorageIntegrated.integrated || !projectData?.workspace?.id,
+		variables: { workspace_id: projectData?.project?.workspace?.id ?? '' },
+		skip:
+			localStorageIntegrated.integrated ||
+			!projectData?.project?.workspace?.id,
 		fetchPolicy: 'cache-and-network',
 	})
 

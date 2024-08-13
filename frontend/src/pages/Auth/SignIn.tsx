@@ -16,17 +16,18 @@ import SvgHighlightLogoOnLight from '@icons/HighlightLogoOnLight'
 import { AuthBody, AuthError, AuthFooter, AuthHeader } from '@pages/Auth/Layout'
 import useLocalStorage from '@rehooks/local-storage'
 import { auth } from '@util/auth'
-import { isOnPrem } from '@util/onPrem/onPremUtils'
 import firebase from 'firebase/compat/app'
 import React, { useCallback, useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { useAuthContext } from '@/authentication/AuthContext'
+import { AUTH_MODE } from '@/constants'
 import {
 	AppLoadingState,
 	useAppLoadingContext,
 } from '@/context/AppLoadingContext'
 import { SIGN_UP_ROUTE } from '@/pages/Auth/AuthRouter'
+import { VERIFY_EMAIL_ROUTE } from '@/routers/AppRouter/AppRouter'
 import analytics from '@/util/analytics'
 
 type Props = {
@@ -75,9 +76,11 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 
 	const handleAuth = useCallback(
 		async ({ additionalUserInfo, user }: firebase.auth.UserCredential) => {
-			if (additionalUserInfo?.isNewUser && user?.email) {
+			const isNewUser = additionalUserInfo?.isNewUser && user?.email
+
+			if (isNewUser) {
 				analytics.track('Sign up', {
-					email: user.email,
+					email: user.email!,
 					provider: additionalUserInfo.providerId,
 				})
 
@@ -90,8 +93,12 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 
 			await fetchAdmin()
 			signIn(user)
+
+			if (isNewUser) {
+				navigate(VERIFY_EMAIL_ROUTE, { replace: true })
+			}
 		},
-		[createAdmin, fetchAdmin, signIn],
+		[createAdmin, fetchAdmin, signIn, navigate],
 	)
 
 	const handleAuthError = useCallback(
@@ -137,37 +144,41 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 								? `You're invited to join ‘${workspaceInvite.workspace_name}’`
 								: 'Welcome back.'}
 						</Heading>
-						<Text>
-							New here?{' '}
-							<Link to={SIGN_UP_ROUTE} state={{ email }}>
-								Create an account
-							</Link>
-							.
-						</Text>
+						{AUTH_MODE !== 'oauth' ? (
+							<Text>
+								New here?{' '}
+								<Link to={SIGN_UP_ROUTE} state={{ email }}>
+									Create an account
+								</Link>
+								.
+							</Text>
+						) : null}
 					</Stack>
 				</Box>
 			</AuthHeader>
-			<AuthBody>
-				<Stack gap="12">
-					<Form.Input
-						name={formStore.names.email}
-						label="Email"
-						type="email"
-						autoFocus
-						autoComplete="email"
-					/>
-					<Form.Input
-						name={formStore.names.password}
-						label="Password"
-						type="password"
-						autoComplete="current-password"
-					/>
-					<Link to="/reset_password" state={{ email }}>
-						<Text size="xSmall">Forgot your password?</Text>
-					</Link>
-					{error && <AuthError>{error}</AuthError>}
-				</Stack>
-			</AuthBody>
+			{AUTH_MODE === 'oauth' ? null : (
+				<AuthBody>
+					<Stack gap="12">
+						<Form.Input
+							name={formStore.names.email}
+							label="Email"
+							type="email"
+							autoFocus
+							autoComplete="email"
+						/>
+						<Form.Input
+							name={formStore.names.password}
+							label="Password"
+							type="password"
+							autoComplete="current-password"
+						/>
+						<Link to="/reset_password" state={{ email }}>
+							<Text size="xSmall">Forgot your password?</Text>
+						</Link>
+						{error && <AuthError>{error}</AuthError>}
+					</Stack>
+				</AuthBody>
+			)}
 
 			<AuthFooter>
 				<Stack gap="12">
@@ -178,8 +189,9 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						id="email-password-signin"
 					>
 						Sign in
+						{AUTH_MODE === 'oauth' ? <>{' with SSO'}</> : null}
 					</Button>
-					{isOnPrem ? null : (
+					{AUTH_MODE !== 'firebase' ? null : (
 						<>
 							<Stack direction="row" align="center">
 								<Box

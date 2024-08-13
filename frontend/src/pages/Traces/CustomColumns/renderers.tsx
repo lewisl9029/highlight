@@ -10,9 +10,10 @@ import {
 	Text,
 } from '@highlight-run/ui/components'
 import React from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
 
+import { useRelatedResource } from '@/components/RelatedResources/hooks'
 import { Trace } from '@/graph/generated/schemas'
+import { ColumnRendererProps } from '@/pages/LogsPage/LogsTable/CustomColumns/renderers'
 import { getTraceDurationString } from '@/pages/Traces/utils'
 import analytics from '@/util/analytics'
 
@@ -36,8 +37,7 @@ const ColumnWrapper: React.FC<ColumnWrapperProps> = ({
 	row,
 	onClick,
 }) => {
-	const navigate = useNavigate()
-	const location = useLocation()
+	const { set } = useRelatedResource()
 
 	if (!first) {
 		return (
@@ -47,10 +47,12 @@ const ColumnWrapper: React.FC<ColumnWrapperProps> = ({
 		)
 	}
 
-	const viewTrace = (trace: Partial<Trace>) => {
-		navigate(
-			`/${trace.projectID}/traces/${trace.traceID}/${trace.spanID}${location.search}`,
-		)
+	const viewTrace = (trace: Trace) => {
+		set({
+			type: 'trace',
+			id: trace.traceID,
+			spanID: trace.spanID,
+		})
 
 		analytics.track('traces_trace-row_click')
 	}
@@ -87,18 +89,15 @@ const EmptyState: React.FC = () => (
 	<Text color="secondaryContentOnDisabled">empty</Text>
 )
 
-type ColumnRendererProps = {
-	row: any
-	getValue: () => any
-	first: boolean
-}
-
 const StringColumnRenderer: React.FC<ColumnRendererProps> = ({
 	row,
 	getValue,
 	first,
 }) => {
-	const value = getValue()
+	let value = getValue()
+	if (typeof value === 'object') {
+		value = JSON.stringify(value)
+	}
 	const color = first ? 'strong' : undefined
 
 	return (
@@ -137,13 +136,16 @@ const SessionColumnRenderer: React.FC<ColumnRendererProps> = ({
 	getValue,
 	first,
 }) => {
-	const navigate = useNavigate()
+	const { set } = useRelatedResource()
 	const secureSessionID = getValue()
-	const trace = row.original.node
 	const onClick = secureSessionID
 		? () => {
-				analytics.track('View session from trace list')
-				navigate(`/${trace.projectID}/sessions/${secureSessionID}`)
+				set({
+					type: 'session',
+					secureId: secureSessionID,
+				})
+
+				analytics.track('traces_session-column_click')
 		  }
 		: undefined
 	const paddingProps = secureSessionID
@@ -218,10 +220,12 @@ const DurationRenderer: React.FC<ColumnRendererProps> = ({
 	)
 }
 
-export const ColumnRenderers = {
+export const TraceColumnRenderers = {
 	boolean: BooleanColumnRenderer,
 	datetime: DateTimeColumnRenderer,
 	duration: DurationRenderer,
 	session: SessionColumnRenderer,
 	string: StringColumnRenderer,
+	metric_name: StringColumnRenderer,
+	metric_value: StringColumnRenderer,
 }

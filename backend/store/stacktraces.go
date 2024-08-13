@@ -20,6 +20,7 @@ import (
 	privateModel "github.com/highlight-run/highlight/backend/private-graph/graph/model"
 	"github.com/highlight-run/highlight/backend/redis"
 	"github.com/highlight-run/highlight/backend/stacktraces"
+	"github.com/highlight-run/highlight/backend/util"
 )
 
 const GITHUB_ERROR_CONTEXT_LINES = 5
@@ -63,7 +64,7 @@ func (store *Store) ExpandedStackTrace(ctx context.Context, lines []string, line
 }
 
 func (store *Store) FetchFileFromGitHub(ctx context.Context, trace *privateModel.ErrorTrace, service *model.Service, fileName string, serviceVersion string, gitHubClient github.ClientInterface) (*string, error) {
-	rateLimit, _ := store.redis.GetGithubRateLimitExceeded(ctx, *service.GithubRepoPath)
+	rateLimit, _ := store.Redis.GetGithubRateLimitExceeded(ctx, *service.GithubRepoPath)
 	if rateLimit {
 		return nil, errors.New("Exceeded GitHub rate limit")
 	}
@@ -71,7 +72,7 @@ func (store *Store) FetchFileFromGitHub(ctx context.Context, trace *privateModel
 	fileContent, _, resp, err := gitHubClient.GetRepoContent(ctx, *service.GithubRepoPath, fileName, serviceVersion)
 	if resp != nil && resp.Rate.Remaining <= 0 {
 		log.WithContext(ctx).WithField("GitHub Repo", *service.GithubRepoPath).Warn("GitHub rate limit hit")
-		_ = store.redis.SetGithubRateLimitExceeded(ctx, *service.GithubRepoPath, resp.Rate.Reset.Time)
+		_ = store.Redis.SetGithubRateLimitExceeded(ctx, *service.GithubRepoPath, resp.Rate.Reset.Time)
 	}
 	if err != nil {
 		return nil, err
@@ -99,7 +100,7 @@ func (store *Store) GitHubGitSHA(ctx context.Context, gitHubRepoPath string, ser
 		return &serviceVersion, nil
 	}
 
-	return redis.CachedEval(ctx, store.redis, fmt.Sprintf("git-main-hash-%s", gitHubRepoPath), 5*time.Second, 24*time.Hour, func() (*string, error) {
+	return redis.CachedEval(ctx, store.Redis, fmt.Sprintf("git-main-hash-%s", gitHubRepoPath), 5*time.Second, 24*time.Hour, func() (*string, error) {
 		commitSha, _, err := gitHubClient.GetLatestCommitHash(ctx, gitHubRepoPath)
 		if err != nil {
 			return nil, err
@@ -110,7 +111,7 @@ func (store *Store) GitHubGitSHA(ctx context.Context, gitHubRepoPath string, ser
 
 func (store *Store) EnhanceTraceWithGitHub(ctx context.Context, trace *privateModel.ErrorTrace, service *model.Service, serviceVersion string, fileName string, gitHubClient github.ClientInterface) (*privateModel.ErrorTrace, error) {
 	lineNumber := trace.LineNumber
-	gitHubFileBytes, err := store.storageClient.ReadGitHubFile(ctx, *service.GithubRepoPath, fileName, serviceVersion)
+	gitHubFileBytes, err := store.StorageClient.ReadGitHubFile(ctx, *service.GithubRepoPath, fileName, serviceVersion)
 
 	if err != nil || gitHubFileBytes == nil {
 		encodedFileContent, err := store.FetchFileFromGitHub(ctx, trace, service, fileName, serviceVersion, gitHubClient)
@@ -122,7 +123,7 @@ func (store *Store) EnhanceTraceWithGitHub(ctx context.Context, trace *privateMo
 
 		gitHubFileBytes = []byte(*encodedFileContent)
 
-		_, err = store.storageClient.PushGitHubFile(ctx, *service.GithubRepoPath, fileName, serviceVersion, gitHubFileBytes)
+		_, err = store.StorageClient.PushGitHubFile(ctx, *service.GithubRepoPath, fileName, serviceVersion, gitHubFileBytes)
 		if err != nil {
 			log.WithContext(ctx).Error(errors.Wrap(err, "Error uploading to storage"))
 		}
@@ -176,7 +177,7 @@ func (store *Store) EnhanceTrace(ctx context.Context, trace *privateModel.ErrorT
 	}
 
 	// check if we've previously errored on this file
-	previousError, _ := store.redis.GetGitHubFileError(ctx, *service.GithubRepoPath, serviceVersion, fileName)
+	previousError, _ := store.Redis.GetGitHubFileError(ctx, *service.GithubRepoPath, serviceVersion, fileName)
 	if previousError {
 		return trace, false, false
 	}
@@ -184,7 +185,7 @@ func (store *Store) EnhanceTrace(ctx context.Context, trace *privateModel.ErrorT
 	enhancedTrace, err := store.EnhanceTraceWithGitHub(ctx, trace, service, serviceVersion, fileName, gitHubClient)
 	if err != nil {
 		log.WithContext(ctx).WithField("frame", trace).Error(errors.Wrap(err, "Error enhancing stacktrace frame from GitHub"))
-		_ = store.redis.SetGitHubFileError(ctx, *service.GithubRepoPath, serviceVersion, fileName)
+		_ = store.Redis.SetGitHubFileError(ctx, *service.GithubRepoPath, serviceVersion, fileName)
 	}
 
 	if enhancedTrace == nil {
@@ -195,6 +196,9 @@ func (store *Store) EnhanceTrace(ctx context.Context, trace *privateModel.ErrorT
 }
 
 func (store *Store) GitHubEnhancedStackTrace(ctx context.Context, stackTrace []*privateModel.ErrorTrace, workspace *model.Workspace, project *model.Project, errorObj *model.ErrorObject, validateService *model.Service) ([]*privateModel.ErrorTrace, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "GitHubEnhancedStackTrace")
+	defer span.Finish()
+
 	if errorObj.ServiceName == "" {
 		return nil, nil
 	}
@@ -210,12 +214,12 @@ func (store *Store) GitHubEnhancedStackTrace(ctx context.Context, stackTrace []*
 		service = validateService
 	}
 
-	gitHubAccessToken, err := store.integrationsClient.GetWorkspaceAccessToken(ctx, workspace, privateModel.IntegrationTypeGitHub)
+	gitHubAccessToken, err := store.IntegrationsClient.GetWorkspaceAccessToken(ctx, workspace, privateModel.IntegrationTypeGitHub)
 	if err != nil || gitHubAccessToken == nil {
 		return nil, err
 	}
 
-	client, err := github.NewClient(ctx, *gitHubAccessToken, store.redis)
+	client, err := github.NewClient(ctx, *gitHubAccessToken, store.Redis)
 	if err != nil {
 		return nil, err
 	}
@@ -243,11 +247,11 @@ func (store *Store) GitHubEnhancedStackTrace(ctx context.Context, stackTrace []*
 	}
 
 	if enhanceable && failedAllEnhancements {
-		errorCount, _ := store.redis.IncrementServiceErrorCount(ctx, service.ID)
+		errorCount, _ := store.Redis.IncrementServiceErrorCount(ctx, service.ID)
 		if errorCount >= MAX_ERROR_KILLSWITCH {
 			_ = store.UpdateServiceErrorState(ctx, service.ID, []string{"Too many errors enhancing errors - Check service configuration."})
 		} else {
-			_, _ = store.redis.ResetServiceErrorCount(ctx, service.ID)
+			_, _ = store.Redis.ResetServiceErrorCount(ctx, service.ID)
 		}
 	}
 
@@ -267,6 +271,9 @@ func (store *Store) StructuredStackTrace(ctx context.Context, stackTrace string)
 
 // should always return error stacktrace, returned error will be logged, return enhanced stacktrace string when successfully enhanced
 func (store *Store) EnhancedStackTrace(ctx context.Context, stackTrace string, workspace *model.Workspace, project *model.Project, errorObj *model.ErrorObject, validateService *model.Service) (*string, []*privateModel.ErrorTrace, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "EnhancedStackTrace", util.Tag("projectID", project.ID))
+	defer span.Finish()
+
 	structuredStackTrace, err := store.StructuredStackTrace(ctx, stackTrace)
 	if err != nil {
 		return nil, structuredStackTrace, errors.Wrap(err, "Error parsing stacktrace to enhance")

@@ -89,11 +89,33 @@ mutation ChangeAdminRole(
 		workspace_id: $workspace_id
 		admin_id: $admin_id
 		new_role: $new_role
-	)
+	) {
+		workspaceId
+		admin {
+			id
+		}
+		role
+		projectIds
+	}
 }
 
-mutation DeleteAdminFromProject($project_id: ID!, $admin_id: ID!) {
-	deleteAdminFromProject(project_id: $project_id, admin_id: $admin_id)
+mutation ChangeProjectMembership(
+	$workspace_id: ID!
+	$admin_id: ID!
+	$project_ids: [ID!]!
+) {
+	changeProjectMembership(
+		workspace_id: $workspace_id
+		admin_id: $admin_id
+		project_ids: $project_ids
+	) {
+		workspaceId
+		admin {
+			id
+		}
+		role
+		projectIds
+	}
 }
 
 mutation DeleteAdminFromWorkspace($workspace_id: ID!, $admin_id: ID!) {
@@ -307,35 +329,18 @@ mutation EditWorkspaceSettings(
 	$workspace_id: ID!
 	$ai_application: Boolean
 	$ai_insights: Boolean
+	$ai_query_builder: Boolean
 ) {
 	editWorkspaceSettings(
 		workspace_id: $workspace_id
 		ai_application: $ai_application
 		ai_insights: $ai_insights
+		ai_query_builder: $ai_query_builder
 	) {
 		workspace_id
 		ai_application
 		ai_insights
-	}
-}
-
-mutation DeleteSegment($segment_id: ID!) {
-	deleteSegment(segment_id: $segment_id)
-}
-
-mutation EditSegment(
-	$project_id: ID!
-	$id: ID!
-	$query: String!
-	$name: String!
-) {
-	editSegment(project_id: $project_id, id: $id, query: $query, name: $name)
-}
-
-mutation CreateSegment($project_id: ID!, $name: String!, $query: String!) {
-	createSegment(project_id: $project_id, name: $name, query: $query) {
-		name
-		id
+		ai_query_builder
 	}
 }
 
@@ -799,31 +804,6 @@ mutation ReplyToErrorComment(
 	}
 }
 
-mutation DeleteErrorSegment($segment_id: ID!) {
-	deleteErrorSegment(segment_id: $segment_id)
-}
-
-mutation EditErrorSegment(
-	$project_id: ID!
-	$id: ID!
-	$query: String!
-	$name: String!
-) {
-	editErrorSegment(
-		project_id: $project_id
-		id: $id
-		query: $query
-		name: $name
-	)
-}
-
-mutation CreateErrorSegment($project_id: ID!, $name: String!, $query: String!) {
-	createErrorSegment(project_id: $project_id, name: $name, query: $query) {
-		name
-		id
-	}
-}
-
 mutation CreateErrorAlert(
 	$project_id: ID!
 	$name: String!
@@ -834,10 +814,10 @@ mutation CreateErrorAlert(
 	$webhook_destinations: [WebhookDestinationInput!]!
 	$microsoft_teams_channels: [MicrosoftTeamsChannelInput!]!
 	$emails: [String]!
-	$environments: [String]!
 	$regex_groups: [String]!
 	$frequency: Int!
 	$default: Boolean
+	$query: String!
 ) {
 	createErrorAlert(
 		project_id: $project_id
@@ -848,11 +828,11 @@ mutation CreateErrorAlert(
 		microsoft_teams_channels: $microsoft_teams_channels
 		webhook_destinations: $webhook_destinations
 		emails: $emails
-		environments: $environments
 		threshold_window: $threshold_window
 		regex_groups: $regex_groups
 		frequency: $frequency
 		default: $default
+		query: $query
 	) {
 		id
 		ChannelsToNotify {
@@ -861,13 +841,13 @@ mutation CreateErrorAlert(
 		}
 		EmailsToNotify
 		Name
-		ExcludedEnvironments
 		CountThreshold
 		ThresholdWindow
 		LastAdminToEditID
 		RegexGroups
 		Frequency
 		disabled
+		Query
 	}
 }
 
@@ -985,6 +965,92 @@ mutation DeleteMetricMonitor($metric_monitor_id: ID!, $project_id: ID!) {
 	}
 }
 
+mutation CreateAlert(
+	$project_id: ID!
+	$name: String!
+	$product_type: ProductType!
+	$function_type: MetricAggregator!
+	$function_column: String
+	$query: String
+	$group_by_key: String
+	$below_threshold: Boolean
+	$threshold_value: Float
+	$threshold_window: Int
+	$threshold_cooldown: Int
+	$destinations: [AlertDestinationInput!]!
+) {
+	createAlert(
+		project_id: $project_id
+		name: $name
+		product_type: $product_type
+		function_type: $function_type
+		function_column: $function_column
+		query: $query
+		group_by_key: $group_by_key
+		below_threshold: $below_threshold
+		threshold_value: $threshold_value
+		threshold_window: $threshold_window
+		threshold_cooldown: $threshold_cooldown
+		destinations: $destinations
+	) {
+		id
+		name
+		product_type
+	}
+}
+
+mutation UpdateAlert(
+	$project_id: ID!
+	$alert_id: ID!
+	$name: String!
+	$product_type: ProductType!
+	$function_type: MetricAggregator!
+	$function_column: String
+	$query: String
+	$group_by_key: String
+	$below_threshold: Boolean
+	$threshold_value: Float
+	$threshold_window: Int
+	$threshold_cooldown: Int
+	$destinations: [AlertDestinationInput!]
+) {
+	updateAlert(
+		project_id: $project_id
+		alert_id: $alert_id
+		name: $name
+		product_type: $product_type
+		function_type: $function_type
+		function_column: $function_column
+		query: $query
+		group_by_key: $group_by_key
+		below_threshold: $below_threshold
+		threshold_value: $threshold_value
+		threshold_window: $threshold_window
+		threshold_cooldown: $threshold_cooldown
+		destinations: $destinations
+	) {
+		id
+		name
+		product_type
+	}
+}
+
+mutation UpdateAlertDisabled(
+	$project_id: ID!
+	$alert_id: ID!
+	$disabled: Boolean!
+) {
+	updateAlertDisabled(
+		project_id: $project_id
+		alert_id: $alert_id
+		disabled: $disabled
+	)
+}
+
+mutation DeleteAlert($project_id: ID!, $alert_id: ID!) {
+	deleteAlert(project_id: $project_id, alert_id: $alert_id)
+}
+
 mutation UpdateAdminAndCreateWorkspace(
 	$admin_and_workspace_details: AdminAndWorkspaceDetails!
 ) {
@@ -1010,10 +1076,10 @@ mutation UpdateErrorAlert(
 	$microsoft_teams_channels: [MicrosoftTeamsChannelInput!]!
 	$webhook_destinations: [WebhookDestinationInput!]!
 	$emails: [String]
-	$environments: [String]
 	$regex_groups: [String]
 	$frequency: Int
 	$disabled: Boolean
+	$query: String!
 ) {
 	updateErrorAlert(
 		project_id: $project_id
@@ -1025,11 +1091,11 @@ mutation UpdateErrorAlert(
 		microsoft_teams_channels: $microsoft_teams_channels
 		webhook_destinations: $webhook_destinations
 		emails: $emails
-		environments: $environments
 		threshold_window: $threshold_window
 		regex_groups: $regex_groups
 		frequency: $frequency
 		disabled: $disabled
+		query: $query
 	) {
 		Name
 		ChannelsToNotify {
@@ -1045,13 +1111,12 @@ mutation UpdateErrorAlert(
 			name
 		}
 		EmailsToNotify
-		ExcludedEnvironments
 		CountThreshold
 		ThresholdWindow
 		LastAdminToEditID
-		RegexGroups
 		Frequency
 		disabled
+		Query
 	}
 }
 
@@ -1259,12 +1324,12 @@ mutation DeleteDashboard($id: ID!) {
 
 mutation DeleteSessions(
 	$project_id: ID!
-	$query: ClickhouseQuery!
+	$params: QueryInput!
 	$sessionCount: Int!
 ) {
 	deleteSessions(
 		project_id: $project_id
-		query: $query
+		params: $params
 		sessionCount: $sessionCount
 	)
 }
@@ -1451,4 +1516,43 @@ mutation CreateSavedSegment(
 		name
 		id
 	}
+}
+
+mutation UpsertVisualization($visualization: VisualizationInput!) {
+	upsertVisualization(visualization: $visualization)
+}
+
+mutation DeleteVisualization($id: ID!) {
+	deleteVisualization(id: $id)
+}
+
+mutation UpsertGraph($graph: GraphInput!) {
+	upsertGraph(graph: $graph) {
+		id
+		type
+		title
+		productType
+		query
+		metric
+		functionType
+		groupByKey
+		bucketByKey
+		bucketCount
+		limit
+		limitFunctionType
+		limitMetric
+		display
+		nullHandling
+	}
+}
+
+mutation DeleteGraph($id: ID!) {
+	deleteGraph(id: $id)
+}
+
+mutation CreateCloudflareProxy($workspace_id: ID!, $proxy_subdomain: String!) {
+	createCloudflareProxy(
+		workspace_id: $workspace_id
+		proxy_subdomain: $proxy_subdomain
+	)
 }

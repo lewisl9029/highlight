@@ -30,7 +30,9 @@ backend/backend
 backend/__debug_bin
 backend/dump.rdb
 backend/.config
+
 docker/.telemetry
+docker/enterprise-private.pem
 
 # Editor Artifacts
 **/.idea
@@ -56,3 +58,4 @@ temp
 scripts/invoices.csv
 sdk/highlightinc-highlight-datasource/grafana/
 
+google-chrome*

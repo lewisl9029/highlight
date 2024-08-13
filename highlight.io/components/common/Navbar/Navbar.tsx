@@ -21,17 +21,12 @@ import Banner from '../Banner/Banner'
 import FeatureDropdown from './FeatureDropdown'
 
 const LaunchWeekBanner = () => {
-	const day = moment().diff(moment('2023-07-17T16:00:00Z'), 'days') + 1
-	if (day < 1 || day > 5) {
-		return null
-	}
-
 	const bannerMessage = (
 		<div className={styles.launchWeekText}>
-			Launch Week 2 is here.{' '}
+			Launch Week 6 is here.{' '}
 			<a
 				target="_blank"
-				href="https://www.highlight.io/launch-week-2"
+				href="https://www.youtube.com/playlist?list=PLtIz-bpzHkhhXNuWXTohSbozKz3t-WjOR"
 				rel="noreferrer"
 			>
 				Follow along
@@ -41,6 +36,36 @@ const LaunchWeekBanner = () => {
 	)
 
 	return <Banner>{bannerMessage}</Banner>
+}
+
+const LivestreamBanner = () => {
+	return (
+		<Link
+			href="https://lu.ma/bvnkoy5v"
+			target="_blank"
+			rel="noreferrer"
+			className="hidden md:flex justify-center items-center w-full h-[40px] bg-color-primary-200 text-white hover:bg-opacity-90"
+		>
+			<Typography type="copy3">
+				Join our livestream: July 2nd at 1pm PDT on Evaluating LLMs with
+				OpenLLMetry. Register
+				<span className="font-semibold"> here</span>.
+			</Typography>
+		</Link>
+	)
+}
+
+const HFSBanner = () => {
+	return (
+		<Link
+			href="/startups"
+			className="flex justify-center items-center w-full h-[40px] bg-color-primary-200 text-white hover:bg-opacity-90"
+		>
+			<Typography type="copy3">
+				Got a startup? Apply for free Highlight credits!
+			</Typography>
+		</Link>
+	)
 }
 
 const Navbar = ({
@@ -84,6 +109,11 @@ const Navbar = ({
 		setPrevY(currentScrollPos)
 	}
 
+	const isLaunchWeek = moment().isBetween(
+		'2024-07-29T16:00:00Z',
+		'2024-08-03T16:00:00Z',
+	)
+
 	useEffect(() => {
 		changeBackground()
 		window.addEventListener('scroll', changeBackground)
@@ -92,16 +122,13 @@ const Navbar = ({
 	return (
 		<>
 			{!hideGitHubPopup && <GithubPopup />}
-			{!hideBanner && (
-				<Link
-					href="/startups"
-					className="flex justify-center items-center w-full h-[40px] bg-color-primary-200 text-white hover:bg-opacity-90"
-				>
-					<Typography type="copy3">
-						Got a startup? Apply for free Highlight credits!
-					</Typography>
-				</Link>
-			)}
+			{!hideBanner ? (
+				isLaunchWeek ? (
+					<LaunchWeekBanner />
+				) : (
+					<HFSBanner />
+				)
+			) : null}
 			<div
 				className={classNames(styles.container, {
 					[styles.hide]: scrolled && !fixed,

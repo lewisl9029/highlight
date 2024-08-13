@@ -3,6 +3,10 @@ import { GetStaticPaths, GetStaticProps } from 'next/types'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BiChevronLeft, BiChevronRight } from 'react-icons/bi'
 import { FaDiscord, FaGithub, FaTwitter } from 'react-icons/fa'
+import {
+	CalendlyModal,
+	EnterpriseSelfHostCalendlyComponent,
+} from '../../components/common/CalendlyModal/CalendlyModal'
 import { Roadmap, RoadmapItem } from '../../components/common/Roadmap/Roadmap'
 import {
 	AutoplayVideo,
@@ -835,7 +839,7 @@ export default function DocPage({
 				}
 				description={description}
 				absoluteImageUrl={`https://${
-					process.env.NEXT_PUBLIC_VERCEL_URL
+					process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL
 				}/api/og/doc${relPath?.replace('.md', '')}`}
 				canonical={`/docs/${slug}`}
 			/>
@@ -967,12 +971,15 @@ export default function DocPage({
 										<MDXRemote
 											components={{
 												AutoplayVideo,
+												CalendlyModal,
 												EmbeddedVideo,
 												MissingFrameworkCopy,
 												Roadmap,
 												RoadmapItem,
 												QuickStart,
+												Typography,
 												DocsCard,
+												EnterpriseSelfHostCalendlyComponent,
 												DocsCardGroup,
 												h1: (props) => (
 													<h4 {...props} />

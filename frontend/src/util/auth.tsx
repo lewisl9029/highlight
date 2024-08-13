@@ -15,27 +15,17 @@ interface User {
 	getIdToken(): Promise<string>
 }
 
-const getFakeFirebaseUser: (email?: string, password?: string) => User = (
+const getFakeFirebaseUser: (email?: string, token?: string) => User = (
 	email,
-	password,
+	token,
 ) => ({
 	async getIdToken(): Promise<string> {
 		if (AUTH_MODE === 'password') {
-			return sessionStorage.getItem('passwordToken') || ''
+			return token || ''
 		}
-		return Promise.resolve('a1b2c3')
+		return 'a1b2c3'
 	},
 	email: email || 'demo@example.com',
-	async sendEmailVerification(): Promise<void> {
-		console.warn('simple auth does not support email verification')
-	},
-})
-
-const makePasswordAuthUser = (email: string): User => ({
-	async getIdToken(): Promise<string> {
-		return sessionStorage.getItem('passwordToken') || ''
-	},
-	email,
 	async sendEmailVerification(): Promise<void> {
 		console.warn('simple auth does not support email verification')
 	},
@@ -92,12 +82,27 @@ class SimpleAuth {
 		return await getFakeFirebaseCredentials()
 	}
 
+	isSignInWithEmailLink(emailLink: string): boolean {
+		console.warn('simple auth does not support email sign in')
+		return false
+	}
+
+	async applyActionCode(
+		actionCode: string,
+		continueUrl: string,
+	): Promise<any> {
+		console.warn('simple auth does not support email verification')
+		return false
+	}
+
 	signOut(): Promise<void> {
 		return Promise.resolve(undefined)
 	}
 }
 
-class PasswordAuth {
+class PasswordAuth implements SimpleAuth {
+	static Key = 'XNnrgjSyZjjEANuxFBG4nXw4p8GvMtrK'
+
 	currentUser: User | null = null
 	googleProvider?: Firebase.auth.GoogleAuthProvider
 	githubProvider?: Firebase.auth.GithubAuthProvider
@@ -106,41 +111,71 @@ class PasswordAuth {
 		this.initialize()
 	}
 
-	initialize() {
-		const user = sessionStorage.getItem('currentUser')
-		const token = sessionStorage.getItem('passwordToken')
-		if (user && token) {
-			try {
-				const userObject = JSON.parse(user)
-				this.currentUser = makePasswordAuthUser(userObject.email)
-			} catch (error) {
-				console.log('error setting user from session storage')
-			}
-			this.validateTokenAndInitializeUser(token)
+	protected set(data: { user: User | undefined; token: string | undefined }) {
+		localStorage.setItem(PasswordAuth.Key, JSON.stringify(data))
+	}
+
+	private retrieve(): {
+		user: User | undefined
+		token: string | undefined
+	} {
+		const data = localStorage.getItem(PasswordAuth.Key)
+		if (data) {
+			return JSON.parse(data)
+		}
+		return { user: undefined, token: undefined }
+	}
+
+	makePasswordAuthUser(email: string, token: string): User {
+		return {
+			async getIdToken(): Promise<string> {
+				return token || ''
+			},
+			email,
+			async sendEmailVerification(): Promise<void> {
+				console.warn('simple auth does not support email verification')
+			},
 		}
 	}
 
-	async validateTokenAndInitializeUser(token: string): Promise<void> {
+	initialize() {
+		const { user, token } = this.retrieve()
+		if (user?.email && token) {
+			try {
+				this.currentUser = this.makePasswordAuthUser(user.email, token)
+			} catch (error) {
+				console.log('error setting user from storage', error)
+			}
+		}
+		this.validateUser()
+	}
+
+	async validateUser(): Promise<boolean> {
 		const response = await fetch(`${PRIVATE_GRAPH_URI}/validate-token`, {
 			method: 'GET',
 			headers: {
 				Accept: 'application/json',
 				'Content-Type': 'application/json',
-				token,
+				token: this.retrieve().token || '',
 			},
 		})
 
 		if (response.status !== 200) {
-			localStorage.removeItem('passwordToken')
-			localStorage.removeItem('currentUser')
+			await this.signOut()
+			// only redirect if we are already not on the sign_in route
+			if (!window.location.href.endsWith('/sign_in')) {
+				window.location.href = `${window.location.origin}/sign_in`
+			}
+			return false
 		}
+		return true
 	}
 
 	async createUserWithEmailAndPassword(
 		email: string,
 		password: string,
 	): Promise<Firebase.auth.UserCredential> {
-		return await getFakeFirebaseCredentials(email, password)
+		return await this.signInWithEmailAndPassword(email, password)
 	}
 
 	onAuthStateChanged(
@@ -173,12 +208,14 @@ class PasswordAuth {
 
 		if (response.status === 200) {
 			const jsonResponse = await response.json()
-			sessionStorage.setItem('passwordToken', jsonResponse.token)
 
-			const user = makePasswordAuthUser(jsonResponse.user.email)
+			const user = this.makePasswordAuthUser(
+				jsonResponse.user.email,
+				jsonResponse.token,
+			)
 			this.currentUser = user
 
-			sessionStorage.setItem('currentUser', JSON.stringify(user))
+			this.set({ user, token: jsonResponse.token })
 
 			return {
 				credential: {
@@ -195,48 +232,168 @@ class PasswordAuth {
 	async signInWithPopup(
 		provider: Firebase.auth.AuthProvider,
 	): Promise<Firebase.auth.UserCredential> {
-		return await getFakeFirebaseCredentials()
+		const { token } = this.retrieve()
+		return await getFakeFirebaseCredentials(undefined, token)
 	}
 
-	signOut(): Promise<void> {
-		sessionStorage.removeItem('passwordToken')
-		sessionStorage.removeItem('currentUser')
-		return Promise.resolve(undefined)
+	isSignInWithEmailLink(emailLink: string): boolean {
+		console.warn('password auth does not support email sign in')
+		return false
+	}
+
+	async applyActionCode(
+		actionCode: string,
+		continueUrl: string,
+	): Promise<any> {
+		console.warn('password auth does not support email verification')
+		return false
+	}
+
+	async signOut() {
+		localStorage.removeItem(PasswordAuth.Key)
+	}
+}
+
+class OAuth extends PasswordAuth implements SimpleAuth {
+	initialized = false
+	currentUser: User | null = null
+	onSignedIn: ((user: Firebase.User | null) => void) | undefined
+	onError: ((error: Firebase.auth.Error) => any) | undefined
+
+	onAuthStateChanged(
+		onSignedIn: (user: Firebase.User | null) => void,
+		onError: (error: Firebase.auth.Error) => any,
+	): () => void {
+		this.onSignedIn = onSignedIn
+		this.onError = onError
+		if (!this.initialized) {
+			this.initialized = true
+			this.initialize()
+		}
+		return function () {}
+	}
+
+	async signInWithEmailAndPassword(): Promise<Firebase.auth.UserCredential> {
+		return await this.signInWithPopup()
+	}
+
+	async signInWithPopup(): Promise<Firebase.auth.UserCredential> {
+		window.location.href = `${PRIVATE_GRAPH_URI}/oauth/login`
+		throw new Error('Redirected')
+	}
+
+	async validateUser(): Promise<boolean> {
+		const response = await fetch(`${PRIVATE_GRAPH_URI}/validate-token`, {
+			method: 'GET',
+			credentials: 'include',
+		})
+
+		if (response.status !== 200) {
+			// only redirect if we are already not on the sign_in route
+			if (!window.location.href.endsWith('/sign_in')) {
+				window.location.href = `${window.location.origin}/sign_in`
+			}
+
+			if (this.onSignedIn) {
+				this.onSignedIn(null)
+			}
+			return false
+		} else {
+			const jsonResponse = await response.json()
+
+			const user = this.makePasswordAuthUser(
+				jsonResponse.user.email,
+				jsonResponse.token,
+			)
+			this.currentUser = user
+
+			this.set({ user, token: jsonResponse.token })
+
+			if (this.onSignedIn) {
+				this.onSignedIn(this.currentUser as Firebase.User)
+			}
+			return {
+				credential: {
+					providerId: '',
+					signInMethod: '',
+					toJSON: () => Object(),
+				},
+				user,
+			} as any
+		}
+	}
+
+	async createUserWithEmailAndPassword(
+		email: string,
+		password: string,
+	): Promise<Firebase.auth.UserCredential> {
+		throw new Error('Not implemented')
+	}
+
+	sendPasswordResetEmail(email: string): Promise<void> {
+		throw new Error('Not implemented')
+	}
+
+	isSignInWithEmailLink(emailLink: string): boolean {
+		throw new Error('Not implemented')
+	}
+
+	async applyActionCode(
+		actionCode: string,
+		continueUrl: string,
+	): Promise<any> {
+		throw new Error('Not implemented')
+	}
+
+	async signOut() {
+		await fetch(`${PRIVATE_GRAPH_URI}/oauth/logout`, {
+			method: 'POST',
+			credentials: 'include',
+		})
+		await super.signOut()
 	}
 }
 
 export let auth: SimpleAuth
-if (AUTH_MODE === 'simple') {
-	auth = new SimpleAuth()
-} else if (AUTH_MODE === 'password') {
-	auth = new PasswordAuth()
-} else {
-	let firebaseConfig: any
-	let firebaseConfigString: string
+switch (AUTH_MODE) {
+	case 'simple':
+		auth = new SimpleAuth()
+		break
+	case 'password':
+		auth = new PasswordAuth()
+		break
+	case 'oauth':
+		auth = new OAuth()
+		break
+	default:
+		let firebaseConfig: any
+		let firebaseConfigString: string
 
-	if (import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT) {
-		firebaseConfigString =
-			import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT ?? ''
-	} else {
-		firebaseConfigString = window._highlightFirebaseConfigString
-	}
+		if (import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT) {
+			firebaseConfigString =
+				import.meta.env.REACT_APP_FIREBASE_CONFIG_OBJECT ?? ''
+		} else {
+			firebaseConfigString = window._highlightFirebaseConfigString
+		}
 
-	// NOTE: we use eval() here (rather than JSON.parse) because its more in-tune
-	// with the string presented to a developer in the firebase console.
-	// This value is passed at build time, so security concerns are put aside.
-	try {
-		firebaseConfig = eval('(' + firebaseConfigString + ')')
-	} catch (_e) {
-		const e = _e as Error
-		throw new Error('Error parsing incoming firebase config' + e.toString())
-	}
+		// NOTE: we use eval() here (rather than JSON.parse) because its more in-tune
+		// with the string presented to a developer in the firebase console.
+		// This value is passed at build time, so security concerns are put aside.
+		try {
+			firebaseConfig = eval('(' + firebaseConfigString + ')')
+		} catch (_e) {
+			const e = _e as Error
+			throw new Error(
+				'Error parsing incoming firebase config' + e.toString(),
+			)
+		}
 
-	window._highlightFirebaseConfig = firebaseConfig
+		window._highlightFirebaseConfig = firebaseConfig
 
-	Firebase.initializeApp(firebaseConfig)
-	const googleProvider = new Firebase.auth.GoogleAuthProvider()
-	const githubProvider = new Firebase.auth.GithubAuthProvider()
-	auth = Firebase.auth()
-	auth.googleProvider = googleProvider
-	auth.githubProvider = githubProvider
+		Firebase.initializeApp(firebaseConfig)
+		const googleProvider = new Firebase.auth.GoogleAuthProvider()
+		const githubProvider = new Firebase.auth.GithubAuthProvider()
+		auth = Firebase.auth()
+		auth.googleProvider = googleProvider
+		auth.githubProvider = githubProvider
 }

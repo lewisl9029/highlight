@@ -1,3 +1,5 @@
+import stringify from 'json-stringify-safe'
+
 import { NetworkListenerCallback } from '../network-listener'
 import { Headers, Request, RequestResponsePair, Response } from './models'
 import {
@@ -8,12 +10,13 @@ import {
 	shouldNetworkRequestBeTraced,
 } from './utils'
 
-interface BrowserXHR extends XMLHttpRequest {
+export interface BrowserXHR extends XMLHttpRequest {
 	_method: string
 	_url: string
 	_requestHeaders: Headers
 	_responseSize?: number
 	_shouldRecordHeaderAndBody: boolean
+	_body?: any
 }
 
 /**
@@ -24,7 +27,6 @@ export const XHRListener = (
 	backendUrl: string,
 	tracingOrigins: boolean | (string | RegExp)[],
 	urlBlocklist: string[],
-	sessionSecureID: string,
 	bodyKeysToRedact?: string[],
 	bodyKeysToRecord?: string[],
 ) => {
@@ -37,12 +39,16 @@ export const XHRListener = (
 	/**
 	 * When a request gets initiated, store metadata for that specific request.
 	 */
-	XHR.open = function (this: BrowserXHR, method: string, url: string) {
+	XHR.open = function (this: BrowserXHR, method: string, url: string | URL) {
+		if (typeof url === 'string') {
+			this._url = url
+		} else {
+			this._url = url.toString()
+		}
 		this._method = method
-		this._url = url
 		this._requestHeaders = {}
 		this._shouldRecordHeaderAndBody = !urlBlocklist.some((blockedUrl) =>
-			url.toLowerCase().includes(blockedUrl),
+			this._url.toLowerCase().includes(blockedUrl),
 		)
 
 		// @ts-expect-error
@@ -72,7 +78,7 @@ export const XHRListener = (
 			return originalSend.apply(this, arguments)
 		}
 
-		const requestId = createNetworkRequestId()
+		const [sessionSecureID, requestId] = createNetworkRequestId()
 		if (shouldNetworkRequestBeTraced(this._url, tracingOrigins)) {
 			this.setRequestHeader(
 				HIGHLIGHT_REQUEST_HEADER,
@@ -82,6 +88,7 @@ export const XHRListener = (
 
 		const shouldRecordHeaderAndBody = this._shouldRecordHeaderAndBody
 		const requestModel: Request = {
+			sessionSecureID,
 			id: requestId,
 			url: this._url,
 			verb: this._method,
@@ -93,6 +100,7 @@ export const XHRListener = (
 			if (postData) {
 				const bodyData = getBodyData(postData, requestModel.url)
 				if (bodyData) {
+					this._body = bodyData
 					requestModel['body'] = getBodyThatShouldBeRecorded(
 						bodyData,
 						bodyKeysToRedact,
@@ -237,7 +245,7 @@ const getBodyData = (postData: any, url: string | undefined) => {
 		typeof postData === 'number' ||
 		typeof postData === 'boolean'
 	) {
-		return postData.toString()
+		return stringify(postData)
 	}
 
 	return null

@@ -5,9 +5,13 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/highlight-run/highlight/backend/env"
+	"github.com/highlight/highlight/sdk/highlight-go"
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
+	"gorm.io/gorm"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/highlight-run/highlight/backend/clickhouse"
@@ -57,44 +61,94 @@ func (m *MockResponseWriter) Write(bytes []byte) (int, error) {
 
 func (m *MockResponseWriter) WriteHeader(statusCode int) {}
 
+var db *gorm.DB
+var chClient *clickhouse.Client
+var red *redis.Client
+
 func TestMain(m *testing.M) {
-	//tracer = otel.GetTracerProvider().Tracer("test")
+	dbName := "highlight_testing_db"
+	testLogger := log.WithContext(context.TODO())
+	var err error
+	db, err = util.CreateAndMigrateTestDB(dbName)
+	if err != nil {
+		testLogger.Error(e.Wrap(err, "error creating testdb"))
+	}
+	w := model.Workspace{Model: model.Model{ID: 1}}
+	if err := db.Create(&w).Error; err != nil {
+		panic(e.Wrap(err, "error inserting workspace"))
+	}
+
+	p := model.Project{Model: model.Model{ID: 1}, WorkspaceID: w.ID}
+	if err := db.Create(&p).Error; err != nil {
+		panic(e.Wrap(err, "error inserting project"))
+	}
+
+	chClient, err = clickhouse.NewClient(clickhouse.TestDatabase)
+	if err != nil {
+		testLogger.Error(e.Wrap(err, "error creating clickhouse client"))
+	}
+
+	red = redis.NewClient()
 
 	code := m.Run()
 	os.Exit(code)
 }
 
 func TestHandler_HandleLog(t *testing.T) {
+	inputBytes, err := os.ReadFile("./samples/log.json")
+	if err != nil {
+		t.Fatalf("error reading: %v", err)
+	}
+
+	req := plogotlp.NewExportRequest()
+	if err := req.UnmarshalJSON(inputBytes); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := req.MarshalProto()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	b := bytes.Buffer{}
+	gz := gzip.NewWriter(&b)
+	if _, err := gz.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	w := &MockResponseWriter{}
-	r, _ := http.NewRequest("POST", "", strings.NewReader(""))
-	h := Handler{}
+	r, _ := http.NewRequest("POST", "", bytes.NewReader(b.Bytes()))
+	r.Header.Set(highlight.ProjectIDHeader, "123")
+
+	producer := MockKafkaProducer{}
+	resolver := &public.Resolver{
+		Redis:         red,
+		Store:         store.NewStore(db, red, integrations.NewIntegrationsClient(db), &storage.FilesystemClient{}, &producer, nil),
+		ProducerQueue: &producer,
+		BatchedQueue:  &producer,
+		TracesQueue:   &producer,
+		DB:            db,
+		Clickhouse:    chClient,
+	}
+	h := Handler{
+		resolver: resolver,
+	}
 	h.HandleLog(w, r)
+
+	for _, message := range producer.messages {
+		if message.GetType() == kafkaqueue.PushLogsFlattened {
+			logRowMessage := message.(*kafka_queue.LogRowMessage)
+			assert.Equal(t, kafkaqueue.PushLogsFlattened, message.GetType())
+			assert.Equal(t, privateModel.LogSourceBackend, logRowMessage.Source)
+			assert.Equal(t, uint32(123), logRowMessage.ProjectId)
+		}
+	}
 }
 
 func TestHandler_HandleTrace(t *testing.T) {
-	dbName := "highlight_testing_db"
-	testLogger := log.WithContext(context.TODO()).WithFields(log.Fields{"DB_HOST": os.Getenv("PSQL_HOST"), "DB_NAME": dbName})
-	var err error
-	db, err := util.CreateAndMigrateTestDB(dbName)
-	if err != nil {
-		testLogger.Error(e.Wrap(err, "error creating testdb"))
-	}
-	w := model.Workspace{Model: model.Model{ID: 1}}
-	if err := db.Create(&w).Error; err != nil {
-		t.Fatal(e.Wrap(err, "error inserting workspace"))
-	}
-
-	p := model.Project{Model: model.Model{ID: 1}, WorkspaceID: w.ID}
-	if err := db.Create(&p).Error; err != nil {
-		t.Fatal(e.Wrap(err, "error inserting project"))
-	}
-
-	chClient, err := clickhouse.NewClient(clickhouse.TestDatabase)
-	if err != nil {
-		testLogger.Error(e.Wrap(err, "error creating clickhouse client"))
-	}
-
-	red := redis.NewClient()
 	for file, tc := range map[string]struct {
 		expectedMessageCounts map[kafkaqueue.PayloadType]int
 		expectedLogCounts     map[privateModel.LogSource]int
@@ -106,7 +160,7 @@ func TestHandler_HandleTrace(t *testing.T) {
 			expectedMessageCounts: map[kafkaqueue.PayloadType]int{
 				kafkaqueue.PushBackendPayload:  4,   // 4 exceptions, pushed as individual messages
 				kafkaqueue.PushLogsFlattened:   15,  // 4 exceptions, 11 logs
-				kafkaqueue.PushTracesFlattened: 501, // 512 spans - 11 logs
+				kafkaqueue.PushTracesFlattened: 512, // 512 spans, of which 11 are logs that also save a span
 			},
 			expectedLogCounts: map[privateModel.LogSource]int{
 				privateModel.LogSourceFrontend: 1,
@@ -117,7 +171,7 @@ func TestHandler_HandleTrace(t *testing.T) {
 			expectedMessageCounts: map[kafkaqueue.PayloadType]int{
 				// no errors expected
 				kafkaqueue.PushLogsFlattened:   11,  // 11 logs
-				kafkaqueue.PushTracesFlattened: 501, // 512 spans - 11 logs
+				kafkaqueue.PushTracesFlattened: 512, // 512 spans, of which 11 are logs that also save a span
 			},
 			external: true,
 		},
@@ -129,9 +183,9 @@ func TestHandler_HandleTrace(t *testing.T) {
 		},
 	} {
 		if tc.external {
-			util.DopplerConfig = "prod_aws"
+			env.Config.Doppler = "prod_aws"
 		} else {
-			util.DopplerConfig = ""
+			env.Config.Doppler = ""
 		}
 
 		inputBytes, err := os.ReadFile(file)
@@ -210,4 +264,57 @@ func TestHandler_HandleTrace(t *testing.T) {
 		}
 	}
 
+}
+
+func TestExtractFields_Syslog(t *testing.T) {
+	resolver := &public.Resolver{
+		Redis:      red,
+		Store:      store.NewStore(db, red, integrations.NewIntegrationsClient(db), &storage.FilesystemClient{}, nil, nil),
+		DB:         db,
+		Clickhouse: chClient,
+	}
+	h := Handler{
+		resolver: resolver,
+	}
+
+	projectMapping := &model.IntegrationProjectMapping{
+		IntegrationType: privateModel.IntegrationTypeHeroku,
+		ExternalID:      "d.xxxxxxxx-yyyy-abcd-1234-deadbeef1234",
+		ProjectID:       123,
+	}
+	if err := db.Model(&projectMapping).Create(&projectMapping).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	lr := plog.NewLogRecord()
+	params := extractFieldsParams{
+		logRecord:              &lr,
+		herokuProjectExtractor: h.matchHerokuDrain,
+	}
+	lr.Body().SetStr("56gl9g91 <3>1 2023-07-27T05:43:22.401882Z render render-log-endpoint-test 1 render-log-endpoint-test - Render test log")
+	fields, err := extractFields(context.Background(), params)
+	assert.NoError(t, err)
+	assert.Equal(t, fields.projectIDInt, 2)
+	assert.Equal(t, fields.attrs, map[string]string{
+		"app_name": "render-log-endpoint-test",
+		"facility": "0",
+		"hostname": "render",
+		"msg_id":   "render-log-endpoint-test",
+		"priority": "3",
+		"proc_id":  "1",
+	})
+
+	lr.Body().SetStr("119 <40>1 2012-11-30T06:45:26+00:00 d.xxxxxxxx-yyyy-abcd-1234-deadbeef1234 heroku 1 web.3 - Starting process with command `bundle exec rackup config.ru -p 24405`")
+	fields, err = extractFields(context.Background(), params)
+	assert.NoError(t, err)
+	assert.Equal(t, "123", fields.projectID)
+	assert.Equal(t, 123, fields.projectIDInt)
+	assert.Equal(t, map[string]string{
+		"app_name": "heroku",
+		"facility": "5",
+		"hostname": "d.xxxxxxxx-yyyy-abcd-1234-deadbeef1234",
+		"msg_id":   "web.3",
+		"priority": "40",
+		"proc_id":  "1",
+	}, fields.attrs)
 }

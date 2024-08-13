@@ -3,12 +3,9 @@ import {
 	CreateAlertButton,
 	Divider,
 } from '@components/CreateAlertButton/CreateAlertButton'
-import { DEFAULT_PAGE_SIZE } from '@components/Pagination/Pagination'
 import { PreviousNextGroup } from '@components/PreviousNextGroup/PreviousNextGroup'
-import {
-	useGetAlertsPagePayloadQuery,
-	useGetSessionsClickhouseQuery,
-} from '@graph/hooks'
+import { toast } from '@components/Toaster'
+import { useGetAlertsPagePayloadQuery } from '@graph/hooks'
 import { colors } from '@highlight-run/ui/colors'
 import {
 	Badge,
@@ -32,16 +29,14 @@ import {
 import { changeSession } from '@pages/Player/PlayerHook/utils'
 import usePlayerConfiguration from '@pages/Player/PlayerHook/utils/usePlayerConfiguration'
 import { useReplayerContext } from '@pages/Player/ReplayerContext'
-import { useSearchContext } from '@pages/Sessions/SearchContext/SearchContext'
 import analytics from '@util/analytics'
-import { useParams } from '@util/react-router/useParams'
-import { message } from 'antd'
 import { delay } from 'lodash'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useNavigate } from 'react-router-dom'
 
 import { PlayerModeSwitch } from '@/pages/Player/SessionLevelBar/PlayerModeSwitch/PlayerModeSwitch'
+import { useSessionParams } from '@/pages/Sessions/utils'
 
 import SessionShareButtonV2 from '../SessionShareButton/SessionShareButtonV2'
 import * as styles from './SessionLevelBarV2.css'
@@ -53,16 +48,11 @@ export const SessionLevelBarV2: React.FC<
 		width: number | string
 	}
 > = (props) => {
-	const [copyShown, setCopyShown] = useState<boolean>(false)
-	const delayRef = useRef<number>()
 	const navigate = useNavigate()
 	const { projectId } = useProjectId()
-	const { session_secure_id } = useParams<{
-		session_secure_id: string
-	}>()
-	const { viewport, currentUrl, sessionResults, setSessionResults, session } =
-		useReplayerContext()
-	const { page, searchQuery } = useSearchContext()
+	const { sessionSecureId } = useSessionParams()
+	const { sessionResults, session } = useReplayerContext()
+
 	const { isLoggedIn } = useAuthContext()
 	const {
 		showLeftPanel,
@@ -71,17 +61,7 @@ export const SessionLevelBarV2: React.FC<
 		setShowRightPanel,
 	} = usePlayerConfiguration()
 	const { rightPanelView, setRightPanelView } = usePlayerUIContext()
-	const { data } = useGetSessionsClickhouseQuery({
-		variables: {
-			query: JSON.parse(searchQuery),
-			count: DEFAULT_PAGE_SIZE,
-			page: page && page > 0 ? page : 1,
-			project_id: projectId!,
-			sort_desc: true,
-		},
-		fetchPolicy: 'cache-first',
-		skip: !projectId,
-	})
+
 	const { data: alertsData } = useGetAlertsPagePayloadQuery({
 		variables: {
 			project_id: projectId!,
@@ -93,28 +73,9 @@ export const SessionLevelBarV2: React.FC<
 	const isDefaultView = DEFAULT_RIGHT_PANEL_VIEWS.includes(rightPanelView)
 
 	const sessionIdx = sessionResults.sessions.findIndex(
-		(s) => s.secure_id === session_secure_id,
+		(s) => s.secure_id === sessionSecureId,
 	)
 	const [prev, next] = [sessionIdx - 1, sessionIdx + 1]
-
-	useEffect(() => {
-		if (
-			!sessionResults.sessions.length &&
-			data?.sessions_clickhouse.sessions.length
-		) {
-			setSessionResults({
-				...data.sessions_clickhouse,
-				sessions: data.sessions_clickhouse.sessions.map((s) => ({
-					...s,
-					payload_updated_at: new Date().toISOString(),
-				})),
-			})
-		}
-	}, [
-		data?.sessions_clickhouse,
-		sessionResults.sessions.length,
-		setSessionResults,
-	])
 
 	const canMoveForward = !!projectId && sessionResults.sessions[next]
 	const canMoveBackward = !!projectId && sessionResults.sessions[prev]
@@ -199,101 +160,8 @@ export const SessionLevelBarV2: React.FC<
 						canMoveForward={!!canMoveForward}
 						size="small"
 					/>
-					{session && (
-						<Stack direction="row" gap="4" align="center">
-							{viewport?.width && viewport?.height && (
-								<Badge
-									iconStart={
-										<IconSolidTemplate color={colors.n9} />
-									}
-									size="medium"
-									variant="gray"
-									shape="basic"
-									label={`${viewport?.width}x${viewport?.height}`}
-									title="Application viewport size (pixels)"
-								/>
-							)}
-							<Badge
-								variant="gray"
-								size="medium"
-								iconStart={
-									session.privacy_setting === 'strict' ||
-									session?.enable_strict_privacy ? (
-										<IconSolidLockClosed
-											color={colors.n9}
-										/>
-									) : (
-										<IconSolidLockOpen color={colors.n9} />
-									)
-								}
-								title={
-									session.privacy_setting === 'strict' ||
-									session?.enable_strict_privacy
-										? 'Strict privacy on'
-										: 'Strict privacy off'
-								}
-							/>
-						</Stack>
-					)}
-					<Box
-						cssClass={styles.currentUrl}
-						onMouseEnter={() => {
-							if (delayRef.current) {
-								window.clearTimeout(delayRef.current)
-								delayRef.current = 0
-							}
-							setCopyShown(true)
-						}}
-						onMouseLeave={() => {
-							delayRef.current = delay(
-								() => setCopyShown(false),
-								200,
-							)
-						}}
-					>
-						<TextLink
-							href={currentUrl || ''}
-							underline="none"
-							color="none"
-						>
-							{currentUrl}
-						</TextLink>
-					</Box>
-					{currentUrl && (
-						<Box
-							cursor="pointer"
-							paddingLeft="8"
-							display="flex"
-							align="center"
-							onMouseEnter={() => {
-								if (delayRef.current) {
-									window.clearTimeout(delayRef.current)
-									delayRef.current = 0
-								}
-								setCopyShown(true)
-							}}
-							onMouseLeave={() => {
-								delayRef.current = delay(
-									() => setCopyShown(false),
-									200,
-								)
-							}}
-							onClick={() => {
-								if (currentUrl?.length) {
-									navigator.clipboard.writeText(currentUrl)
-									message.success('Copied url to clipboard')
-								}
-							}}
-						>
-							<IconSolidDocumentDuplicate
-								color={colors.n9}
-								style={{
-									opacity: copyShown ? 1 : 0,
-									transition: 'opacity 0.1s ease-in-out',
-								}}
-							/>
-						</Box>
-					)}
+					<SessionViewportMetadata />
+					<SessionCurrentUrl />
 				</Box>
 				<Box cssClass={styles.rightButtons}>
 					{session && (
@@ -335,3 +203,104 @@ export const SessionLevelBarV2: React.FC<
 }
 
 export default SessionLevelBarV2
+
+export const SessionViewportMetadata = () => {
+	const { session, viewport } = useReplayerContext()
+
+	if (!session) {
+		return null
+	}
+
+	return (
+		<Stack direction="row" gap="4" align="center">
+			{viewport?.width && viewport?.height && (
+				<Badge
+					iconStart={<IconSolidTemplate color={colors.n9} />}
+					size="medium"
+					variant="gray"
+					shape="basic"
+					label={`${viewport?.width}x${viewport?.height}`}
+					title="Application viewport size (pixels)"
+				/>
+			)}
+			<Badge
+				variant="gray"
+				size="medium"
+				iconStart={
+					session.privacy_setting === 'strict' ||
+					session?.enable_strict_privacy ? (
+						<IconSolidLockClosed color={colors.n9} />
+					) : (
+						<IconSolidLockOpen color={colors.n9} />
+					)
+				}
+				title={
+					session.privacy_setting === 'strict' ||
+					session?.enable_strict_privacy
+						? 'Strict privacy on'
+						: 'Strict privacy off'
+				}
+			/>
+		</Stack>
+	)
+}
+
+export const SessionCurrentUrl = () => {
+	const { currentUrl } = useReplayerContext()
+	const [copyShown, setCopyShown] = useState<boolean>(false)
+	const delayRef = useRef<number>()
+
+	return (
+		<>
+			<Box
+				cssClass={styles.currentUrl}
+				onMouseEnter={() => {
+					if (delayRef.current) {
+						window.clearTimeout(delayRef.current)
+						delayRef.current = 0
+					}
+					setCopyShown(true)
+				}}
+				onMouseLeave={() => {
+					delayRef.current = delay(() => setCopyShown(false), 200)
+				}}
+			>
+				<TextLink href={currentUrl || ''} underline="none" color="none">
+					{currentUrl}
+				</TextLink>
+			</Box>
+			{currentUrl && (
+				<Box
+					cursor="pointer"
+					paddingLeft="8"
+					display="flex"
+					align="center"
+					onMouseEnter={() => {
+						if (delayRef.current) {
+							window.clearTimeout(delayRef.current)
+							delayRef.current = 0
+						}
+						setCopyShown(true)
+					}}
+					onMouseLeave={() => {
+						delayRef.current = delay(() => setCopyShown(false), 200)
+					}}
+					onClick={() => {
+						if (currentUrl?.length) {
+							navigator.clipboard.writeText(currentUrl)
+							toast.success('Copied url to clipboard')
+						}
+					}}
+				>
+					<IconSolidDocumentDuplicate
+						color={colors.n9}
+						style={{
+							opacity: copyShown ? 1 : 0,
+							transition: 'opacity 0.1s ease-in-out',
+						}}
+					/>
+				</Box>
+			)}
+		</>
+	)
+}

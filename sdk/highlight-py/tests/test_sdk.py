@@ -33,6 +33,21 @@ def mock_otlp(mocker, request, integrations):
     yield integrations, request.param
 
 
+@pytest.fixture()
+def mock_trace(mocker):
+    span = mocker.patch("highlight_io.sdk.OTLPSpanExporter")
+    log = mocker.patch("highlight_io.sdk.OTLPLogExporter")
+    sp = mocker.patch(
+        "highlight_io.sdk.BatchSpanProcessor", return_value=BatchSpanProcessor(span)
+    )
+    lg = mocker.patch(
+        "highlight_io.sdk.BatchLogRecordProcessor",
+        return_value=BatchLogRecordProcessor(log),
+    )
+    mock_trace = mocker.spy(highlight_io.H, "trace")
+    yield mock_trace
+
+
 @pytest.mark.parametrize("project_id", [None, "", "a123"])
 @pytest.mark.parametrize("session_id", ["", "a1b2c3d4e5"])
 @pytest.mark.parametrize("request_id", ["", "a123"])
@@ -60,22 +75,41 @@ def test_record_exception(
     assert len(spy.call_args_list) == 10
 
 
-def test_log_no_trace(mocker):
-    span = mocker.patch("highlight_io.sdk.OTLPSpanExporter")
-    log = mocker.patch("highlight_io.sdk.OTLPLogExporter")
-    sp = mocker.patch(
-        "highlight_io.sdk.BatchSpanProcessor", return_value=BatchSpanProcessor(span)
-    )
-    lg = mocker.patch(
-        "highlight_io.sdk.BatchLogRecordProcessor",
-        return_value=BatchLogRecordProcessor(log),
-    )
-    mock_trace = mocker.spy(highlight_io.H, "trace")
-
+def test_log_no_trace(mock_trace):
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     h = highlight_io.H("1", instrument_logging=True)
     logger.info(f"hey there!")
     h.flush()
 
-    assert mock_trace.call_args_list[0].args[1:] == ()
+    assert mock_trace.call_args_list[0].args[1:] == ("highlight.log",)
+
+
+def test_test_decorator(mock_trace):
+    h = highlight_io.H("1", instrument_logging=True)
+
+    @highlight_io.trace
+    def my_func():
+        return "yo"
+
+    my_func()
+    h.flush()
+
+    assert mock_trace.call_args_list[0].args[1:] == ("highlight.log",)
+
+
+@pytest.mark.parametrize("debug", [False, True])
+@pytest.mark.parametrize("disable_export_error_logging", [False, True])
+def test_no_errors(mock_trace, debug, disable_export_error_logging):
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    h = highlight_io.H(
+        "1",
+        debug=debug,
+        disable_export_error_logging=disable_export_error_logging,
+        otlp_endpoint="http://foo:4318",
+    )
+    logger.info(f"hey there!")
+    h.flush()
+
+    assert mock_trace.call_args_list[0].args[1:] == ("highlight.log",)

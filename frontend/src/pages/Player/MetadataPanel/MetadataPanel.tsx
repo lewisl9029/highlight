@@ -1,18 +1,17 @@
 import { useAuthContext } from '@authentication/AuthContext'
 import LoadingBox from '@components/LoadingBox'
 import { TableList, TableListItem } from '@components/TableList/TableList'
+import { toast } from '@components/Toaster'
 import { Box, ButtonLink } from '@highlight-run/ui/components'
 import { formatShortTime } from '@pages/Home/components/KeyPerformanceIndicators/utils/utils'
 import { getChromeExtensionURL } from '@pages/Player/SessionLevelBar/utils/utils'
 import { bytesToPrettyString } from '@util/string'
-import { buildQueryStateString } from '@util/url/params'
-import { message } from 'antd'
 import _, { capitalize } from 'lodash'
 
 import CollapsibleSection from '@/components/CollapsibleSection'
+import { useSearchContext } from '@/components/Search/SearchContext'
 import { styledVerticalScrollbar } from '@/style/common.css'
 
-import { useSearchContext } from '../../Sessions/SearchContext/SearchContext'
 import { useReplayerContext } from '../ReplayerContext'
 import { formatSize } from '../Toolbar/DevToolsWindowV2/utils'
 import * as style from './MetadataPanel.css'
@@ -32,7 +31,7 @@ type Field = {
 
 const MetadataPanel = () => {
 	const { session, browserExtensionScriptURLs } = useReplayerContext()
-	const { setSearchQuery, removeSelectedSegment } = useSearchContext()
+	const { onSubmit } = useSearchContext()
 	const { isHighlightAdmin } = useAuthContext()
 
 	const sessionData: TableListItem[] = [
@@ -84,7 +83,7 @@ const MetadataPanel = () => {
 						session?.enable_strict_privacy,
 					)}{' '}
 					<a
-						href="https://docs.highlight.run/privacy"
+						href="https://www.highlight.io/docs/getting-started/client-sdk/replay-configuration/privacy"
 						target="_blank"
 						rel="noreferrer"
 					>
@@ -104,7 +103,7 @@ const MetadataPanel = () => {
 					This specifies whether Highlight records the status codes,
 					headers, and bodies for XML/Fetch requests made in your app.{' '}
 					<a
-						href="https://docs.highlight.run/recording-network-requests-and-responses"
+						href="https://www.highlight.io/docs/getting-started/client-sdk/replay-configuration/recording-network-requests-and-responses"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
@@ -164,7 +163,7 @@ const MetadataPanel = () => {
 					Did you know that you can enrich sessions with additional
 					metadata? They'll show up here. You can{' '}
 					<a
-						href="https://docs.highlight.run/identifying-users"
+						href="https://www.highlight.io/docs/getting-started/client-sdk/replay-configuration/identifying-sessions"
 						target="_blank"
 						rel="noreferrer"
 					>
@@ -224,16 +223,10 @@ const MetadataPanel = () => {
 					onClick={(e) => {
 						e.stopPropagation()
 
-						message.success(
+						toast.success(
 							`Showing sessions created by device #${session.fingerprint}`,
 						)
-						removeSelectedSegment()
-						setSearchQuery(
-							buildQueryStateString({
-								session_device_id:
-									session.fingerprint?.toString(),
-							}),
-						)
+						onSubmit(`device_id=${session.fingerprint}`)
 					}}
 				>
 					#{session?.fingerprint}

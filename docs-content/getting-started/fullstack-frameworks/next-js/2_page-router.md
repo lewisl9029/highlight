@@ -43,6 +43,7 @@ export default function MyApp({ Component, pageProps }: AppProps) {
 					enabled: true,
 					recordHeadersAndBody: true
 				}}
+				debug
 			/>
 
 			<Component {...pageProps} />
@@ -149,6 +150,8 @@ function ThrowerOfErrors({
 We use `experimental.instrumentationHook` to capture [Next.js's automatic instrumentation](https://nextjs.org/docs/app/building-your-application/optimizing/open-telemetry). This method captures detailed API route tracing as well as server-side errors.
 
 1. Enable `experimental.instrumentationHook` in `next.config.js`.
+2. Ignore warnings from `@highlight-run/node` due to a [known OpenTelemetry issue](https://github.com/open-telemetry/opentelemetry-js/issues/4173#issuecomment-1822938936)
+
 ```javascript
 // next.config.mjs
 import { withHighlightConfig } from '@highlight-run/next/config'
@@ -156,6 +159,12 @@ import { withHighlightConfig } from '@highlight-run/next/config'
 const nextConfig = {
 	experimental: {
 		instrumentationHook: true,
+	},
+	webpack(config, options) {
+		if (options.isServer) {
+			config.ignoreWarnings = [{ module: /highlight-(run\/)?node/ }]
+		}
+		return config
 	},
 	// ...additional config
 }
@@ -205,6 +214,28 @@ export default pageRouterCustomErrorHandler(
 	 */
 	(props: PageRouterErrorProps) => <NextError {...props} />,
 )
+```
+
+```hint
+`pageRouterCustomErrorHandler` is incompatible with `getInitialProps`. 
+
+You'll see `Error: You can not use getInitialProps with getServerSideProps. Please remove getInitialProps.` 
+
+Remove `pageRouterCustomErrorHandler` and consume the error in your `getServerSideProps` function by injecting the following code into your handler:
+```
+
+```javascript
+// client-side example; 
+// Errors can be sent server-side with `import { H } from '@highlight-run/next/server'`
+import { H } from '@highlight-run/next/ssr'
+
+const projectId = '<project id>'
+const highlightOptions = {
+	// Highlight options: https://www.highlight.io/docs/sdk/client#Hinit
+}
+
+H.init(projectId, highlightOptions)
+H.consumeError(new Error("Your custom error message"))
 ```
 
 ### Validate SSR error capture

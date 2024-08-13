@@ -1,3 +1,4 @@
+import { toast } from '@components/Toaster'
 import {
 	Box,
 	Heading,
@@ -7,7 +8,6 @@ import {
 } from '@highlight-run/ui/components'
 import { useAuthorization } from '@util/authorization/authorization'
 import { POLICY_NAMES } from '@util/authorization/authorizationPolicies'
-import { message } from 'antd'
 
 import BorderBox from '@/components/BorderBox/BorderBox'
 import { Button } from '@/components/Button'
@@ -22,13 +22,13 @@ import { useApplicationContext } from '@/routers/AppRouter/context/ApplicationCo
 type AiSetting = {
 	label: string
 	info: string
-	key: 'ai_application' | 'ai_insights'
+	key: 'ai_application' | 'ai_insights' | 'ai_query_builder'
 	feature: string
 }
 
 const AI_FEATURES: AiSetting[] = [
 	{
-		label: 'Enable Harold',
+		label: 'Error Suggestions & Session Summarization',
 		info: 'Enable error suggestions and session summarization across the app',
 		key: 'ai_application',
 		feature: 'Application',
@@ -38,6 +38,12 @@ const AI_FEATURES: AiSetting[] = [
 		info: 'Supercharge your session insight digests with AI',
 		key: 'ai_insights',
 		feature: 'Session Insights Digests',
+	},
+	{
+		label: 'AI-powered Query Builder',
+		info: 'Build queries with natural language using the power of Harold',
+		key: 'ai_query_builder',
+		feature: 'Query Builder',
 	},
 ]
 
@@ -69,14 +75,14 @@ export const HaroldAISettings = () => {
 			},
 		})
 			.then(() => {
-				message.success(
+				toast.success(
 					`${isOptIn ? 'Enabled' : 'Disabled'} Harold for your ${
 						setting.feature
 					}.`,
 				)
 			})
 			.catch((reason: any) => {
-				message.error(String(reason))
+				toast.error(String(reason))
 			})
 	}
 
@@ -123,7 +129,7 @@ export const HaroldAISettings = () => {
 					</BorderBox>
 					<Stack gap="12" direction="column" paddingTop="24">
 						<Text weight="bold" size="small" color="default">
-							Features
+							Harold Features
 						</Text>
 						{AI_FEATURES.map((c) => (
 							<BorderBox key={c.key}>

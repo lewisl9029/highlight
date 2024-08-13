@@ -56,6 +56,7 @@ export async function render(
 		browser = await puppeteer.launch({
 			channel: 'chrome',
 			headless: 'new',
+			args: ['--no-sandbox'],
 		})
 	} else {
 		console.log(`starting puppeteer for lambda`)
@@ -82,22 +83,14 @@ export async function render(
 		path.join(
 			path.resolve(),
 			'node_modules',
-			'@highlight-run',
 			'rrweb',
 			'dist',
-			'rrweb.min.js',
+			'rrweb.umd.min.cjs',
 		),
 		'utf8',
 	)
 	const css = readFileSync(
-		path.join(
-			path.resolve(),
-			'node_modules',
-			'@highlight-run',
-			'rrweb',
-			'dist',
-			'rrweb.css',
-		),
+		path.join(path.resolve(), 'node_modules', 'rrweb', 'dist', 'style.css'),
 		'utf8',
 	)
 	await page.setContent(getHtml(css, js))

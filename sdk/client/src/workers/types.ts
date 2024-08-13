@@ -1,4 +1,4 @@
-import { eventWithTime } from '@highlight-run/rrweb-types'
+import { eventWithTime } from '@rrweb/types'
 import { ConsoleMessage, ErrorMessage } from '../types/shared-types'
 import { MetricCategory } from '../types/client'
 
@@ -17,6 +17,7 @@ export enum MessageType {
 	Metrics,
 	Feedback,
 	CustomEvent,
+	Stop,
 }
 
 export type InitializeMessage = {
@@ -30,7 +31,6 @@ export type InitializeMessage = {
 export type AsyncEventsMessage = {
 	type: MessageType.AsyncEvents
 	id: number
-	isBeacon: boolean
 	hasSessionUnloaded: boolean
 	highlightLogs: string
 	events: eventWithTime[]
@@ -86,6 +86,12 @@ export type CustomEventResponse = {
 	payload: any
 }
 
+export type StopEventResponse = {
+	type: MessageType.Stop
+	requestStart: number
+	asyncEventsResponse: AsyncEventsResponse
+}
+
 export type HighlightClientWorkerParams = {
 	message:
 		| InitializeMessage
@@ -97,5 +103,5 @@ export type HighlightClientWorkerParams = {
 }
 
 export type HighlightClientWorkerResponse = {
-	response?: AsyncEventsResponse | CustomEventResponse
+	response?: AsyncEventsResponse | CustomEventResponse | StopEventResponse
 }

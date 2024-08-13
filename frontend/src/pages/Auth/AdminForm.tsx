@@ -1,5 +1,6 @@
 import { useAuthContext } from '@authentication/AuthContext'
 import { Button } from '@components/Button'
+import { toast } from '@components/Toaster'
 import {
 	AppLoadingState,
 	useAppLoadingContext,
@@ -21,14 +22,13 @@ import {
 } from '@highlight-run/ui/components'
 import { AuthBody, AuthFooter, AuthHeader } from '@pages/Auth/Layout'
 import { Landing } from '@pages/Landing/Landing'
+import useLocalStorage from '@rehooks/local-storage'
 import { INVITE_TEAM_ROUTE } from '@routers/AppRouter/AppRouter'
 import analytics from '@util/analytics'
 import { getAttributionData } from '@util/attribution'
 import { isOnPrem } from '@util/onPrem/onPremUtils'
-import { message } from 'antd'
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useLocalStorage } from 'react-use'
 
 import { namedOperations } from '@/graph/generated/operations'
 import { DISMISS_JOIN_WORKSPACE_LOCAL_STORAGE_KEY } from '@/pages/Auth/JoinWorkspace'
@@ -58,7 +58,6 @@ enum HeardAbout {
 
 export const AdminForm: React.FC = () => {
 	const [showPromoCodeField, setShowPromoCodeField] = useState(false)
-	const [error, setError] = useState('')
 	const { setLoadingState } = useAppLoadingContext()
 	const { admin, fetchAdmin } = useAuthContext()
 	const navigate = useNavigate()
@@ -113,7 +112,10 @@ export const AdminForm: React.FC = () => {
 
 		if (!formState.valid) {
 			analytics.track('About you submission failed')
-			setError('Please fill out all form fields correctly.')
+			formStore.setError(
+				'general',
+				'Please fill out all form fields correctly.',
+			)
 			return
 		}
 
@@ -165,7 +167,7 @@ export const AdminForm: React.FC = () => {
 				})
 			}
 
-			message.success(
+			toast.success(
 				`Nice to meet you ${formState.values.firstName}, let's get started!`,
 			)
 
@@ -185,7 +187,7 @@ export const AdminForm: React.FC = () => {
 				errorMessage = 'Something went wrong. Please try again.'
 			}
 
-			setError(errorMessage)
+			formStore.setError('general', errorMessage)
 		}
 	})
 
@@ -203,6 +205,8 @@ export const AdminForm: React.FC = () => {
 	if (workspacesLoading) {
 		return null
 	}
+
+	const formError = formStore.getError('general')
 
 	return (
 		<Landing>
@@ -257,6 +261,7 @@ export const AdminForm: React.FC = () => {
 							<option value="Product">Product</option>
 							<option value="Engineer">Engineering</option>
 							<option value="Founder">Founder</option>
+							<option value="Sales">Business / Finance</option>
 						</Form.Select>
 						<Form.Select
 							className={styles.select}
@@ -305,7 +310,9 @@ export const AdminForm: React.FC = () => {
 									</ButtonLink>
 								</Box>
 							))}
-						{error && <Callout kind="error">{error}</Callout>}
+						{formError && (
+							<Callout kind="error">{formError}</Callout>
+						)}
 					</Stack>
 				</AuthBody>
 				<AuthFooter>

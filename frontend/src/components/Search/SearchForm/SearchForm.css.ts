@@ -8,18 +8,20 @@ import { styledVerticalScrollbar } from '@/style/common.css'
 
 export const searchIcon = style({
 	position: 'absolute',
-	top: 13,
+	top: 10,
 	left: 14,
 	color: vars.theme.interactive.fill.secondary.content.text,
 })
 
-const WORD_SPACING = 4
+export const searchIconWithActions = style({
+	top: 12,
+})
 
 export const combobox = style([
 	sprinkles({
 		p: '6',
 	}),
-	typographyStyles.family.body,
+	typographyStyles.family.monospace,
 	typographyStyles.size.small,
 	{
 		background: 'transparent',
@@ -30,7 +32,6 @@ export const combobox = style([
 		fontWeight: '500 !important',
 		pointerEvents: 'auto',
 		width: '100%',
-		wordSpacing: WORD_SPACING,
 		selectors: {
 			'&:focus': {
 				outline: 0,
@@ -50,14 +51,14 @@ export const comboboxNotEmpty = style({
 })
 
 export const comboboxTagsContainer = style([
-	typographyStyles.family.body,
+	typographyStyles.family.monospace,
 	typographyStyles.size.small,
 	{
 		display: 'block',
 		fontWeight: '500 !important',
 		maxWidth: 'calc(100% - 24px)',
 		paddingBottom: 12,
-		paddingRight: 6,
+		paddingRight: 14,
 		paddingTop: 12,
 		pointerEvents: 'none',
 		position: 'absolute',
@@ -75,16 +76,12 @@ export const comboboxTag = style({
 	height: 20,
 })
 
-export const token = style({
-	height: 20,
-	letterSpacing: 0,
-	wordSpacing: WORD_SPACING,
-})
-
-export const whitespaceToken = style({
-	letterSpacing: WORD_SPACING,
-	wordSpacing: 0,
-})
+export const token = style([
+	typographyStyles.family.monospace,
+	{
+		height: 20,
+	},
+])
 
 export const errorToken = style({
 	backgroundColor: 'rgba(255, 9, 87, 0.1)',
@@ -96,26 +93,26 @@ export const comboboxTagError = style({})
 export const comboboxTagClose = style({
 	backgroundColor: vars.color.white,
 	borderRadius: vars.borderRadius.round,
+	bottom: 8,
 	color: themeVars.static.content.default,
 	cursor: 'pointer',
+	marginLeft: -6,
 	position: 'absolute',
 	pointerEvents: 'auto',
 	opacity: 0,
-	right: -8,
-	top: -8,
 	zIndex: 1,
 })
 
 export const comboboxTagErrorIndicator = style({
 	backgroundColor: vars.color.white,
 	borderRadius: vars.borderRadius.round,
+	bottom: 8,
 	color: themeVars.static.content.sentiment.bad,
 	fontWeight: 'bold',
+	marginLeft: -6,
 	opacity: 1,
 	position: 'absolute',
 	pointerEvents: 'auto',
-	right: -8,
-	top: -8,
 	zIndex: 1,
 })
 
@@ -145,6 +142,7 @@ export const comboboxPopover = style({
 	flexGrow: 1,
 	maxWidth: 600,
 	maxHeight: 'min(var(--popover-available-height,300px),300px)',
+	minWidth: 'min(var(--popover-available-width,350px),350px)',
 	paddingBottom: 33,
 	zIndex: 10,
 })
@@ -186,3 +184,7 @@ export const comboboxGroup = style([
 		},
 	},
 ])
+
+export const toggle = style({
+	paddingLeft: '8px',
+})

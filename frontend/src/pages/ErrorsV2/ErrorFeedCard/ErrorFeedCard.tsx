@@ -31,8 +31,12 @@ export const ErrorFeedCard = ({ errorGroup, onClick }: Props) => {
 		error_secure_id?: string
 	}>()
 	const body = getErrorBody(errorGroup?.event)
-	const createdDate = formatErrorGroupDate(errorGroup?.created_at)
-	const updatedDate = formatErrorGroupDate(errorGroup?.updated_at)
+	const firstInstance = formatErrorGroupDate(
+		errorGroup?.first_occurrence || errorGroup?.created_at,
+	)
+	const lastInstance = formatErrorGroupDate(
+		errorGroup?.last_occurrence || errorGroup?.updated_at,
+	)
 
 	const { totalCount, userCount } = getErrorGroupStats(errorGroup)
 	const snoozed =
@@ -43,7 +47,10 @@ export const ErrorFeedCard = ({ errorGroup, onClick }: Props) => {
 		<Link
 			to={
 				onClick
-					? {}
+					? {
+							pathname: location.pathname,
+							search: location.search,
+					  }
 					: {
 							pathname: `/${projectId}/errors/${errorGroup?.secure_id}`,
 							search: location.search,
@@ -169,14 +176,14 @@ export const ErrorFeedCard = ({ errorGroup, onClick }: Props) => {
 						</Box>
 						<Box display="flex" gap="4" alignItems="center">
 							<Tag shape="basic" kind="secondary">
-								{updatedDate}
+								{lastInstance}
 							</Tag>
 							<Tag
 								shape="basic"
 								kind="secondary"
 								iconLeft={<IconSolidSparkles size={12} />}
 							>
-								{createdDate}
+								{firstInstance}
 							</Tag>
 						</Box>
 					</Box>

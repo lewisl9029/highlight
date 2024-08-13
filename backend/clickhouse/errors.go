@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/highlight-run/highlight/backend/parser"
 	"github.com/highlight-run/highlight/backend/parser/listener"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -22,6 +24,7 @@ type ClickhouseErrorGroup struct {
 	CreatedAt           int64
 	UpdatedAt           int64
 	ID                  int64
+	SecureID            string
 	Event               string
 	Status              string
 	Type                string
@@ -64,6 +67,7 @@ func (client *Client) WriteErrorGroups(ctx context.Context, groups []*model.Erro
 			CreatedAt: group.CreatedAt.UTC().UnixMicro(),
 			UpdatedAt: group.UpdatedAt.UTC().UnixMicro(),
 			ID:        int64(group.ID),
+			SecureID:  group.SecureID,
 			Event:     group.Event,
 			Status:    string(group.State),
 			Type:      group.Type,
@@ -87,7 +91,7 @@ func (client *Client) WriteErrorGroups(ctx context.Context, groups []*model.Erro
 			NewStruct(new(ClickhouseErrorGroup)).
 			InsertInto(ErrorGroupsTable, chGroups...).
 			BuildWithFlavor(sqlbuilder.ClickHouse)
-		sql, args = replaceTimestampInserts(sql, args, 10, map[int]bool{1: true, 2: true}, MicroSeconds)
+		sql, args = replaceTimestampInserts(sql, args, map[int]bool{1: true, 2: true}, MicroSeconds)
 		return client.conn.Exec(chCtx, sql, args...)
 	}
 
@@ -153,14 +157,14 @@ func (client *Client) WriteErrorObjects(ctx context.Context, objects []*model.Er
 			NewStruct(new(ClickhouseErrorObject)).
 			InsertInto(ErrorObjectsTable, chObjects...).
 			BuildWithFlavor(sqlbuilder.ClickHouse)
-		sql, args = replaceTimestampInserts(sql, args, 14, map[int]bool{1: true}, MicroSeconds)
+		sql, args = replaceTimestampInserts(sql, args, map[int]bool{1: true}, MicroSeconds)
 		return client.conn.Exec(chCtx, sql, args...)
 	}
 
 	return nil
 }
 
-func getErrorQueryImpl(tableName string, selectColumns string, query modelInputs.ClickhouseQuery, projectId int, retentionDate time.Time, groupBy *string, orderBy *string, limit *int, offset *int) (string, []interface{}, error) {
+func getErrorQueryImplDeprecated(tableName string, selectColumns string, query modelInputs.ClickhouseQuery, projectId int, groupBy *string, orderBy *string, limit *int, offset *int) (string, []interface{}, error) {
 	rules, err := deserializeRules(query.Rules)
 	if err != nil {
 		return "", nil, err
@@ -198,14 +202,14 @@ func getErrorQueryImpl(tableName string, selectColumns string, query modelInputs
 	return sql, args, nil
 }
 
-func (client *Client) QueryErrorGroupIds(ctx context.Context, projectId int, count int, query modelInputs.ClickhouseQuery, page *int, retentionDate time.Time) ([]int64, int64, error) {
+func (client *Client) QueryErrorGroupIdsDeprecated(ctx context.Context, projectId int, count int, query modelInputs.ClickhouseQuery, page *int) ([]int64, int64, error) {
 	pageInt := 1
 	if page != nil {
 		pageInt = *page
 	}
 	offset := (pageInt - 1) * count
 
-	sql, args, err := getErrorQueryImpl(ErrorGroupsTable, "ID, count() OVER() AS total", query, projectId, retentionDate, nil, pointy.String("UpdatedAt DESC, ID DESC"), pointy.Int(count), pointy.Int(offset))
+	sql, args, err := getErrorQueryImplDeprecated(ErrorGroupsTable, "ID, count() OVER() AS total", query, projectId, nil, pointy.String("UpdatedAt DESC, ID DESC"), pointy.Int(count), pointy.Int(offset))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -374,30 +378,45 @@ func (client *Client) QueryErrorGroupAggregateFrequency(ctx context.Context, pro
 	return items, err
 }
 
-func (client *Client) QueryErrorGroupOccurrences(ctx context.Context, projectId int, errorGroupId int) (*time.Time, *time.Time, error) {
+type ErrorGroupOccurence struct {
+	FirstOccurrence time.Time
+	LastOccurrence  time.Time
+}
+
+func (client *Client) QueryErrorGroupOccurrences(ctx context.Context, projectId int, errorGroupIds []int) (map[int]ErrorGroupOccurence, error) {
 	sb := sqlbuilder.NewSelectBuilder()
 	sql, args := sb.Select(`
+		ErrorGroupID,
 		min(Timestamp) as firstOccurrence,
 		max(Timestamp) as lastOccurrence`).
 		From("error_objects FINAL").
 		Where(sb.Equal("ProjectID", projectId)).
-		Where(sb.Equal("ErrorGroupID", errorGroupId)).
+		Where(sb.In("ErrorGroupID", errorGroupIds)).
+		GroupBy("ErrorGroupID").
 		BuildWithFlavor(sqlbuilder.ClickHouse)
 
 	rows, err := client.conn.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	var firstOccurrence time.Time
-	var lastOccurrence time.Time
+	occurancesByErrorGroup := map[int]ErrorGroupOccurence{}
 	for rows.Next() {
-		if err := rows.Scan(&firstOccurrence, &lastOccurrence); err != nil {
-			return nil, nil, err
+		var errorGroupId int64
+		var firstOccurrence time.Time
+		var lastOccurrence time.Time
+
+		if err := rows.Scan(&errorGroupId, &firstOccurrence, &lastOccurrence); err != nil {
+			return nil, err
+		}
+
+		occurancesByErrorGroup[int(errorGroupId)] = ErrorGroupOccurence{
+			FirstOccurrence: firstOccurrence,
+			LastOccurrence:  lastOccurrence,
 		}
 	}
 
-	return &firstOccurrence, &lastOccurrence, nil
+	return occurancesByErrorGroup, nil
 }
 
 func (client *Client) QueryErrorGroupTags(ctx context.Context, projectId int, errorGroupId int) ([]*modelInputs.ErrorGroupTagAggregation, error) {
@@ -455,32 +474,44 @@ func (client *Client) QueryErrorGroupTags(ctx context.Context, projectId int, er
 			aggs[key].Buckets = append(aggs[key].Buckets, &modelInputs.ErrorGroupTagAggregationBucket{
 				Key:      bucket,
 				DocCount: int64(count),
-				Percent:  float64(count) / float64(total),
 			})
+		}
+	}
+
+	// In some versions of ClickHouse, the total result will not always be returned first,
+	// so calculate each bucket's percentage after iterating through the results.
+	for _, value := range aggs {
+		for _, bucket := range value.Buckets {
+			bucket.Percent = float64(bucket.DocCount) / float64(total)
 		}
 	}
 
 	return lo.Values(aggs), nil
 }
 
-func (client *Client) QueryErrorFieldValues(ctx context.Context, projectId int, count int, fieldType string, fieldName string, query string, start time.Time, end time.Time) ([]string, error) {
-	mappedName, found := fieldMap[fieldName]
-	if !found {
-		return nil, fmt.Errorf("unknown column %s", fieldName)
-	}
+func (client *Client) QueryErrorFieldValues(ctx context.Context, projectId int, count int, fieldName string, query string, start time.Time, end time.Time) ([]string, error) {
+	var table string
+	var mappedName string
+	var ok bool
 
-	table := ErrorGroupsTable
-	if fieldType == "error-field" {
+	// needed to support "Tag" for backwards compatibility (can remove with new query language)
+	fieldName = strings.ToLower(fieldName)
+
+	if mappedName, ok = ErrorGroupsTableConfig.KeysToColumns[fieldName]; ok {
+		table = ErrorGroupsTable
+	} else if mappedName, ok = ErrorObjectsTableConfig.KeysToColumns[fieldName]; ok {
 		table = ErrorObjectsTable
+	} else {
+		return nil, fmt.Errorf("unknown column %s", fieldName)
 	}
 
 	sb := sqlbuilder.NewSelectBuilder()
 	sb = sb.
-		Select(mappedName).
+		Select(fmt.Sprintf("toString(%s)", mappedName)).
 		From(table).
 		Where(sb.Equal("ProjectID", projectId)).
-		Where(fmt.Sprintf("%s ILIKE %s", mappedName, sb.Var("%"+query+"%"))).
-		Where(fmt.Sprintf("%s <> ''", mappedName))
+		Where(fmt.Sprintf("toString(%s) ILIKE %s", mappedName, sb.Var("%"+query+"%"))).
+		Where(fmt.Sprintf("toString(%s) <> ''", mappedName))
 
 	if table == ErrorGroupsTable {
 		sb = sb.Where(sb.Or(
@@ -512,7 +543,7 @@ func (client *Client) QueryErrorFieldValues(ctx context.Context, projectId int, 
 	return values, nil
 }
 
-func (client *Client) QueryErrorHistogram(ctx context.Context, projectId int, query modelInputs.ClickhouseQuery, retentionDate time.Time, options modelInputs.DateHistogramOptions) ([]time.Time, []int64, error) {
+func (client *Client) QueryErrorHistogramDeprecated(ctx context.Context, projectId int, query modelInputs.ClickhouseQuery, options modelInputs.DateHistogramOptions) ([]time.Time, []int64, error) {
 	aggFn, addFn, location, err := getClickhouseHistogramSettings(options)
 	if err != nil {
 		return nil, nil, err
@@ -522,7 +553,7 @@ func (client *Client) QueryErrorHistogram(ctx context.Context, projectId int, qu
 
 	orderBy := fmt.Sprintf("1 WITH FILL FROM %s(?, '%s') TO %s(?, '%s') STEP 1", aggFn, location.String(), aggFn, location.String())
 
-	sql, args, err := getErrorQueryImpl(ErrorObjectsTable, selectCols, query, projectId, retentionDate, pointy.String("1"), &orderBy, nil, nil)
+	sql, args, err := getErrorQueryImplDeprecated(ErrorObjectsTable, selectCols, query, projectId, pointy.String("1"), &orderBy, nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -549,69 +580,290 @@ func (client *Client) QueryErrorHistogram(ctx context.Context, projectId int, qu
 	return bucketTimes, totals, nil
 }
 
-var ErrorObjectsTableConfig = model.TableConfig[modelInputs.ReservedErrorObjectKey]{
-	TableName: ErrorObjectsTable,
-	KeysToColumns: map[modelInputs.ReservedErrorObjectKey]string{
-		modelInputs.ReservedErrorObjectKeyBrowser:         "Browser",
-		modelInputs.ReservedErrorObjectKeyClientID:        "ClientID",
-		modelInputs.ReservedErrorObjectKeyEnvironment:     "Environment",
-		modelInputs.ReservedErrorObjectKeyHasSession:      "HasSession",
-		modelInputs.ReservedErrorObjectKeyOsName:          "OSName",
-		modelInputs.ReservedErrorObjectKeySecureSessionID: "SecureSessionID",
-		modelInputs.ReservedErrorObjectKeyServiceName:     "ServiceName",
-		modelInputs.ReservedErrorObjectKeyServiceVersion:  "ServiceVersion",
-		modelInputs.ReservedErrorObjectKeyTimestamp:       "Timestamp",
-		modelInputs.ReservedErrorObjectKeyTraceID:         "TraceID",
-		modelInputs.ReservedErrorObjectKeyVisitedURL:      "VisitedURL",
-	},
-	ReservedKeys: modelInputs.AllReservedErrorObjectKey,
-}
+var reservedErrorGroupKeys = lo.Map(modelInputs.AllReservedErrorGroupKey, func(key modelInputs.ReservedErrorGroupKey, _ int) string {
+	return string(key)
+})
 
-var errorsJoinedTableConfig = model.TableConfig[modelInputs.ReservedErrorsJoinedKey]{
-	TableName: "errors_joined_vw",
-	KeysToColumns: map[modelInputs.ReservedErrorsJoinedKey]string{
-		modelInputs.ReservedErrorsJoinedKeyBrowser:        "Browser",
-		modelInputs.ReservedErrorsJoinedKeyClientID:       "ClientID",
-		modelInputs.ReservedErrorsJoinedKeyEnvironment:    "Environment",
-		modelInputs.ReservedErrorsJoinedKeyEvent:          "Event",
-		modelInputs.ReservedErrorsJoinedKeyHasSession:     "HasSession",
-		modelInputs.ReservedErrorsJoinedKeyOsName:         "OSName",
-		modelInputs.ReservedErrorsJoinedKeyServiceName:    "ServiceName",
-		modelInputs.ReservedErrorsJoinedKeyServiceVersion: "ServiceVersion",
-		modelInputs.ReservedErrorsJoinedKeyTag:            "ErrorTagTitle",
-		modelInputs.ReservedErrorsJoinedKeyType:           "Type",
-		modelInputs.ReservedErrorsJoinedKeyVisitedURL:     "VisitedURL",
-		modelInputs.ReservedErrorsJoinedKeyTimestamp:      "Timestamp",
-		modelInputs.ReservedErrorsJoinedKeyStatus:         "Status",
+var ErrorGroupsTableConfig = model.TableConfig{
+	TableName: ErrorGroupsTable,
+	KeysToColumns: map[string]string{
+		string(modelInputs.ReservedErrorGroupKeyEvent):    "Event",
+		string(modelInputs.ReservedErrorGroupKeySecureID): "SecureID",
+		string(modelInputs.ReservedErrorGroupKeyStatus):   "Status",
+		string(modelInputs.ReservedErrorGroupKeyTag):      "ErrorTagTitle",
+		string(modelInputs.ReservedErrorGroupKeyType):     "Type",
 	},
 	BodyColumn:   "Event",
-	ReservedKeys: modelInputs.AllReservedErrorsJoinedKey,
+	ReservedKeys: reservedErrorGroupKeys,
 }
 
-var errorsSampleableTableConfig = sampleableTableConfig[modelInputs.ReservedErrorsJoinedKey]{
-	tableConfig: errorsJoinedTableConfig,
+var reservedErrorObjectKeys = lo.Map(modelInputs.AllReservedErrorObjectKey, func(key modelInputs.ReservedErrorObjectKey, _ int) string {
+	return string(key)
+})
+
+var ErrorObjectsTableConfig = model.TableConfig{
+	TableName: ErrorObjectsTable,
+	KeysToColumns: map[string]string{
+		string(modelInputs.ReservedErrorObjectKeyBrowser):         "Browser",
+		string(modelInputs.ReservedErrorObjectKeyClientID):        "ClientID",
+		string(modelInputs.ReservedErrorObjectKeyEnvironment):     "Environment",
+		string(modelInputs.ReservedErrorObjectKeyHasSession):      "HasSession",
+		string(modelInputs.ReservedErrorObjectKeyOsName):          "OSName",
+		string(modelInputs.ReservedErrorObjectKeySecureSessionID): "SecureSessionID",
+		string(modelInputs.ReservedErrorObjectKeyServiceName):     "ServiceName",
+		string(modelInputs.ReservedErrorObjectKeyServiceVersion):  "ServiceVersion",
+		string(modelInputs.ReservedErrorObjectKeyTimestamp):       "Timestamp",
+		string(modelInputs.ReservedErrorObjectKeyTraceID):         "TraceID",
+		string(modelInputs.ReservedErrorObjectKeyVisitedURL):      "VisitedURL",
+	},
+	ReservedKeys: reservedErrorObjectKeys,
+}
+
+var reservedErrorsJoinedKeys = lo.Map(modelInputs.AllReservedErrorsJoinedKey, func(key modelInputs.ReservedErrorsJoinedKey, _ int) string {
+	return string(key)
+})
+
+var ErrorsJoinedTableConfig = model.TableConfig{
+	TableName: "errors_joined_vw",
+	KeysToColumns: map[string]string{
+		string(modelInputs.ReservedErrorsJoinedKeyID):              "ID",
+		string(modelInputs.ReservedErrorsJoinedKeyBrowser):         "Browser",
+		string(modelInputs.ReservedErrorsJoinedKeyClientID):        "ClientID",
+		string(modelInputs.ReservedErrorsJoinedKeyEnvironment):     "Environment",
+		string(modelInputs.ReservedErrorsJoinedKeyEvent):           "Event",
+		string(modelInputs.ReservedErrorsJoinedKeyHasSession):      "HasSession",
+		string(modelInputs.ReservedErrorsJoinedKeyOsName):          "OSName",
+		string(modelInputs.ReservedErrorsJoinedKeySecureID):        "SecureID",
+		string(modelInputs.ReservedErrorsJoinedKeySecureSessionID): "SecureSessionID",
+		string(modelInputs.ReservedErrorsJoinedKeyServiceName):     "ServiceName",
+		string(modelInputs.ReservedErrorsJoinedKeyServiceVersion):  "ServiceVersion",
+		string(modelInputs.ReservedErrorsJoinedKeyStatus):          "Status",
+		string(modelInputs.ReservedErrorsJoinedKeyTag):             "ErrorTagTitle",
+		string(modelInputs.ReservedErrorsJoinedKeyTimestamp):       "Timestamp",
+		string(modelInputs.ReservedErrorsJoinedKeyTraceID):         "TraceID",
+		string(modelInputs.ReservedErrorsJoinedKeyType):            "Type",
+		string(modelInputs.ReservedErrorsJoinedKeyVisitedURL):      "VisitedURL",
+	},
+	BodyColumn:   "Event",
+	ReservedKeys: reservedErrorsJoinedKeys,
+}
+
+var BackendErrorObjectInputConfig = model.TableConfig{
+	KeysToColumns: map[string]string{
+		string(modelInputs.ReservedErrorsJoinedKeyEnvironment):    "Environment",
+		string(modelInputs.ReservedErrorsJoinedKeyEvent):          "Event",
+		string(modelInputs.ReservedErrorsJoinedKeyHasSession):     "SessionSecureID",
+		string(modelInputs.ReservedErrorsJoinedKeyServiceName):    "Service.Name",
+		string(modelInputs.ReservedErrorsJoinedKeyServiceVersion): "Service.Version",
+		string(modelInputs.ReservedErrorsJoinedKeyTimestamp):      "Timestamp",
+		string(modelInputs.ReservedErrorsJoinedKeyType):           "Type",
+		string(modelInputs.ReservedErrorsJoinedKeyVisitedURL):     "URL",
+	},
+	BodyColumn:   "Event",
+	ReservedKeys: reservedErrorsJoinedKeys,
+}
+
+var ErrorsSampleableTableConfig = SampleableTableConfig{
+	tableConfig: ErrorsJoinedTableConfig,
 	useSampling: func(time.Duration) bool {
 		return false
 	},
 }
 
 func ErrorMatchesQuery(errorObject *model2.BackendErrorObjectInput, filters listener.Filters) bool {
-	return matchesQuery(errorObject, errorsJoinedTableConfig, filters)
+	return matchesQuery(errorObject, BackendErrorObjectInputConfig, filters, listener.OperatorAnd)
 }
 
-func (client *Client) ReadErrorsMetrics(ctx context.Context, projectID int, params modelInputs.QueryInput, column string, metricTypes []modelInputs.MetricAggregator, groupBy []string, nBuckets *int, bucketBy string, limit *int, limitAggregator *modelInputs.MetricAggregator, limitColumn *string) (*modelInputs.MetricsBuckets, error) {
-	return readMetrics(ctx, client, errorsSampleableTableConfig, projectID, params, column, metricTypes, groupBy, nBuckets, bucketBy, limit, limitAggregator, limitColumn)
+func (client *Client) ReadErrorsMetrics(ctx context.Context, projectID int, params modelInputs.QueryInput, column string, metricTypes []modelInputs.MetricAggregator, groupBy []string, nBuckets *int, bucketBy string, bucketWindow *int, limit *int, limitAggregator *modelInputs.MetricAggregator, limitColumn *string) (*modelInputs.MetricsBuckets, error) {
+	return client.ReadMetrics(ctx, ReadMetricsInput{
+		SampleableConfig: ErrorsSampleableTableConfig,
+		ProjectIDs:       []int{projectID},
+		Params:           params,
+		Column:           column,
+		MetricTypes:      metricTypes,
+		GroupBy:          groupBy,
+		BucketCount:      nBuckets,
+		BucketWindow:     bucketWindow,
+		BucketBy:         bucketBy,
+		Limit:            limit,
+		LimitAggregator:  limitAggregator,
+		LimitColumn:      limitColumn,
+	})
 }
 
-func (client *Client) ErrorsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time) ([]string, error) {
-	var tableName string
-	if ok := modelInputs.ReservedErrorGroupKey(keyName).IsValid(); ok {
-		tableName = ErrorGroupsTable
-	} else if ok := modelInputs.ReservedErrorObjectKey(keyName).IsValid(); ok {
-		tableName = ErrorObjectsTable
-	} else {
-		return nil, fmt.Errorf("unknown error key %s", keyName)
+func (client *Client) ReadWorkspaceErrorCounts(ctx context.Context, projectIDs []int, params modelInputs.QueryInput) (*modelInputs.MetricsBuckets, error) {
+	// 12 buckets - 12 months in a year, or 12 weeks in a quarter
+	return client.ReadMetrics(ctx,
+		ReadMetricsInput{
+			SampleableConfig: ErrorsSampleableTableConfig,
+			ProjectIDs:       projectIDs,
+			Params:           params,
+			Column:           "id",
+			MetricTypes:      []modelInputs.MetricAggregator{modelInputs.MetricAggregatorCount},
+			BucketCount:      pointy.Int(12),
+			BucketBy:         modelInputs.MetricBucketByTimestamp.String(),
+		})
+}
+
+func (client *Client) ErrorsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time, limit *int) ([]string, error) {
+	limitCount := 10
+	if limit != nil {
+		limitCount = *limit
 	}
 
-	return client.QueryErrorFieldValues(ctx, projectID, 10, tableName, keyName, "", startDate, endDate)
+	return client.QueryErrorFieldValues(ctx, projectID, limitCount, keyName, "", startDate, endDate)
+}
+
+func (client *Client) QueryErrorObjectsHistogram(ctx context.Context, projectId int, params modelInputs.QueryInput, options modelInputs.DateHistogramOptions) ([]time.Time, []int64, error) {
+	aggFn, addFn, location, err := getClickhouseHistogramSettings(options)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sb, err := readErrorsObjects(params, projectId)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sb.Select(fmt.Sprintf("%s(Timestamp, '%s') as time, count() as count", aggFn, location.String()))
+	sb.GroupBy("1")
+	sb.OrderBy(fmt.Sprintf("1 WITH FILL FROM %s(?, '%s') TO %s(?, '%s') STEP 1", aggFn, location.String(), aggFn, location.String()))
+
+	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+	args = append(args, *options.Bounds.StartDate, *options.Bounds.EndDate)
+	sql = fmt.Sprintf("SELECT %s(makeDate(0, 0), time), count from (%s)", addFn, sql)
+
+	rows, err := client.conn.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	bucketTimes := []time.Time{}
+	totals := []int64{}
+	for rows.Next() {
+		var time time.Time
+		var total uint64
+		if err := rows.Scan(&time, &total); err != nil {
+			return nil, nil, err
+		}
+		bucketTimes = append(bucketTimes, time)
+		totals = append(totals, int64(total))
+	}
+
+	return bucketTimes, totals, nil
+}
+
+func (client *Client) QueryErrorObjects(ctx context.Context, projectId int, errorGroupId *int, count int, params modelInputs.QueryInput, page *int) ([]int64, int64, error) {
+	pageInt := 1
+	if page != nil {
+		pageInt = *page
+	}
+	offset := (pageInt - 1) * count
+
+	sb, err := readErrorsObjects(params, projectId)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if errorGroupId != nil {
+		sb.Where(sb.Equal("ErrorGroupID", *errorGroupId))
+	}
+
+	sb.Select("ID, count() OVER() AS total")
+	sb.OrderBy("Timestamp DESC")
+	sb.Limit(count)
+	sb.Offset(offset)
+
+	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+	rows, err := client.conn.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ids := []int64{}
+	var total uint64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, int64(total), nil
+}
+
+func (client *Client) QueryErrorGroups(ctx context.Context, projectId int, count int, params modelInputs.QueryInput, page *int) ([]int64, int64, error) {
+	pageInt := 1
+	if page != nil {
+		pageInt = *page
+	}
+	offset := (pageInt - 1) * count
+
+	var sb *sqlbuilder.SelectBuilder
+	var err error
+	sb, err = readErrorGroups(params, projectId)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	sb.Select("ID, count() OVER() AS total")
+	sb.OrderBy("UpdatedAt DESC, ID DESC")
+	sb.Limit(count)
+	sb.Offset(offset)
+
+	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+
+	rows, err := client.conn.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ids := []int64{}
+	var total uint64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id, &total); err != nil {
+			return nil, 0, err
+		}
+		ids = append(ids, id)
+	}
+
+	return ids, int64(total), nil
+}
+
+func readErrorGroups(params modelInputs.QueryInput, projectId int) (*sqlbuilder.SelectBuilder, error) {
+	sb := sqlbuilder.NewSelectBuilder()
+	sb.From(fmt.Sprintf("%s FINAL", ErrorGroupsTableConfig.TableName))
+
+	sbInner := sqlbuilder.NewSelectBuilder()
+	sbInner.Select("ErrorGroupID")
+	sbInner.From(fmt.Sprintf("%s FINAL", ErrorsJoinedTableConfig.TableName))
+	sbInner.Where(sbInner.Equal("ProjectId", projectId))
+
+	sbInner.Where(sbInner.LessEqualThan("Timestamp", params.DateRange.EndDate)).
+		Where(sbInner.GreaterEqualThan("Timestamp", params.DateRange.StartDate))
+
+	parser.AssignSearchFilters(sbInner, params.Query, ErrorsJoinedTableConfig)
+
+	sb.Where(sb.In("ID", sbInner))
+
+	return sb, nil
+}
+
+func readErrorsObjects(params modelInputs.QueryInput, projectId int) (*sqlbuilder.SelectBuilder, error) {
+	sb := sqlbuilder.NewSelectBuilder()
+	sb.From(fmt.Sprintf("%s FINAL", ErrorsJoinedTableConfig.TableName))
+	sb.Where(sb.Equal("ProjectId", projectId))
+
+	sb.Where(sb.LessEqualThan("Timestamp", params.DateRange.EndDate)).
+		Where(sb.GreaterEqualThan("Timestamp", params.DateRange.StartDate))
+
+	parser.AssignSearchFilters(sb, params.Query, ErrorsJoinedTableConfig)
+
+	return sb, nil
+}
+
+func (client *Client) ErrorsLogLines(ctx context.Context, projectID int, params modelInputs.QueryInput) ([]*modelInputs.LogLine, error) {
+	return logLines(ctx, client, ErrorsJoinedTableConfig, projectID, params)
 }
