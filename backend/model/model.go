@@ -1413,6 +1413,7 @@ type Graph struct {
 	GroupByKey        *string
 	BucketByKey       *string
 	BucketCount       *int
+	BucketInterval    *int
 	Limit             *int
 	LimitFunctionType *modelInputs.MetricAggregator
 	LimitMetric       *string
@@ -1428,6 +1429,7 @@ type Visualization struct {
 	UpdatedByAdmin   *Admin        `gorm:"foreignKey:UpdatedByAdminId"`
 	GraphIds         pq.Int32Array `gorm:"type:integer[]"`
 	Graphs           []Graph
+	TimePreset       *string
 }
 
 type VisualizationsResponse struct {
@@ -2439,16 +2441,39 @@ func SendWelcomeSlackMessage(ctx context.Context, obj IAlert, input *SendWelcome
 	return nil
 }
 
+// EnableAllWorkspaceSettings updates all rows to enable enterprise workspace features
+func EnableAllWorkspaceSettings(ctx context.Context, db *gorm.DB) error {
+	if err := db.WithContext(ctx).
+		Model(&AllWorkspaceSettings{}).
+		Where("1 = 1").
+		Updates(&AllWorkspaceSettings{
+			StoreIP:                   true,
+			CanShowBillingIssueBanner: false,
+			EnableUnlimitedDashboards: true,
+			EnableUnlimitedProjects:   true,
+			EnableUnlimitedRetention:  true,
+			EnableUnlimitedSeats:      true,
+			EnableBillingLimits:       true,
+			EnableGrafanaDashboard:    true,
+			EnableIngestSampling:      true,
+			EnableProjectLevelAccess:  true,
+			EnableSessionExport:       true,
+		}).Error; err != nil {
+		return e.Wrap(err, "failed to enable all workspace settings")
+	}
+	return nil
+}
+
 type TableConfig struct {
 	TableName        string
 	BodyColumn       string
 	SeverityColumn   string
 	AttributesColumn string
-	// AttributesList set when AttributesColumn is an array of k,v pairs of attributes
-	AttributesList bool
-	KeysToColumns  map[string]string
-	ReservedKeys   []string
-	SelectColumns  []string
-	DefaultFilter  string
-	IgnoredFilters map[string]bool
+	AttributesTable  string
+	MetricColumn     *string
+	KeysToColumns    map[string]string
+	ReservedKeys     []string
+	SelectColumns    []string
+	DefaultFilter    string
+	IgnoredFilters   map[string]bool
 }

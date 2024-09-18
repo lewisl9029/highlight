@@ -193,7 +193,7 @@ def test_express_error(express_app, oauth_api):
 def test_dotnet_error(dotnet_app, oauth_api):
     start = datetime.utcnow() - timedelta(minutes=1)
     r = requests.get(
-        f"http://localhost:5249/error",
+        f"http://localhost:5249/api/errors",
         headers={"x-highlight-request": "a1b2c30001/aaa111"},
         timeout=30,
     )
@@ -242,7 +242,7 @@ def test_dotnet_error(dotnet_app, oauth_api):
 def test_dotnet_logs(dotnet_app, oauth_api):
     start = datetime.utcnow() - timedelta(minutes=1)
     r = requests.get(
-        f"http://localhost:5249/weatherforecast",
+        f"http://localhost:5249/api/traces",
         headers={"x-highlight-request": "a1b2c30002/aaa112"},
         timeout=30,
     )
@@ -273,7 +273,7 @@ def test_dotnet_logs(dotnet_app, oauth_api):
             assert item["node"]["level"] == "warn"
             assert item["node"]["secureSessionID"] == "a1b2c30002"
             assert item["node"]["traceID"] == "aaa112"
-            assert item["node"]["serviceName"] == "highlight-dot-net-example"
+            assert item["node"]["serviceName"] == "example-dotnet-backend"
             assert item["node"]["serviceVersion"] == ""
 
     query(
@@ -298,7 +298,7 @@ def test_dotnet_logs(dotnet_app, oauth_api):
 def test_dotnet_traces(dotnet_app, oauth_api):
     start = datetime.utcnow() - timedelta(minutes=1)
     r = requests.get(
-        f"http://localhost:5249/weatherforecast",
+        f"http://localhost:5249/api/traces",
         headers={"x-highlight-request": "a1b2c30002/aaa112"},
         timeout=30,
     )
@@ -315,18 +315,23 @@ def test_dotnet_traces(dotnet_app, oauth_api):
             )
         )
 
-        for exp in {"GET /weatherforecast", "SomeWork", "child span"}:
+        for exp in {"GET /api/traces", "SomeWork", "child span"}:
             assert exp in msgs
 
             for item in filter(
                 lambda eg: eg["node"]["spanName"] == exp, data["traces"]["edges"]
             ):
+                logging.info(f"checking item {item}")
                 assert item["node"]["projectID"] == 1
                 assert item["node"]["secureSessionID"] == "a1b2c30002"
                 assert item["node"]["traceID"] == "aaa112"
-                assert item["node"]["serviceName"] == "highlight-dot-net-example"
+                assert item["node"]["serviceName"] == "example-dotnet-backend"
                 assert item["node"]["serviceVersion"] == ""
                 assert item["node"]["duration"] > 1000
+                assert (
+                    item["node"]["traceAttributes"]["telemetry"]["distro"]["name"]
+                    == "Highlight.ASPCore"
+                )
 
     query(
         oauth_api,
@@ -336,7 +341,7 @@ def test_dotnet_traces(dotnet_app, oauth_api):
             "project_id": "1",
             "direction": "DESC",
             "params": {
-                "query": "telemetry.sdk.language=dotnet",
+                "query": "telemetry.sdk.language=dotnet telemetry.distro.name=Highlight.ASPCore",
                 "date_range": {
                     "start_date": f'{start.isoformat(timespec="microseconds")}000-00:00',
                     "end_date": f'{ts.isoformat(timespec="microseconds")}000-00:00',

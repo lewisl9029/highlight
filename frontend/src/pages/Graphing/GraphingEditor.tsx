@@ -8,6 +8,8 @@ import {
 	IconSolidClock,
 	Input,
 	presetStartDate,
+	Select,
+	TagSwitchGroup,
 	Text,
 } from '@highlight-run/ui/components'
 import { useParams } from '@util/react-router/useParams'
@@ -34,6 +36,7 @@ import {
 	MetricAggregator,
 	ProductType,
 } from '@/graph/generated/schemas'
+import useFeatureFlag, { Feature } from '@/hooks/useFeatureFlag/useFeatureFlag'
 import { useProjectId } from '@/hooks/useProjectId'
 import { useSearchTime } from '@/hooks/useSearchTime'
 import { BAR_DISPLAY, BarDisplay } from '@/pages/Graphing/components/BarChart'
@@ -60,14 +63,21 @@ import { HeaderDivider } from '@/pages/Graphing/Dashboard'
 import { Combobox } from './Combobox'
 import {
 	DEFAULT_BUCKET_COUNT,
+	DEFAULT_BUCKET_INTERVAL,
 	FUNCTION_TYPES,
 	PRODUCT_ICONS,
+	PRODUCT_ICONS_WITH_EVENTS,
 	PRODUCTS,
+	PRODUCTS_WITH_EVENTS,
 } from './constants'
 import * as style from './GraphingEditor.css'
 import { LabeledRow } from './LabeledRow'
 import { OptionDropdown } from './OptionDropdown'
 import { BarChartSettings, LineChartSettings, TableSettings } from './Settings'
+import { FREQUENCIES } from '@/pages/Alerts/AlertConfigurationCard/AlertConfigurationConstants'
+
+type BucketBy = 'None' | 'Interval' | 'Count'
+const BUCKET_BY_OPTIONS: BucketBy[] = ['None', 'Interval', 'Count']
 
 const SidebarSection = (props: PropsWithChildren) => {
 	return (
@@ -132,11 +142,39 @@ export const GraphBackgroundWrapper = ({ children }: PropsWithChildren) => {
 	)
 }
 
+const getBucketByKey = (
+	bucketBySetting: BucketBy,
+	bucketByKey: string,
+): string | undefined => {
+	switch (bucketBySetting) {
+		case 'Count':
+			return bucketByKey
+		case 'Interval':
+			return TIMESTAMP_KEY
+		default:
+			return undefined
+	}
+}
+
 export const GraphingEditor: React.FC = () => {
 	const { dashboard_id, graph_id } = useParams<{
 		dashboard_id: string
 		graph_id: string
 	}>()
+
+	const eventSearchEnabled = useFeatureFlag(Feature.EventSearch)
+	const { products, productIcons } = useMemo(() => {
+		if (!eventSearchEnabled) {
+			return {
+				products: PRODUCTS,
+				productIcons: PRODUCT_ICONS,
+			}
+		}
+		return {
+			products: PRODUCTS_WITH_EVENTS,
+			productIcons: PRODUCT_ICONS_WITH_EVENTS,
+		}
+	}, [eventSearchEnabled])
 
 	const isEdit = graph_id !== undefined
 
@@ -171,12 +209,15 @@ export const GraphingEditor: React.FC = () => {
 
 		const graphInput: GraphInput = {
 			visualizationId: dashboard_id!,
-			bucketByKey: bucketByEnabled ? bucketByKey : null,
-			bucketCount: bucketByEnabled ? bucketCount : null,
+			bucketByKey: getBucketByKey(bucketBySetting, bucketByKey) ?? null,
+			bucketCount:
+				bucketBySetting === 'Count' ? Number(bucketCount) : null,
+			bucketInterval:
+				bucketBySetting === 'Interval' ? Number(bucketInterval) : null,
 			display,
 			functionType,
 			groupByKey: groupByEnabled ? groupByKey : null,
-			limit: groupByEnabled ? limit : null,
+			limit: groupByEnabled ? Number(limit) : null,
 			limitFunctionType: groupByEnabled ? limitFunctionType : null,
 			limitMetric: groupByEnabled ? limitMetric : null,
 			metric,
@@ -217,7 +258,7 @@ export const GraphingEditor: React.FC = () => {
 				cache.modify({
 					id: vizId,
 					fields: {
-						graphs(existing: any[] = []) {
+						graphs(existing = []) {
 							return existing.concat([{ __ref: graphId }])
 						},
 					},
@@ -237,12 +278,13 @@ export const GraphingEditor: React.FC = () => {
 		})
 	}
 
-	const { loading: metaLoading } = useGetVisualizationQuery({
+	useGetVisualizationQuery({
 		variables: {
 			id: dashboard_id!,
 		},
 		skip: !isEdit,
 		onCompleted: (data) => {
+			setCompleted(true)
 			const g = data.visualization.graphs.find((g) => g.id === graph_id)
 			if (g === undefined) {
 				return
@@ -271,15 +313,22 @@ export const GraphingEditor: React.FC = () => {
 			setLimitFunctionType(g.limitFunctionType ?? FUNCTION_TYPES[0])
 			setLimit(g.limit ?? 10)
 			setLimitMetric(g.limitMetric ?? '')
-			setBucketByEnabled(g.bucketByKey !== null)
 			setBucketByKey(g.bucketByKey ?? '')
 			setBucketCount(g.bucketCount ?? DEFAULT_BUCKET_COUNT)
+			setBucketInterval(g.bucketInterval ?? DEFAULT_BUCKET_INTERVAL)
+			setBucketBySetting(
+				g.bucketInterval
+					? 'Interval'
+					: g.bucketCount
+						? 'Count'
+						: 'None',
+			)
 		},
 	})
 
 	const { projectId } = useProjectId()
 
-	const [productType, setProductType] = useState(PRODUCTS[0])
+	const [productType, setProductType] = useState(products[0])
 	const [viewType, setViewType] = useState(VIEWS[0])
 	const [functionType, setFunctionType] = useState(FUNCTION_TYPES[0])
 	const [lineNullHandling, setLineNullHandling] = useState(
@@ -310,12 +359,19 @@ export const GraphingEditor: React.FC = () => {
 	const [limitFunctionType, setLimitFunctionType] = useState(
 		FUNCTION_TYPES[0],
 	)
-	const [limit, setLimit] = useState(10)
+	const [limit, setLimit] = useState<number | string>(10)
 	const [limitMetric, setLimitMetric] = useState('')
 
-	const [bucketByEnabled, setBucketByEnabled] = useState(true)
+	const [bucketBySetting, setBucketBySetting] = useState(BUCKET_BY_OPTIONS[2])
 	const [bucketByKey, setBucketByKey] = useState(TIMESTAMP_KEY)
-	const [bucketCount, setBucketCount] = useState(DEFAULT_BUCKET_COUNT)
+	const [bucketCount, setBucketCount] = useState<number | string>(
+		DEFAULT_BUCKET_COUNT,
+	)
+	const [bucketInterval, setBucketInterval] = useState<number | string>(
+		DEFAULT_BUCKET_INTERVAL,
+	)
+
+	const [completed, setCompleted] = useState(!isEdit)
 
 	tempMetricViewTitle.current = useMemo(() => {
 		let newViewTitle = ''
@@ -353,7 +409,7 @@ export const GraphingEditor: React.FC = () => {
 		}
 	}, [endDate, productType, startDate])
 
-	if (metaLoading) {
+	if (!completed) {
 		return null
 	}
 
@@ -434,7 +490,7 @@ export const GraphingEditor: React.FC = () => {
 						display="flex"
 						flexDirection="row"
 						justifyContent="space-between"
-						height="full"
+						cssClass={style.editGraphPanel}
 					>
 						<GraphBackgroundWrapper>
 							<Graph
@@ -451,16 +507,26 @@ export const GraphingEditor: React.FC = () => {
 								query={debouncedQuery}
 								metric={metric}
 								functionType={functionType}
-								bucketByKey={
-									bucketByEnabled ? bucketByKey : undefined
-								}
+								bucketByKey={getBucketByKey(
+									bucketBySetting,
+									bucketByKey,
+								)}
 								bucketCount={
-									bucketByEnabled ? bucketCount : undefined
+									bucketBySetting === 'Count'
+										? Number(bucketCount)
+										: undefined
+								}
+								bucketByWindow={
+									bucketBySetting === 'Interval'
+										? Number(bucketInterval)
+										: undefined
 								}
 								groupByKey={
 									groupByEnabled ? groupByKey : undefined
 								}
-								limit={groupByEnabled ? limit : undefined}
+								limit={
+									groupByEnabled ? Number(limit) : undefined
+								}
 								limitFunctionType={
 									groupByEnabled
 										? limitFunctionType
@@ -507,6 +573,21 @@ export const GraphingEditor: React.FC = () => {
 								<Divider className="m-0" />
 								<SidebarSection>
 									<LabeledRow
+										label="Source"
+										name="source"
+										tooltip="The resource being queried, one of the four highlight.io resources."
+									>
+										<OptionDropdown<ProductType>
+											options={products}
+											selection={productType}
+											setSelection={setProductType}
+											icons={productIcons}
+										/>
+									</LabeledRow>
+								</SidebarSection>
+								<Divider className="m-0" />
+								<SidebarSection>
+									<LabeledRow
 										label="View type"
 										name="viewType"
 									>
@@ -542,21 +623,6 @@ export const GraphingEditor: React.FC = () => {
 											}
 										/>
 									)}
-								</SidebarSection>
-								<Divider className="m-0" />
-								<SidebarSection>
-									<LabeledRow
-										label="Source"
-										name="source"
-										tooltip="The resource being queried, one of the four highlight.io resources."
-									>
-										<OptionDropdown<ProductType>
-											options={PRODUCTS}
-											selection={productType}
-											setSelection={setProductType}
-											icons={PRODUCT_ICONS}
-										/>
-									</LabeledRow>
 								</SidebarSection>
 								<Divider className="m-0" />
 								<SidebarSection>
@@ -645,11 +711,7 @@ export const GraphingEditor: React.FC = () => {
 													placeholder="Enter limit"
 													value={limit}
 													onChange={(e) => {
-														setLimit(
-															Number(
-																e.target.value,
-															),
-														)
+														setLimit(e.target.value)
 													}}
 													cssClass={style.input}
 												/>
@@ -691,36 +753,73 @@ export const GraphingEditor: React.FC = () => {
 									<LabeledRow
 										label="Bucket by"
 										name="bucketBy"
-										enabled={bucketByEnabled}
-										setEnabled={setBucketByEnabled}
-										tooltip="A numeric field for bucketing results along the X-axis. Timestamp for time series charts, numeric fields for histograms, can be disabled to aggregate all results within the time range."
+										tooltip="The method for determining the bucket sizes - can be a fixed interval or fixed count."
 									>
-										<Combobox
-											selection={bucketByKey}
-											setSelection={setBucketByKey}
-											label="bucketBy"
-											searchConfig={searchOptionsConfig}
-											defaultKeys={[TIMESTAMP_KEY]}
-											onlyNumericKeys
+										<TagSwitchGroup
+											options={BUCKET_BY_OPTIONS}
+											defaultValue={bucketBySetting}
+											onChange={(o: string | number) => {
+												setBucketBySetting(
+													o as BucketBy,
+												)
+											}}
+											cssClass={style.tagSwitch}
 										/>
 									</LabeledRow>
-									{bucketByEnabled && (
+									{bucketBySetting === 'Count' && (
+										<>
+											<LabeledRow
+												label="Bucket field"
+												name="bucketField"
+												tooltip="A numeric field for bucketing results along the X-axis. Timestamp for time series charts, numeric fields for histograms, can be disabled to aggregate all results within the time range."
+											>
+												<Combobox
+													selection={bucketByKey}
+													setSelection={
+														setBucketByKey
+													}
+													label="bucketBy"
+													searchConfig={
+														searchOptionsConfig
+													}
+													defaultKeys={[
+														TIMESTAMP_KEY,
+													]}
+													onlyNumericKeys
+												/>
+											</LabeledRow>
+											<LabeledRow
+												label="Buckets"
+												name="bucketCount"
+												tooltip="The number of X-axis buckets. A higher value will display smaller, more granular buckets."
+											>
+												<Input
+													type="number"
+													name="bucketCount"
+													placeholder="Enter bucket count"
+													value={bucketCount}
+													onChange={(e) => {
+														setBucketCount(
+															e.target.value,
+														)
+													}}
+													cssClass={style.input}
+												/>
+											</LabeledRow>
+										</>
+									)}
+									{bucketBySetting === 'Interval' && (
 										<LabeledRow
-											label="Buckets"
-											name="bucketCount"
+											label="Bucket interval"
+											name="bucketInterval"
 											tooltip="The number of X-axis buckets. A higher value will display smaller, more granular buckets."
 										>
-											<Input
-												type="number"
-												name="bucketCount"
-												placeholder="Enter bucket count"
-												value={bucketCount}
-												onChange={(e) => {
-													setBucketCount(
-														Number(e.target.value),
-													)
+											<Select
+												options={FREQUENCIES}
+												value={bucketInterval}
+												onValueChange={(o) => {
+													setBucketInterval(o.value)
 												}}
-												cssClass={style.input}
 											/>
 										</LabeledRow>
 									)}

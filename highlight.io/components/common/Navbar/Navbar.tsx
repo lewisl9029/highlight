@@ -1,4 +1,3 @@
-import { DocSearch } from '@docsearch/react'
 import classNames from 'classnames'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
@@ -15,10 +14,10 @@ import { Typography } from '../Typography/Typography'
 import styles from './Navbar.module.scss'
 import ResourceDropdown from './ResourceDropdown'
 
-import '@docsearch/css'
 import moment from 'moment'
 import Banner from '../Banner/Banner'
 import FeatureDropdown from './FeatureDropdown'
+import InkeepSearchBar from './InkeepSearchBar'
 
 const LaunchWeekBanner = () => {
 	const bannerMessage = (
@@ -41,15 +40,15 @@ const LaunchWeekBanner = () => {
 const LivestreamBanner = () => {
 	return (
 		<Link
-			href="https://lu.ma/bvnkoy5v"
+			href="https://lu.ma/51zg6p43?utm_source=highlight-banner"
 			target="_blank"
 			rel="noreferrer"
-			className="hidden md:flex justify-center items-center w-full h-[40px] bg-color-primary-200 text-white hover:bg-opacity-90"
+			className="hidden md:flex text-center justify-center items-center w-full py-2.5 px-3 bg-color-primary-200 text-white hover:bg-opacity-90"
 		>
 			<Typography type="copy3">
-				Join our livestream: July 2nd at 1pm PDT on Evaluating LLMs with
-				OpenLLMetry. Register
-				<span className="font-semibold"> here</span>.
+				Join our livestream: September 5th at 1pm PT on Fullstack
+				Monitoring for .NET Applications with OpenTelemetry. Register{' '}
+				<span className="font-semibold underline">here</span>.
 			</Typography>
 		</Link>
 	)
@@ -126,7 +125,7 @@ const Navbar = ({
 				isLaunchWeek ? (
 					<LaunchWeekBanner />
 				) : (
-					<HFSBanner />
+					<LivestreamBanner />
 				)
 			) : null}
 			<div
@@ -185,14 +184,7 @@ const Navbar = ({
 									{title}
 								</p>
 							</Typography>
-							{isDocsPage && (
-								<DocSearch
-									placeholder="Search the highlight.io docs"
-									appId="JGT9LI80J2"
-									indexName="highlight"
-									apiKey="ac336720d8f4f996abe3adee603a1c84"
-								/>
-							)}
+							{isDocsPage && <InkeepSearchBar />}
 						</div>
 						<div
 							className={styles.navMenu}

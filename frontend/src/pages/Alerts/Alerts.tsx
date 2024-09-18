@@ -7,7 +7,6 @@ import {
 	Container,
 	Heading,
 	IconSolidChartBar,
-	IconSolidCheveronDown,
 	IconSolidCheveronRight,
 	IconSolidDiscord,
 	IconSolidExclamation,
@@ -15,12 +14,10 @@ import {
 	IconSolidLightningBolt,
 	IconSolidLogs,
 	IconSolidMicrosoftTeams,
-	IconSolidPlay,
 	IconSolidPlayCircle,
 	IconSolidPlus,
 	IconSolidRefresh,
 	IconSolidTraces,
-	Menu,
 	Stack,
 	Tag,
 	Text,
@@ -43,7 +40,6 @@ import { RiMailFill, RiSlackFill } from 'react-icons/ri'
 import { useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/Button'
-import { Link } from '@/components/Link'
 import { LinkButton } from '@/components/LinkButton'
 import {
 	AlertDestination,
@@ -53,7 +49,6 @@ import {
 	ProductType,
 	SanitizedSlackChannel,
 } from '@/graph/generated/schemas'
-import useFeatureFlag, { Feature } from '@/hooks/useFeatureFlag/useFeatureFlag'
 
 import styles from './Alerts.module.css'
 
@@ -178,7 +173,7 @@ export const ALERT_CONFIGURATIONS: { [key: string]: AlertConfiguration } = {
 		supportsExcludeRules: true,
 	},
 } as const
-const WALKTHROUGH_LINK = 'TODO'
+
 const ALERTS_DOCS_LINK =
 	'https://www.highlight.io/docs/general/product-features/general-features/alerts'
 
@@ -278,7 +273,6 @@ function AlertsPageLoaded({
 	)
 	const { project_id } = useParams<{ project_id: string }>()
 	const navigate = useNavigate()
-	const metricAlertsEnabled = useFeatureFlag(Feature.MetricAlerts)
 
 	const navigateToAlert = (record: any) => {
 		if (record.configuration.name === ALERT_NAMES['ALERT']) {
@@ -374,7 +368,9 @@ function AlertsPageLoaded({
 						</Heading>
 						<Text weight="medium" size="small" color="default">
 							Manage all the alerts for your currently selected
-							project.
+							project. Get notified when errors occur or important
+							metric conditions are met. Learn more about building
+							alerts <a href={ALERTS_DOCS_LINK}>here</a>.
 						</Text>
 					</Stack>
 					<Stack gap="8" width="full">
@@ -387,21 +383,17 @@ function AlertsPageLoaded({
 							<Text weight="bold" size="small" color="strong">
 								All alerts
 							</Text>
-							{metricAlertsEnabled ? (
-								<Button
-									trackingId="alerts-page-add-alert-button"
-									onClick={() =>
-										navigate(`/${project_id}/alerts/new`)
-									}
-									iconLeft={<IconSolidPlus />}
-									kind="secondary"
-									emphasis="low"
-								>
-									Add Alert
-								</Button>
-							) : (
-								<NewAlertMenu />
-							)}
+							<Button
+								trackingId="alerts-page-add-alert-button"
+								onClick={() =>
+									navigate(`/${project_id}/alerts/new`)
+								}
+								iconLeft={<IconSolidPlus />}
+								kind="secondary"
+								emphasis="low"
+							>
+								Add Alert
+							</Button>
 						</Box>
 						{visible && (
 							<Callout
@@ -412,29 +404,19 @@ function AlertsPageLoaded({
 							>
 								<Stack gap="16">
 									<Text>
-										Be sure to take a look at the docs, and
-										the walkthrough coming soon!
+										Be sure to take a look at the docs, or
+										watch the walkthrough video!
 									</Text>
-									<Stack flexDirection="row" gap="8">
+									<Box>
 										<LinkButton
 											kind="secondary"
 											emphasis="high"
-											trackingId="alerts-watch-walkthrough"
-											to={WALKTHROUGH_LINK}
-											iconLeft={<IconSolidPlay />}
-											disabled
-										>
-											Watch walkthrough
-										</LinkButton>
-										<LinkButton
 											trackingId="alerts-read-docs"
-											kind="secondary"
-											emphasis="low"
 											to={ALERTS_DOCS_LINK}
 										>
-											Read docs
+											Learn more
 										</LinkButton>
-									</Stack>
+									</Box>
 								</Stack>
 							</Callout>
 						)}
@@ -706,50 +688,4 @@ const AlertIcon = ({ type, disabled }: { type: string; disabled: boolean }) => {
 		default:
 			return <IconSolidPlayCircle size="20" color={color} />
 	}
-}
-
-function NewAlertMenu() {
-	const { project_id } = useParams<{ project_id: string }>()
-
-	const NEW_ALERT_OPTIONS = [
-		{
-			title: 'Session alert',
-			icon: <IconSolidPlayCircle />,
-			href: `/${project_id}/alerts/session/new`,
-		},
-		{
-			title: 'Error alert',
-			icon: <IconSolidLightningBolt />,
-			href: `/${project_id}/alerts/errors/new`,
-		},
-		{
-			title: 'Log alert',
-			icon: <IconSolidLogs />,
-			href: `/${project_id}/alerts/logs/new`,
-		},
-	]
-	return (
-		<Menu>
-			<Menu.Button iconRight={<IconSolidCheveronDown />}>
-				Create new alert
-			</Menu.Button>
-			<Menu.List>
-				{NEW_ALERT_OPTIONS.map((option) => (
-					<Link key={option.title} to={option.href}>
-						<Menu.Item>
-							<Box
-								display="flex"
-								alignItems="center"
-								gap="4"
-								py="2"
-							>
-								{option.icon}
-								<Text>{option.title}</Text>
-							</Box>
-						</Menu.Item>
-					</Link>
-				))}
-			</Menu.List>
-		</Menu>
-	)
 }

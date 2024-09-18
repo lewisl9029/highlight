@@ -7862,6 +7862,7 @@ export const GetSessionUsersReportsDocument = gql`
 	query GetSessionUsersReports($project_id: ID!, $params: QueryInput!) {
 		session_users_report(project_id: $project_id, params: $params) {
 			key
+			email
 			num_sessions
 			num_days_visited
 			num_months_visited
@@ -13864,61 +13865,6 @@ export type GetSessionLogsQueryResult = Apollo.QueryResult<
 	Types.GetSessionLogsQuery,
 	Types.GetSessionLogsQueryVariables
 >
-export const GetLogsTotalCountDocument = gql`
-	query GetLogsTotalCount($project_id: ID!, $params: QueryInput!) {
-		logs_total_count(project_id: $project_id, params: $params)
-	}
-`
-
-/**
- * __useGetLogsTotalCountQuery__
- *
- * To run a query within a React component, call `useGetLogsTotalCountQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetLogsTotalCountQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetLogsTotalCountQuery({
- *   variables: {
- *      project_id: // value for 'project_id'
- *      params: // value for 'params'
- *   },
- * });
- */
-export function useGetLogsTotalCountQuery(
-	baseOptions: Apollo.QueryHookOptions<
-		Types.GetLogsTotalCountQuery,
-		Types.GetLogsTotalCountQueryVariables
-	>,
-) {
-	return Apollo.useQuery<
-		Types.GetLogsTotalCountQuery,
-		Types.GetLogsTotalCountQueryVariables
-	>(GetLogsTotalCountDocument, baseOptions)
-}
-export function useGetLogsTotalCountLazyQuery(
-	baseOptions?: Apollo.LazyQueryHookOptions<
-		Types.GetLogsTotalCountQuery,
-		Types.GetLogsTotalCountQueryVariables
-	>,
-) {
-	return Apollo.useLazyQuery<
-		Types.GetLogsTotalCountQuery,
-		Types.GetLogsTotalCountQueryVariables
-	>(GetLogsTotalCountDocument, baseOptions)
-}
-export type GetLogsTotalCountQueryHookResult = ReturnType<
-	typeof useGetLogsTotalCountQuery
->
-export type GetLogsTotalCountLazyQueryHookResult = ReturnType<
-	typeof useGetLogsTotalCountLazyQuery
->
-export type GetLogsTotalCountQueryResult = Apollo.QueryResult<
-	Types.GetLogsTotalCountQuery,
-	Types.GetLogsTotalCountQueryVariables
->
 export const GetLogsHistogramDocument = gql`
 	query GetLogsHistogram($project_id: ID!, $params: QueryInput!) {
 		logs_histogram(project_id: $project_id, params: $params) {
@@ -14816,11 +14762,13 @@ export const GetTraceDocument = gql`
 	query GetTrace(
 		$project_id: ID!
 		$trace_id: String!
+		$timestamp: Timestamp!
 		$session_secure_id: String
 	) {
 		trace(
 			project_id: $project_id
 			trace_id: $trace_id
+			timestamp: $timestamp
 			session_secure_id: $session_secure_id
 		) {
 			trace {
@@ -14878,6 +14826,7 @@ export const GetTraceDocument = gql`
  *   variables: {
  *      project_id: // value for 'project_id'
  *      trace_id: // value for 'trace_id'
+ *      timestamp: // value for 'timestamp'
  *      session_secure_id: // value for 'session_secure_id'
  *   },
  * });
@@ -15184,12 +15133,16 @@ export const GetKeyValuesDocument = gql`
 		$project_id: ID!
 		$key_name: String!
 		$date_range: DateRangeRequiredInput!
+		$query: String!
+		$count: Int!
 	) {
 		key_values(
 			product_type: $product_type
 			project_id: $project_id
 			key_name: $key_name
 			date_range: $date_range
+			query: $query
+			count: $count
 		)
 	}
 `
@@ -15210,6 +15163,8 @@ export const GetKeyValuesDocument = gql`
  *      project_id: // value for 'project_id'
  *      key_name: // value for 'key_name'
  *      date_range: // value for 'date_range'
+ *      query: // value for 'query'
+ *      count: // value for 'count'
  *   },
  * });
  */
@@ -15352,6 +15307,7 @@ export const GetVisualizationDocument = gql`
 			updatedAt
 			projectId
 			name
+			timePreset
 			graphs {
 				id
 				type
@@ -15363,6 +15319,7 @@ export const GetVisualizationDocument = gql`
 				groupByKey
 				bucketByKey
 				bucketCount
+				bucketInterval
 				limit
 				limitFunctionType
 				limitMetric
@@ -15446,6 +15403,7 @@ export const GetVisualizationsDocument = gql`
 				updatedAt
 				projectId
 				name
+				timePreset
 				graphs {
 					id
 					type
@@ -15457,6 +15415,7 @@ export const GetVisualizationsDocument = gql`
 					groupByKey
 					bucketByKey
 					bucketCount
+					bucketInterval
 					limit
 					limitFunctionType
 					limitMetric

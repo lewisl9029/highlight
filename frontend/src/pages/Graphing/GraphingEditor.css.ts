@@ -6,7 +6,7 @@ export const editGraphHeader = style({
 })
 
 export const editGraphPanel = style({
-	height: '100%',
+	height: 'calc(100% - 40px)',
 })
 
 export const previewWindow = style({
@@ -35,4 +35,8 @@ export const graphWrapper = style({
 	margin: 'auto',
 	zIndex: 1,
 	backgroundColor: vars.color.white,
+})
+
+export const tagSwitch = style({
+	width: '100%',
 })

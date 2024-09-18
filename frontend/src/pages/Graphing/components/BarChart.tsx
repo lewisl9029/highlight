@@ -1,8 +1,8 @@
 import { useId } from 'react'
 import {
 	Bar,
-	BarChart as RechartsBarChart,
 	CartesianGrid,
+	BarChart as RechartsBarChart,
 	ResponsiveContainer,
 	XAxis,
 	YAxis,
@@ -131,16 +131,6 @@ export const BarChart = ({
 					hide={showXAxis === false}
 				/>
 
-				{/* <Tooltip
-					content={getCustomTooltip(
-						xAxisMetric,
-						yAxisMetric,
-						yAxisFunction,
-					)}
-					wrapperStyle={{ zIndex: 100 }}
-					cursor={{ fill: '#C8C7CB', fillOpacity: 0.5 }}
-					isAnimationActive={false}
-				/> */}
 				{tooltip}
 
 				<YAxis

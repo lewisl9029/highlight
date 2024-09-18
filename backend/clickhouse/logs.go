@@ -197,7 +197,7 @@ func (client *Client) ReadLogs(ctx context.Context, projectID int, params modelI
 
 // This is a lighter weight version of the previous function for loading the minimal about of data for a session
 func (client *Client) ReadSessionLogs(ctx context.Context, projectID int, params modelInputs.QueryInput) ([]*modelInputs.LogEdge, error) {
-	sb, err := makeSelectBuilder(
+	sb, _, err := makeSelectBuilder(
 		LogsTableConfig,
 		LogsTableConfig.SelectColumns,
 		[]int{projectID},
@@ -267,7 +267,7 @@ func (client *Client) ReadSessionLogs(ctx context.Context, projectID int, params
 }
 
 func (client *Client) ReadLogsTotalCount(ctx context.Context, projectID int, params modelInputs.QueryInput) (uint64, error) {
-	sb, err := makeSelectBuilder(
+	sb, _, err := makeSelectBuilder(
 		LogsTableConfig,
 		[]string{"COUNT(*)"},
 		[]int{projectID},
@@ -353,7 +353,7 @@ func (client *Client) ReadLogsHistogram(ctx context.Context, projectID int, para
 	var fromSb *sqlbuilder.SelectBuilder
 	var err error
 	if params.DateRange.EndDate.Sub(params.DateRange.StartDate) >= 24*time.Hour {
-		fromSb, err = makeSelectBuilder(
+		fromSb, _, err = makeSelectBuilder(
 			logsSamplingTableConfig,
 			[]string{bucketIdxExpr, "toUInt64(round(count() * any(_sample_factor)))", "any(_sample_factor)"},
 			[]int{projectID},
@@ -361,7 +361,7 @@ func (client *Client) ReadLogsHistogram(ctx context.Context, projectID int, para
 			Pagination{CountOnly: true},
 		)
 	} else {
-		fromSb, err = makeSelectBuilder(
+		fromSb, _, err = makeSelectBuilder(
 			LogsTableConfig,
 			[]string{bucketIdxExpr, "count()", "1.0"},
 			[]int{projectID},
@@ -502,8 +502,8 @@ func (client *Client) LogsKeys(ctx context.Context, projectID int, startDate tim
 	return logKeys, nil
 }
 
-func (client *Client) LogsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time, limit *int) ([]string, error) {
-	return KeyValuesAggregated(ctx, client, LogKeyValuesTable, projectID, keyName, startDate, endDate, limit)
+func (client *Client) LogsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time, query *string, limit *int) ([]string, error) {
+	return KeyValuesAggregated(ctx, client, LogKeyValuesTable, projectID, keyName, startDate, endDate, query, limit)
 }
 
 func LogMatchesQuery(logRow *LogRow, filters listener.Filters) bool {

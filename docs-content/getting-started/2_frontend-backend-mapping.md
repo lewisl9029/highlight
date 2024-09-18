@@ -53,13 +53,21 @@ Backend changes are dependent on the underlying language/framework used on the s
 
 Below are solutions for what we support today. If you'd like us to support a new framework, feel free to shoot us a message at [support@highlight.io](mailto:support@highlight.io) or drop us a note in our [discord](https://discord.gg/yxaXEAqgwN).
 
-- [Go Backend Integration](4_backend-sdk/go)
+- [Go Backend Integration](4_backend-sdk/01_go)
 
-- [JS Backend Integration](4_backend-sdk/js)
+- [Java Backend Integration](4_backend-sdk/02_java)
 
-- [Python Backend Integration](4_backend-sdk/python)
+- [JS Backend Integration](4_backend-sdk/03_js)
 
-- [Java Backend Integration](4_backend-sdk/java)
+- [JS Backend Integration](4_backend-sdk/04_php)
+
+- [Python Backend Integration](4_backend-sdk/05_python)
+
+- [Python Backend Integration](4_backend-sdk/06_ruby)
+
+- [Python Backend Integration](4_backend-sdk/07_rust)
+
+- [Python Backend Integration](4_backend-sdk/08_dotnet.md)
 
 ## Distributed Tracing
 
@@ -85,6 +93,10 @@ error wrapping or logging code as per usual.
 const parsed = H.parseHeaders(request.headers)
 H.consumeError(error, parsed.secureSessionId, parsed.requestId)
 ```
+
+### Context Propogation Using OpenTelemetry
+
+In addition to the `x-highlight-request` header, we are also working on a way of leveraging [OpenTelemetry's context propogation](https://opentelemetry.io/docs/concepts/context-propagation/) to connect resources across across distributed systems. Check out our [Client SDK OpenTelemetry docs](https://highlight.io/docs/getting-started/3_client-sdk/7_replay-configuration/opentelemetry.md) to learn more.
 
 ## Troubleshooting
 

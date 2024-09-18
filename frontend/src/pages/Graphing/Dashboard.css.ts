@@ -42,7 +42,6 @@ export const graphGrid = style({
 	width: '100%',
 	height: '100%',
 	padding: '8px 28px',
-	gridTemplateRows: 'repeat(auto-fill, 280px)',
 
 	'@media': {
 		[`(width <= 850px)`]: {
@@ -55,10 +54,6 @@ export const graphGrid = style({
 			gridTemplateColumns: '1fr 1fr 1fr',
 		},
 	},
-})
-
-export const gridEditing = style({
-	backgroundColor: vars.theme.static.surface.raised,
 })
 
 globalStyle(`${menuButton} > div`, {

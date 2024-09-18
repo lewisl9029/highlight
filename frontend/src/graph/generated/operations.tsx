@@ -2557,6 +2557,7 @@ export type GetSessionUsersReportsQuery = { __typename?: 'Query' } & {
 		{ __typename?: 'SessionsReportRow' } & Pick<
 			Types.SessionsReportRow,
 			| 'key'
+			| 'email'
 			| 'num_sessions'
 			| 'num_days_visited'
 			| 'num_months_visited'
@@ -4720,16 +4721,6 @@ export type GetSessionLogsQuery = { __typename?: 'Query' } & {
 	>
 }
 
-export type GetLogsTotalCountQueryVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-	params: Types.QueryInput
-}>
-
-export type GetLogsTotalCountQuery = { __typename?: 'Query' } & Pick<
-	Types.Query,
-	'logs_total_count'
->
-
 export type GetLogsHistogramQueryVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
 	params: Types.QueryInput
@@ -5046,6 +5037,7 @@ export type MatchErrorTagQuery = { __typename?: 'Query' } & {
 export type GetTraceQueryVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
 	trace_id: Types.Scalars['String']
+	timestamp: Types.Scalars['Timestamp']
 	session_secure_id?: Types.Maybe<Types.Scalars['String']>
 }>
 
@@ -5213,6 +5205,8 @@ export type GetKeyValuesQueryVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
 	key_name: Types.Scalars['String']
 	date_range: Types.DateRangeRequiredInput
+	query: Types.Scalars['String']
+	count: Types.Scalars['Int']
 }>
 
 export type GetKeyValuesQuery = { __typename?: 'Query' } & Pick<
@@ -5261,7 +5255,7 @@ export type GetVisualizationQueryVariables = Types.Exact<{
 export type GetVisualizationQuery = { __typename?: 'Query' } & {
 	visualization: { __typename?: 'Visualization' } & Pick<
 		Types.Visualization,
-		'id' | 'updatedAt' | 'projectId' | 'name'
+		'id' | 'updatedAt' | 'projectId' | 'name' | 'timePreset'
 	> & {
 			graphs: Array<
 				{ __typename?: 'Graph' } & Pick<
@@ -5276,6 +5270,7 @@ export type GetVisualizationQuery = { __typename?: 'Query' } & {
 					| 'groupByKey'
 					| 'bucketByKey'
 					| 'bucketCount'
+					| 'bucketInterval'
 					| 'limit'
 					| 'limitFunctionType'
 					| 'limitMetric'
@@ -5307,7 +5302,7 @@ export type GetVisualizationsQuery = { __typename?: 'Query' } & {
 			results: Array<
 				{ __typename?: 'Visualization' } & Pick<
 					Types.Visualization,
-					'id' | 'updatedAt' | 'projectId' | 'name'
+					'id' | 'updatedAt' | 'projectId' | 'name' | 'timePreset'
 				> & {
 						graphs: Array<
 							{ __typename?: 'Graph' } & Pick<
@@ -5322,6 +5317,7 @@ export type GetVisualizationsQuery = { __typename?: 'Query' } & {
 								| 'groupByKey'
 								| 'bucketByKey'
 								| 'bucketCount'
+								| 'bucketInterval'
 								| 'limit'
 								| 'limitFunctionType'
 								| 'limitMetric'
@@ -5485,7 +5481,6 @@ export const namedOperations = {
 		GetEmailOptOuts: 'GetEmailOptOuts' as const,
 		GetLogs: 'GetLogs' as const,
 		GetSessionLogs: 'GetSessionLogs' as const,
-		GetLogsTotalCount: 'GetLogsTotalCount' as const,
 		GetLogsHistogram: 'GetLogsHistogram' as const,
 		GetLogsRelatedResources: 'GetLogsRelatedResources' as const,
 		GetProjectSettings: 'GetProjectSettings' as const,

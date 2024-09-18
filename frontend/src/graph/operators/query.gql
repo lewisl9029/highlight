@@ -599,6 +599,7 @@ query GetSessionsHistogram(
 query GetSessionUsersReports($project_id: ID!, $params: QueryInput!) {
 	session_users_report(project_id: $project_id, params: $params) {
 		key
+		email
 		num_sessions
 		num_days_visited
 		num_months_visited
@@ -2135,10 +2136,6 @@ query GetSessionLogs($project_id: ID!, $params: QueryInput!) {
 	}
 }
 
-query GetLogsTotalCount($project_id: ID!, $params: QueryInput!) {
-	logs_total_count(project_id: $project_id, params: $params)
-}
-
 query GetLogsHistogram($project_id: ID!, $params: QueryInput!) {
 	logs_histogram(project_id: $project_id, params: $params) {
 		totalCount
@@ -2381,11 +2378,13 @@ query MatchErrorTag($query: String!) {
 query GetTrace(
 	$project_id: ID!
 	$trace_id: String!
+	$timestamp: Timestamp!
 	$session_secure_id: String
 ) {
 	trace(
 		project_id: $project_id
 		trace_id: $trace_id
+		timestamp: $timestamp
 		session_secure_id: $session_secure_id
 	) {
 		trace {
@@ -2538,12 +2537,16 @@ query GetKeyValues(
 	$project_id: ID!
 	$key_name: String!
 	$date_range: DateRangeRequiredInput!
+	$query: String!
+	$count: Int!
 ) {
 	key_values(
 		product_type: $product_type
 		project_id: $project_id
 		key_name: $key_name
 		date_range: $date_range
+		query: $query
+		count: $count
 	)
 }
 
@@ -2594,6 +2597,7 @@ query GetVisualization($id: ID!) {
 		updatedAt
 		projectId
 		name
+		timePreset
 		graphs {
 			id
 			type
@@ -2605,6 +2609,7 @@ query GetVisualization($id: ID!) {
 			groupByKey
 			bucketByKey
 			bucketCount
+			bucketInterval
 			limit
 			limitFunctionType
 			limitMetric
@@ -2638,6 +2643,7 @@ query GetVisualizations(
 			updatedAt
 			projectId
 			name
+			timePreset
 			graphs {
 				id
 				type
@@ -2649,6 +2655,7 @@ query GetVisualizations(
 				groupByKey
 				bucketByKey
 				bucketCount
+				bucketInterval
 				limit
 				limitFunctionType
 				limitMetric
