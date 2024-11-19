@@ -305,7 +305,7 @@
         "./styles.css": "./noop.ts",
       },
       "storybookCompatibility": {
-        "testStories": false,
+        "testStories": true,
       },
       "npmPackages": {
         "ariakit": {
