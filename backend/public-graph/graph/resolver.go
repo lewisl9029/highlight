@@ -21,6 +21,7 @@ import (
 
 	"github.com/highlight-run/highlight/backend/env"
 	"github.com/highlight-run/highlight/backend/geolocation"
+	kafkaqueue "github.com/highlight-run/highlight/backend/kafka-queue"
 	"github.com/oschwald/geoip2-golang"
 
 	"go.opentelemetry.io/otel/codes"
@@ -225,8 +226,14 @@ func init() {
 	}
 }
 
+type AppendProperty struct {
+	Key       string
+	Value     string
+	Timestamp time.Time
+}
+
 // Change to AppendProperties(sessionId,properties,type)
-func (r *Resolver) AppendProperties(ctx context.Context, sessionID int, properties map[string]string, propType Property) error {
+func (r *Resolver) AppendProperties(ctx context.Context, sessionID int, properties []AppendProperty, propType Property) error {
 	outerSpan, ctx := util.StartSpanFromContext(ctx, "public-graph.AppendProperties",
 		util.ResourceName("go.sessions.AppendProperties"), util.Tag("sessionID", sessionID))
 	defer outerSpan.Finish()
@@ -244,16 +251,16 @@ func (r *Resolver) AppendProperties(ctx context.Context, sessionID int, properti
 		util.ResourceName("processProperties"), util.Tag("num_properties", len(properties)))
 	var modelFields []*model.Field
 	projectID := session.ProjectID
-	for k, fv := range properties {
-		if len(fv) > SESSION_FIELD_MAX_LENGTH {
-			log.WithContext(ctx).Warnf("property %s from session %d exceeds max expected field length, skipping", k, sessionID)
-		} else if fv == "" {
+	for _, fv := range properties {
+		if len(fv.Value) > SESSION_FIELD_MAX_LENGTH {
+			log.WithContext(ctx).Warnf("property %s from session %d exceeds max expected field length, skipping", fv.Key, sessionID)
+		} else if fv.Value == "" {
 			// Skip when the field value is blank
-		} else if NumberRegex.MatchString(k) {
+		} else if NumberRegex.MatchString(fv.Key) {
 			// Skip when the field name is a number
 			// (this can be sent by clients if a string is passed as an `addProperties` payload)
 		} else {
-			modelFields = append(modelFields, &model.Field{ProjectID: projectID, Name: k, Value: fv, Type: string(propType)})
+			modelFields = append(modelFields, &model.Field{ProjectID: projectID, Name: fv.Key, Value: fv.Value, Type: string(propType), Timestamp: fv.Timestamp})
 		}
 	}
 
@@ -290,11 +297,11 @@ func (r *Resolver) AppendProperties(ctx context.Context, sessionID int, properti
 	return nil
 }
 
-func (r *Resolver) CreateSessionEvents(ctx context.Context, sessionID int, events []*clickhouse.SessionEventRow) error {
-	outerSpan, ctxT := util.StartSpanFromContext(ctx, "public-graph.CreateSessionEvents", util.Tag("sessionID", sessionID))
+func (r *Resolver) SubmitSessionEvents(ctx context.Context, sessionID int, events []*clickhouse.SessionEventRow) error {
+	outerSpan, ctxT := util.StartSpanFromContext(ctx, "public-graph.SubmitSessionEvents", util.Tag("sessionID", sessionID))
 	defer outerSpan.Finish()
 
-	loadSessionSpan, ctxS := util.StartSpanFromContext(ctxT, "public-graph.CreateSessionEvents.loadSessions", util.Tag("sessionID", sessionID))
+	loadSessionSpan, ctxS := util.StartSpanFromContext(ctxT, "public-graph.SubmitSessionEvents.loadSessions", util.Tag("sessionID", sessionID))
 	session := &model.Session{}
 	res := r.DB.WithContext(ctxS).Where(&model.Session{Model: model.Model{ID: sessionID}}).Take(&session)
 	if err := res.Error; err != nil {
@@ -302,25 +309,26 @@ func (r *Resolver) CreateSessionEvents(ctx context.Context, sessionID int, event
 	}
 	loadSessionSpan.Finish()
 
-	clickhouseSpan, ctxW := util.StartSpanFromContext(ctxT, "public-graph.CreateSessionEvents.flush.sessionEvents")
-	clickhouseSpan.SetAttribute("NumSessionEventRows", len(events))
-	defer clickhouseSpan.Finish()
-
-	sessionEvents := []*clickhouse.SessionEventRow{}
+	var messages []kafkaqueue.RetryableMessage
 	for _, event := range events {
-		sessionEvents = append(sessionEvents, &clickhouse.SessionEventRow{
+		sessionEvent := &clickhouse.SessionEventRow{
 			ProjectID:        uint32(session.ProjectID),
 			SessionID:        uint64(session.ID),
-			SessionCreatedAt: session.CreatedAt,
+			SessionCreatedAt: session.CreatedAt.UnixMicro(),
 			Timestamp:        event.Timestamp,
 			Event:            event.Event,
 			Attributes:       event.Attributes,
+		}
+
+		messages = append(messages, &kafkaqueue.SessionEventRowMessage{
+			Type:            kafkaqueue.PushSessionEvents,
+			SessionEventRow: sessionEvent,
 		})
 	}
 
-	err := r.Clickhouse.BatchWriteSessionEventRows(ctxW, sessionEvents)
+	err := r.DataSyncQueue.Submit(ctx, "", messages...)
 	if err != nil {
-		return e.Wrap(err, "error writing session events to clickhouse")
+		return e.Wrap(err, "failed to submit session events to public worker queue")
 	}
 
 	return nil
@@ -460,6 +468,9 @@ func (r *Resolver) tagErrorGroup(ctx context.Context, errorObj *model.ErrorObjec
 }
 
 func (r *Resolver) GetOrCreateErrorGroup(ctx context.Context, errorObj *model.ErrorObject, matchFn func() (*int, error), onCreateGroup func(int) error, tagGroup bool) (*model.ErrorGroup, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "resolver.GetOrCreateErrorGroup", util.Tag("error_object_id", errorObj.ID))
+	defer span.Finish()
+
 	match, err := matchFn()
 	if err != nil {
 		return nil, err
@@ -495,7 +506,6 @@ func (r *Resolver) GetOrCreateErrorGroup(ctx context.Context, errorObj *model.Er
 			MappedStackTrace: errorObj.MappedStackTrace,
 			Type:             errorObj.Type,
 			State:            privateModel.ErrorStateOpen,
-			Fields:           []*model.ErrorField{},
 			Environments:     environmentsString,
 			ServiceName:      errorObj.ServiceName,
 		}
@@ -557,7 +567,7 @@ func (r *Resolver) GetOrCreateErrorGroup(ctx context.Context, errorObj *model.Er
 }
 
 func (r *Resolver) GetTopErrorGroupMatchByEmbedding(ctx context.Context, projectID int, method model.ErrorGroupingMethod, embedding model.Vector, threshold float64) (*int, error) {
-	span, ctx := util.StartSpanFromContext(ctx, "public-resolver", util.ResourceName("GetTopErrorGroupMatchByEmbedding"), util.Tag("projectID", projectID))
+	span, ctx := util.StartSpanFromContext(ctx, "resolver.GetTopErrorGroupMatchByEmbedding", util.Tag("projectID", projectID), util.Tag("method", method))
 	defer span.Finish()
 
 	result := struct {
@@ -614,6 +624,9 @@ func (r *Resolver) GetTopErrorGroupMatchByEmbedding(ctx context.Context, project
 }
 
 func (r *Resolver) GetTopErrorGroupMatch(ctx context.Context, event string, projectID int, fingerprints []*model.ErrorFingerprint) (*int, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "resolver.GetTopErrorGroupMatch", util.Tag("projectID", projectID), util.Tag("event", event), util.Tag("num_fingerprints", len(fingerprints)))
+	defer span.Finish()
+
 	firstCode := ""
 	firstMeta := ""
 	restCode := []string{}
@@ -748,8 +761,9 @@ func (r *Resolver) isWithinErrorQuota(ctx context.Context, workspace *model.Work
 	return withinBillingQuota
 }
 
-// Matches the ErrorObject with an existing ErrorGroup, or creates a new one if the group does not exist
-func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.ErrorObject, structuredStackTrace []*privateModel.ErrorTrace, fields []*model.ErrorField, projectID int, workspace *model.Workspace) (*model.ErrorGroup, error) {
+// HandleErrorAndGroup caches the result of handleErrorAndGroup under the exact match of the error body + stacktrace.
+// Improves performance of handleErrorAndGroup by first checking if the exact error object has been grouped before.
+func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.ErrorObject, structuredStackTrace []*privateModel.ErrorTrace, projectID int, workspace *model.Workspace) (*model.ErrorGroup, error) {
 	span, ctx := util.StartSpanFromContext(ctx, "HandleErrorAndGroup", util.Tag("projectID", projectID))
 	defer span.Finish()
 
@@ -789,7 +803,48 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 		}
 	}
 
-	fingerprints := []*model.ErrorFingerprint{}
+	key := errorgroups.GetKey(projectID, errorObj, structuredStackTrace)
+	var cacheMiss bool
+	eg, err := redis.CachedEval(ctx, r.Redis, key, 10*time.Second, time.Hour, func() (*model.ErrorGroup, error) {
+		cacheMiss = true
+		return r.handleErrorAndGroup(ctx, project, errorObj, structuredStackTrace, projectID, workspace)
+	})
+	if eg == nil || err != nil {
+		log.WithContext(ctx).WithError(err).WithField("project_id", projectID).Error("failed to group error")
+		return eg, err
+	}
+
+	// on cache hit, we want to run logic to update error group based on new error object
+	if !cacheMiss {
+		// tagGroup is ignored when error group is matched
+		eg, err = r.GetOrCreateErrorGroup(ctx, errorObj, func() (*int, error) {
+			return ptr.Int(eg.ID), nil
+		}, nil, false)
+		if eg == nil || err != nil {
+			log.WithContext(ctx).WithError(err).WithField("project_id", projectID).Error("failed to group error on cache hit")
+			return eg, err
+		}
+	}
+
+	// save error object after grouping
+	errorObj.ErrorGroupID = eg.ID
+	if err := r.DB.WithContext(ctx).Create(errorObj).Error; err != nil {
+		return nil, e.Wrap(err, "Error performing error insert for error")
+	}
+
+	if err := r.DataSyncQueue.Submit(ctx, strconv.Itoa(errorObj.ID), &kafka_queue.Message{Type: kafka_queue.ErrorObjectDataSync, ErrorObjectDataSync: &kafka_queue.ErrorObjectDataSyncArgs{ErrorObjectID: errorObj.ID}}); err != nil {
+		return nil, err
+	}
+
+	return eg, err
+}
+
+// Matches the ErrorObject with an existing ErrorGroup, or creates a new one if the group does not exist
+func (r *Resolver) handleErrorAndGroup(ctx context.Context, project *model.Project, errorObj *model.ErrorObject, structuredStackTrace []*privateModel.ErrorTrace, projectID int, workspace *model.Workspace) (*model.ErrorGroup, error) {
+	span, ctx := util.StartSpanFromContext(ctx, "handleErrorAndGroup", util.Tag("projectID", projectID))
+	defer span.Finish()
+
+	var fingerprints []*model.ErrorFingerprint
 	fingerprints = append(fingerprints, errorgroups.GetFingerprints(projectID, structuredStackTrace)...)
 
 	// Try unmarshalling the Event to JSON.
@@ -815,8 +870,8 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 		}
 	}
 
+	var err error
 	var errorGroup *model.ErrorGroup
-
 	var settings *model.AllWorkspaceSettings
 	if workspace != nil {
 		if settings, err = r.Store.GetAllWorkspaceSettings(ctx, workspace.ID); err != nil {
@@ -831,7 +886,7 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 		var emb []*model.ErrorObjectEmbeddings
 		emb, err = r.EmbeddingsClient.GetEmbeddings(eCtx, []*model.ErrorObject{errorObj})
 		if err != nil || len(emb) == 0 {
-			log.WithContext(ctx).WithError(err).WithField("error_object_id", errorObj.ID).Error("failed to get embeddings")
+			log.WithContext(ctx).WithError(err).Error("failed to get embeddings")
 			errorObj.ErrorGroupingMethod = model.ErrorGroupingMethodClassic
 		} else {
 			embedding = emb[0]
@@ -839,7 +894,7 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 			errorGroup, err = r.GetOrCreateErrorGroup(ctx, errorObj, func() (*int, error) {
 				match, err := r.GetTopErrorGroupMatchByEmbedding(ctx, errorObj.ProjectID, embeddingType, embedding.GteLargeEmbedding, settings.ErrorEmbeddingsThreshold)
 				if err != nil {
-					log.WithContext(ctx).WithError(err).WithField("error_object_id", errorObj.ID).Error("failed to group error using embeddings")
+					log.WithContext(ctx).WithError(err).Error("failed to group error using embeddings")
 				}
 				return match, err
 			}, func(errorGroupId int) error {
@@ -872,19 +927,6 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 		if err != nil {
 			return nil, e.Wrap(err, "Error getting or creating error group")
 		}
-	}
-	errorObj.ErrorGroupID = errorGroup.ID
-
-	if err := r.DB.WithContext(ctx).Create(errorObj).Error; err != nil {
-		return nil, e.Wrap(err, "Error performing error insert for error")
-	}
-
-	if err := r.DataSyncQueue.Submit(ctx, strconv.Itoa(errorObj.ID), &kafka_queue.Message{Type: kafka_queue.ErrorObjectDataSync, ErrorObjectDataSync: &kafka_queue.ErrorObjectDataSyncArgs{ErrorObjectID: errorObj.ID}}); err != nil {
-		return nil, err
-	}
-
-	if err := r.AppendErrorFields(ctx, fields, errorGroup); err != nil {
-		return nil, e.Wrap(err, "error appending error fields")
 	}
 
 	if err := r.DB.Transaction(func(tx *gorm.DB) error {
@@ -923,53 +965,6 @@ func (r *Resolver) HandleErrorAndGroup(ctx context.Context, errorObj *model.Erro
 	}
 
 	return errorGroup, nil
-}
-
-func (r *Resolver) AppendErrorFields(ctx context.Context, fields []*model.ErrorField, errorGroup *model.ErrorGroup) error {
-	fieldsToAppend := []*model.ErrorField{}
-	for _, f := range fields {
-		field := &model.ErrorField{}
-		res := r.DB.WithContext(ctx).Raw(`
-			SELECT * FROM error_fields
-			WHERE project_id = ?
-			AND name = ?
-			AND value = ?
-			AND md5(value)::uuid = md5(?)::uuid
-			`, f.ProjectID, f.Name, f.Value, f.Value).Take(&field)
-		// If the field doesn't exist, we create it.
-		if err := res.Error; err != nil || e.Is(err, gorm.ErrRecordNotFound) {
-			if err := r.DB.WithContext(ctx).Create(f).Error; err != nil {
-				return e.Wrap(err, "error creating error field")
-			}
-			fieldsToAppend = append(fieldsToAppend, f)
-		} else {
-			fieldsToAppend = append(fieldsToAppend, field)
-		}
-	}
-
-	var entries []struct {
-		ErrorGroupID int
-		ErrorFieldID int
-	}
-	for _, f := range fieldsToAppend {
-		entries = append(entries, struct {
-			ErrorGroupID int
-			ErrorFieldID int
-		}{
-			ErrorGroupID: errorGroup.ID,
-			ErrorFieldID: f.ID,
-		})
-	}
-
-	if len(entries) > 0 {
-		if err := r.DB.Table("error_group_fields").Clauses(clause.OnConflict{
-			DoNothing: true,
-		}).Create(entries).Error; err != nil {
-			return e.Wrap(err, "error updating fields")
-		}
-	}
-
-	return nil
 }
 
 func GetLocationFromIP(ctx context.Context, ip string) (location *Location, err error) {
@@ -1039,7 +1034,9 @@ func (r *Resolver) IndexSessionClickhouse(ctx context.Context, session *model.Se
 	if session.AppVersion != nil {
 		sessionProperties["service_version"] = *session.AppVersion
 	}
-	if err := r.AppendProperties(ctx, session.ID, sessionProperties, PropertyType.SESSION); err != nil {
+	if err := r.AppendProperties(ctx, session.ID, lo.MapToSlice(sessionProperties, func(key string, value string) AppendProperty {
+		return AppendProperty{key, value, session.CreatedAt}
+	}), PropertyType.SESSION); err != nil {
 		log.WithContext(ctx).Error(e.Wrap(err, "error adding set of properties to db"))
 	}
 	return r.DataSyncQueue.Submit(ctx, strconv.Itoa(session.ID), &kafka_queue.Message{Type: kafka_queue.SessionDataSync, SessionDataSync: &kafka_queue.SessionDataSyncArgs{SessionID: session.ID}})
@@ -1523,7 +1520,9 @@ func (r *Resolver) IdentifySessionImpl(ctx context.Context, sessionSecureID stri
 	if err := session.SetUserProperties(allUserProperties); err != nil {
 		return e.Wrapf(err, "[IdentifySession] [project_id: %d] error appending user properties to session object {id: %d}", session.ProjectID, sessionID)
 	}
-	if err := r.AppendProperties(spanCtx, sessionID, newUserProperties, PropertyType.USER); err != nil {
+	if err := r.AppendProperties(spanCtx, sessionID, lo.MapToSlice(newUserProperties, func(key string, value string) AppendProperty {
+		return AppendProperty{key, value, session.CreatedAt}
+	}), PropertyType.USER); err != nil {
 		log.WithContext(ctx).Error(e.Wrapf(err, "[IdentifySession] error adding set of identify properties to db: session: %d", sessionID))
 	}
 	setUserPropsSpan.Finish()
@@ -1643,7 +1642,9 @@ func (r *Resolver) AddSessionPropertiesImpl(ctx context.Context, sessionSecureID
 	for k, v := range obj {
 		fields[k] = fmt.Sprintf("%v", v)
 	}
-	err = r.AppendProperties(ctx, sessionObj.ID, fields, PropertyType.SESSION)
+	err = r.AppendProperties(ctx, sessionObj.ID, lo.MapToSlice(fields, func(key string, value string) AppendProperty {
+		return AppendProperty{key, value, sessionObj.CreatedAt}
+	}), PropertyType.SESSION)
 	if err != nil {
 		return e.Wrap(err, "error adding set of properties to db")
 	}
@@ -2039,26 +2040,13 @@ func ClampTime(input time.Time, curTime time.Time) time.Time {
 		return input
 	}
 
-	minTime := curTime.Add(-2 * time.Hour)
-	maxTime := curTime.Add(2 * time.Hour)
+	minTime := curTime.Add(-30 * 24 * time.Hour)
+	maxTime := curTime.Add(30 * 24 * time.Hour)
 	if input.Before(minTime) || input.After(maxTime) {
 		return curTime
 	}
 
 	return input
-}
-
-func extractErrorFields(sessionObj *model.Session, errorToProcess *model.ErrorObject) []*model.ErrorField {
-	projectID := sessionObj.ProjectID
-
-	errorFields := []*model.ErrorField{}
-	errorFields = append(errorFields, &model.ErrorField{ProjectID: projectID, Name: "browser", Value: sessionObj.BrowserName})
-	errorFields = append(errorFields, &model.ErrorField{ProjectID: projectID, Name: "os_name", Value: sessionObj.OSName})
-	errorFields = append(errorFields, &model.ErrorField{ProjectID: projectID, Name: "visited_url", Value: errorToProcess.URL})
-	errorFields = append(errorFields, &model.ErrorField{ProjectID: projectID, Name: "event", Value: errorToProcess.Event})
-	errorFields = append(errorFields, &model.ErrorField{ProjectID: projectID, Name: "environment", Value: errorToProcess.Environment})
-
-	return errorFields
 }
 
 func (r *Resolver) updateErrorsCount(ctx context.Context, projectID int, errorsBySession map[string]int64, errors int, errorType string) {
@@ -2234,7 +2222,7 @@ func (r *Resolver) ProcessBackendPayloadImpl(ctx context.Context, sessionSecureI
 			structuredStackTrace = structured
 		}
 
-		group, err := r.HandleErrorAndGroup(ctx, errorToInsert, structuredStackTrace, extractErrorFields(session, errorToInsert), projectID, workspace)
+		group, err := r.HandleErrorAndGroup(ctx, errorToInsert, structuredStackTrace, projectID, workspace)
 		if err != nil {
 			if e.Is(err, ErrUserFilteredError) {
 				log.WithContext(ctx).WithError(err).Info("Will not update error group")
@@ -2255,13 +2243,17 @@ func (r *Resolver) ProcessBackendPayloadImpl(ctx context.Context, sessionSecureI
 	for _, errorInstances := range groupedErrors {
 		instance := errorInstances[len(errorInstances)-1]
 		data := groups[instance.ErrorGroupID]
+		if data.Group == nil || data.SessionObj == nil {
+			log.WithContext(ctx).WithField("error_group_id", instance.ErrorGroupID).Error("skipping error group alert")
+			continue
+		}
 		r.sendErrorAlert(ctx, data.Group.ProjectID, data.SessionObj, data.Group, instance, data.VisitedURL)
 	}
 
 	putErrorsToDBSpan.Finish()
 }
 
-// Deprecated, left for backward compatibility with older client versions. Use AddTrackProperties instead
+// Deprecated, left for backward compatibility with older client versions. Use AddSessionEvents instead
 func (r *Resolver) AddTrackPropertiesImpl(ctx context.Context, sessionSecureID string, propertiesObject interface{}) error {
 	outerSpan, ctx := util.StartSpanFromContext(ctx, "public-graph.AddTrackPropertiesImpl",
 		util.ResourceName("go.sessions.AddTrackPropertiesImpl"))
@@ -2278,24 +2270,31 @@ func (r *Resolver) AddTrackPropertiesImpl(ctx context.Context, sessionSecureID s
 	}
 	fields := map[string]string{}
 	for k, v := range obj {
+		if k == "visited-url" {
+			// from old SDK versions (=<9.5.2): don't process as these are now added in session events processing
+			continue
+		}
+
 		fields[k] = fmt.Sprintf("%v", v)
 		if fields[k] == "therewasonceahumblebumblebeeflyingthroughtheforestwhensuddenlyadropofwaterfullyencasedhimittookhimasecondtofigureoutthathesinaraindropsuddenlytheraindrophitthegroundasifhewasdivingintoapoolandheflewawaywithnofurtherissues" {
 			return e.New("therewasonceahumblebumblebeeflyingthroughtheforestwhensuddenlyadropofwaterfullyencasedhimittookhimasecondtofigureoutthathesinaraindropsuddenlytheraindrophitthegroundasifhewasdivingintoapoolandheflewawaywithnofurtherissues")
 		}
 	}
-	err = r.AppendProperties(ctx, sessionObj.ID, fields, PropertyType.TRACK)
+	err = r.AppendProperties(ctx, sessionObj.ID, lo.MapToSlice(fields, func(key string, value string) AppendProperty {
+		return AppendProperty{key, value, sessionObj.CreatedAt}
+	}), PropertyType.TRACK)
 	if err != nil {
 		return e.Wrap(err, "error adding set of properties to db")
 	}
 	return nil
 }
 
-func (r *Resolver) AddTrackProperties(ctx context.Context, sessionID int, events *parse.ReplayEvents) error {
-	outerSpan, ctx := util.StartSpanFromContext(ctx, "public-graph.AddTrackProperties",
-		util.ResourceName("go.sessions.AddTrackProperties"))
+func (r *Resolver) AddSessionEvents(ctx context.Context, sessionID int, events *parse.ReplayEvents) error {
+	outerSpan, ctx := util.StartSpanFromContext(ctx, "public-graph.AddSessionEvents",
+		util.ResourceName("go.sessions.AddSessionEvents"))
 	defer outerSpan.Finish()
 
-	fields := map[string]string{}
+	var fields []AppendProperty
 	sessionEvents := []*clickhouse.SessionEventRow{}
 
 	for _, event := range events.Events {
@@ -2306,65 +2305,117 @@ func (r *Resolver) AddTrackProperties(ctx context.Context, sessionID int, events
 			}{}
 
 			if err := json.Unmarshal([]byte(event.Data), &dataObject); err != nil {
-				return e.New("error deserializing custom event properties")
+				log.WithContext(ctx).WithField("session_id", sessionID).Error("error deserializing custom event properties")
+				continue
 			}
 
-			if !strings.Contains(dataObject.Tag, "Track") {
+			trackEvent := strings.Contains(dataObject.Tag, "Track")
+			navigateEvent := strings.Contains(dataObject.Tag, "Navigate")
+			reloadEvent := strings.Contains(dataObject.Tag, "Reload")
+			clickEvent := strings.Contains(dataObject.Tag, "Click")
+
+			if !trackEvent && !navigateEvent && !reloadEvent && !clickEvent {
 				continue
 			}
 
 			if dataObject.Payload == nil {
-				return e.New("error reading raw payload from track event")
+				log.WithContext(ctx).WithField("session_id", sessionID).Error("error reading raw payload from session event")
+				continue
 			}
 
-			var payloadStr string
-			if err := json.Unmarshal(dataObject.Payload, &payloadStr); err != nil {
-				return e.New("error deserializing track event payload into a string")
-			}
-
-			propertiesObject := make(map[string]interface{})
-			if err := json.Unmarshal([]byte(payloadStr), &propertiesObject); err != nil {
-				return e.New("error deserializing track event properties")
-			}
-
-			attributes := make(map[string]string)
-			for k, v := range propertiesObject {
-				attributes[k] = fmt.Sprintf("%v", v)
-			}
-
-			// make event name the event key and delete from attributes
-			eventName := "unknown_event"
-			if attributes["event"] != "" {
-				eventName = attributes["event"]
-				delete(attributes, "event")
-			} else if attributes["segment-event"] != "" {
-				eventName = attributes["segment-event"]
-				delete(attributes, "segment-event")
-			} else {
-				log.WithContext(ctx).WithFields(
-					log.Fields{
-						"sessionID":  sessionID,
-						"attributes": attributes,
-					}).Warn("writing unknown event")
-			}
-
-			sessionEvents = append(sessionEvents,
-				&clickhouse.SessionEventRow{
-					Event:      eventName,
-					Timestamp:  event.Timestamp,
-					Attributes: attributes,
-				},
-			)
-
-			for k, v := range propertiesObject {
-				formattedVal := fmt.Sprintf("%.*v", SESSION_FIELD_MAX_LENGTH, v)
-				if len(formattedVal) > 0 {
-					fields[k] = formattedVal
+			payloadStr := string(dataObject.Payload)
+			if !clickEvent {
+				if err := json.Unmarshal(dataObject.Payload, &payloadStr); err != nil {
+					log.WithContext(ctx).WithField("session_id", sessionID).WithField("payloadStr", dataObject.Payload).Error("error deserializing session event payload into a string")
+					continue
 				}
-				// the value below is used for testing using /buttons
-				testTrackingMessage := "therewasonceahumblebumblebeeflyingthroughtheforestwhensuddenlyadropofwaterfullyencasedhimittookhimasecondtofigureoutthathesinaraindropsuddenlytheraindrophitthegroundasifhewasdivingintoapoolandheflewawaywithnofurtherissues"
-				if fields[k] == testTrackingMessage {
-					return e.New(testTrackingMessage)
+			}
+
+			if clickEvent {
+				propertiesObject := make(map[string]interface{})
+				if err := json.Unmarshal([]byte(payloadStr), &propertiesObject); err != nil {
+					// older versions of the client send in the clickTarget as a string
+					propertiesObject["clickTarget"] = payloadStr
+				}
+
+				attributes := make(map[string]string)
+				for k, v := range propertiesObject {
+					attributes[k] = fmt.Sprintf("%.*v", SESSION_FIELD_MAX_LENGTH, v)
+					if len(attributes[k]) > 0 {
+						fields = append(fields, AppendProperty{k, attributes[k], event.Timestamp})
+					}
+				}
+
+				sessionEvents = append(sessionEvents,
+					&clickhouse.SessionEventRow{
+						Event:      dataObject.Tag,
+						Timestamp:  event.Timestamp.UnixMicro(),
+						Attributes: attributes,
+					},
+				)
+			} else if navigateEvent {
+				fields = append(fields, AppendProperty{"visited-url", payloadStr, event.Timestamp})
+
+				sessionEvents = append(sessionEvents,
+					&clickhouse.SessionEventRow{
+						Event:     "Navigate",
+						Timestamp: event.Timestamp.UnixMicro(),
+						Attributes: map[string]string{
+							"url": payloadStr,
+						},
+					},
+				)
+			} else if reloadEvent {
+				sessionEvents = append(sessionEvents,
+					&clickhouse.SessionEventRow{
+						Event:     "Navigate",
+						Timestamp: event.Timestamp.UnixMicro(),
+						Attributes: map[string]string{
+							"reload": payloadStr,
+						},
+					},
+				)
+			} else if trackEvent {
+				propertiesObject := make(map[string]interface{})
+				if err := json.Unmarshal([]byte(payloadStr), &propertiesObject); err != nil {
+					log.WithContext(ctx).WithField("session_id", sessionID).WithField("payloadStr", payloadStr).Error("error deserializing track event properties")
+					propertiesObject["payload"] = payloadStr
+				}
+
+				attributes := make(map[string]string)
+				for k, v := range propertiesObject {
+					attributes[k] = fmt.Sprintf("%v", v)
+				}
+
+				// make event name the event key and delete from attributes
+				eventName := "unknown_event"
+				if attributes["event"] != "" {
+					eventName = attributes["event"]
+					delete(attributes, "event")
+				} else if attributes["segment-event"] != "" {
+					eventName = attributes["segment-event"]
+					delete(attributes, "segment-event")
+				} else {
+					log.WithContext(ctx).WithFields(
+						log.Fields{
+							"sessionID":  sessionID,
+							"attributes": attributes,
+						}).Warn("writing unknown event")
+				}
+
+				sessionEvents = append(sessionEvents,
+					&clickhouse.SessionEventRow{
+						Event:      eventName,
+						Timestamp:  event.Timestamp.UnixMicro(),
+						Attributes: attributes,
+					},
+				)
+
+				for k, v := range propertiesObject {
+					formattedVal := fmt.Sprintf("%.*v", SESSION_FIELD_MAX_LENGTH, v)
+					if len(formattedVal) > 0 {
+						fields = append(fields, AppendProperty{k, formattedVal, event.Timestamp})
+					}
 				}
 			}
 		}
@@ -2372,13 +2423,13 @@ func (r *Resolver) AddTrackProperties(ctx context.Context, sessionID int, events
 
 	if len(fields) > 0 {
 		if err := r.AppendProperties(ctx, sessionID, fields, PropertyType.TRACK); err != nil {
-			return e.Wrap(err, "error adding set of properties to db")
+			log.WithContext(ctx).WithField("session_id", sessionID).Error(e.Wrap(err, "error adding set of properties to db"))
 		}
 	}
 
 	if len(sessionEvents) > 0 {
-		if err := r.CreateSessionEvents(ctx, sessionID, sessionEvents); err != nil {
-			return e.Wrapf(err, "error creating session events for session %d", sessionID)
+		if err := r.SubmitSessionEvents(ctx, sessionID, sessionEvents); err != nil {
+			log.WithContext(ctx).WithField("session_id", sessionID).Error(e.Wrapf(err, "error creating session events for session %d", sessionID))
 		}
 	}
 
@@ -2597,7 +2648,7 @@ func (r *Resolver) ProcessPayload(ctx context.Context, sessionSecureID string, e
 				return e.Wrap(err, "error parsing events from schema interfaces")
 			}
 
-			if err := r.AddTrackProperties(ctx, sessionID, parsedEvents); err != nil {
+			if err := r.AddSessionEvents(ctx, sessionID, parsedEvents); err != nil {
 				log.WithContext(ctx).Error(e.Wrap(err, "failed to add track properties"))
 			}
 
@@ -2866,7 +2917,7 @@ func (r *Resolver) ProcessPayload(ctx context.Context, sessionSecureID string, e
 				structuredStackTrace = structured
 			}
 
-			group, err := r.HandleErrorAndGroup(ctx, errorToInsert, structuredStackTrace, extractErrorFields(sessionObj, errorToInsert), projectID, workspace)
+			group, err := r.HandleErrorAndGroup(ctx, errorToInsert, structuredStackTrace, projectID, workspace)
 			if err != nil {
 				if e.Is(err, ErrUserFilteredError) {
 					log.WithContext(ctx).WithError(err).Info("Will not update error group")
@@ -3197,7 +3248,7 @@ func (r *Resolver) submitFrontendNetworkMetric(ctx context.Context, sessionObj *
 		responseHeaders, _ := re.RequestResponsePairs.Response.HeadersRaw.(map[string]interface{})
 		userAgent, _ := requestHeaders["User-Agent"].(string)
 		requestBody, ok := re.RequestResponsePairs.Request.Body.(string)
-		if !ok {
+		if re.RequestResponsePairs.Request.Body != nil && !ok {
 			bdBytes, err := json.Marshal(requestBody)
 			if err != nil {
 				log.WithContext(ctx).WithError(err).WithField("sessionID", sessionObj.ID).Error("failed to serialize network request body as json")
@@ -3206,7 +3257,7 @@ func (r *Resolver) submitFrontendNetworkMetric(ctx context.Context, sessionObj *
 			}
 		}
 		responseBody, ok := re.RequestResponsePairs.Response.Body.(string)
-		if !ok {
+		if re.RequestResponsePairs.Response.Body != nil && !ok {
 			bdBytes, err := json.Marshal(responseBody)
 			if err != nil {
 				log.WithContext(ctx).WithError(err).WithField("sessionID", sessionObj.ID).Error("failed to serialize network response body as json")
@@ -3224,6 +3275,7 @@ func (r *Resolver) submitFrontendNetworkMetric(ctx context.Context, sessionObj *
 			semconv.ServiceName(sessionObj.ServiceName),
 			semconv.ServiceVersion(ptr.ToString(sessionObj.AppVersion)),
 			semconv.HTTPURL(re.Name),
+			attribute.Bool("http.blocked", re.RequestResponsePairs.URLBlocked),
 			attribute.String("http.request.body", requestBody),
 			attribute.String("http.response.body", responseBody),
 			attribute.Float64("http.response.encoded.size", re.EncodedBodySize),
@@ -3247,13 +3299,13 @@ func (r *Resolver) submitFrontendNetworkMetric(ctx context.Context, sessionObj *
 		for requestHeader, requestHeaderValue := range requestHeaders {
 			str, ok := requestHeaderValue.(string)
 			if ok {
-				attributes = append(attributes, attribute.String(fmt.Sprintf("http.request.header.%s", requestHeader), str))
+				attributes = append(attributes, attribute.String(fmt.Sprintf("http.request.headers.%s", requestHeader), str))
 			}
 		}
 		for responseHeader, responseHeaderValue := range responseHeaders {
 			str, ok := responseHeaderValue.(string)
 			if ok {
-				attributes = append(attributes, attribute.String(fmt.Sprintf("http.response.header.%s", responseHeader), str))
+				attributes = append(attributes, attribute.String(fmt.Sprintf("http.response.headers.%s", responseHeader), str))
 			}
 		}
 		requestBodyJson := make(map[string]interface{})
@@ -3284,6 +3336,7 @@ func (r *Resolver) submitFrontendWebsocketMetric(sessionObj *model.Session, even
 			attribute.String(highlight.SessionIDAttribute, sessionObj.SecureID),
 			attribute.String(highlight.RequestIDAttribute, event.SocketID),
 			attribute.String(highlight.TraceKeyAttribute, event.Name),
+			attribute.String("ws.type", event.Type),
 			semconv.DeploymentEnvironmentKey.String(sessionObj.Environment),
 			semconv.ServiceNameKey.String(sessionObj.ServiceName),
 			semconv.ServiceVersionKey.String(ptr.ToString(sessionObj.AppVersion)),
@@ -3402,7 +3455,7 @@ func (r *Resolver) submitFrontendConsoleMessages(ctx context.Context, sessionObj
 	return nil
 }
 
-func (r *Resolver) SendSessionTrackPropertiesAlert(ctx context.Context, workspace *model.Workspace, project *model.Project, session *model.Session, properties map[string]string) error {
+func (r *Resolver) SendSessionTrackPropertiesAlert(ctx context.Context, workspace *model.Workspace, project *model.Project, session *model.Session, properties []AppendProperty) error {
 	alertWorkerSpan, ctx := util.StartSpanFromContext(ctx, "public-graph.AppendProperties",
 		util.ResourceName("go.sessions.AppendProperties.alertWorker"), util.Tag("sessionID", session.ID))
 	defer alertWorkerSpan.Finish()
@@ -3466,17 +3519,17 @@ func (r *Resolver) SendSessionTrackPropertiesAlert(ctx context.Context, workspac
 
 		// relatedFields is the list of fields not inside of matchedFields.
 		var relatedFields []*model.Field
-		for k, fv := range properties {
+		for _, fv := range properties {
 			isAMatchedField := false
 
 			for _, matchedField := range matchedFields {
-				if matchedField.Name == k && matchedField.Value == fv {
+				if matchedField.Name == fv.Key && matchedField.Value == fv.Value {
 					isAMatchedField = true
 				}
 			}
 
 			if !isAMatchedField {
-				relatedFields = append(relatedFields, &model.Field{ProjectID: session.ProjectID, Name: k, Value: fv, Type: string(PropertyType.TRACK)})
+				relatedFields = append(relatedFields, &model.Field{ProjectID: session.ProjectID, Name: fv.Key, Value: fv.Value, Type: string(PropertyType.TRACK), Timestamp: fv.Timestamp})
 			}
 		}
 

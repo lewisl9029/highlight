@@ -814,9 +814,9 @@ func (w *Worker) processSession(ctx context.Context, s *model.Session) error {
 	if len(visitFields) >= 1 {
 		landingPage := visitFields[0]
 		exitPage := visitFields[len(visitFields)-1]
-		sessionProperties := map[string]string{
-			"landing_page": landingPage.Value,
-			"exit_page":    exitPage.Value,
+		sessionProperties := []pubgraph.AppendProperty{
+			{Key: "landing_page", Value: landingPage.Value, Timestamp: landingPage.CreatedAt},
+			{Key: "exit_page", Value: exitPage.Value, Timestamp: exitPage.CreatedAt},
 		}
 
 		if err := w.PublicResolver.AppendProperties(ctx, s.ID, sessionProperties, pubgraph.PropertyType.SESSION); err != nil {
@@ -825,18 +825,22 @@ func (w *Worker) processSession(ctx context.Context, s *model.Session) error {
 
 		sessionEvents := []*clickhouse.SessionEventRow{
 			{
-				Timestamp:  landingPage.CreatedAt,
-				Event:      "landing_page",
-				Attributes: map[string]string{"url": landingPage.Value},
+				Timestamp: landingPage.CreatedAt.UnixMicro(),
+				Event:     "Navigate",
+				Attributes: map[string]string{
+					"landing_page": landingPage.Value,
+				},
 			},
 			{
-				Timestamp:  exitPage.CreatedAt,
-				Event:      "exit_page",
-				Attributes: map[string]string{"url": exitPage.Value},
+				Timestamp: exitPage.CreatedAt.UnixMicro(),
+				Event:     "Navigate",
+				Attributes: map[string]string{
+					"exit_page": exitPage.Value,
+				},
 			},
 		}
 
-		if err := w.PublicResolver.CreateSessionEvents(ctx, s.ID, sessionEvents); err != nil {
+		if err := w.PublicResolver.SubmitSessionEvents(ctx, s.ID, sessionEvents); err != nil {
 			log.WithContext(ctx).Error(e.Wrapf(err, "error creating session events for session %d", s.ID))
 		}
 	}
@@ -1128,7 +1132,7 @@ func (w *Worker) StartLogAlertWatcher(ctx context.Context) {
 }
 
 func (w *Worker) StartMetricAlertWatcher(ctx context.Context) {
-	metric_alerts.WatchMetricAlerts(ctx, w.Resolver.DB, w.Resolver.MailClient, w.Resolver.RH, w.Resolver.Redis, w.Resolver.ClickhouseClient, w.Resolver.LambdaClient)
+	metric_alerts.WatchMetricAlerts(ctx, w.Resolver.DB, w.Resolver.MailClient, w.Resolver.ClickhouseClient, w.Resolver.LambdaClient)
 }
 
 func (w *Worker) StartSessionDeleteJob(ctx context.Context) {

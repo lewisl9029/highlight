@@ -273,7 +273,7 @@ function NetworkResourceDetails({
 								? moment(resource.timestamp).format('h:mm:ss A')
 								: MillisToMinutesAndSeconds(
 										resource.relativeStartTime,
-									)
+								  )
 						}
 						size="medium"
 						shape="basic"
@@ -308,10 +308,18 @@ function NetworkResourceDetails({
 			>
 				<Tabs.List px="8" gap="12">
 					<Tabs.Tab id={NetworkRequestTabs.Info}>Info</Tabs.Tab>
-					<Tabs.Tab id={NetworkRequestTabs.Errors}>Errors</Tabs.Tab>
-					<Tabs.Tab id={NetworkRequestTabs.Logs}>Logs</Tabs.Tab>
 					{isNetworkRequest && (
-						<Tabs.Tab id={NetworkRequestTabs.Trace}>Trace</Tabs.Tab>
+						<>
+							<Tabs.Tab id={NetworkRequestTabs.Errors}>
+								Errors
+							</Tabs.Tab>
+							<Tabs.Tab id={NetworkRequestTabs.Logs}>
+								Logs
+							</Tabs.Tab>
+							<Tabs.Tab id={NetworkRequestTabs.Trace}>
+								Trace
+							</Tabs.Tab>
+						</>
 					)}
 				</Tabs.List>
 				<Tabs.Panel id={NetworkRequestTabs.Info} scrollable>
@@ -505,7 +513,7 @@ function WebSocketDetails({
 								? moment(resource.timestamp).format('h:mm:ss A')
 								: MillisToMinutesAndSeconds(
 										resource.relativeStartTime,
-									)
+								  )
 						}
 						size="medium"
 						shape="basic"

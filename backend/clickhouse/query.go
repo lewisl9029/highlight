@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -22,35 +23,46 @@ import (
 	"github.com/huandu/go-sqlbuilder"
 	"github.com/nqd/flat"
 	e "github.com/pkg/errors"
+	"github.com/samber/lo"
 )
 
 const SamplingRows = 20_000_000
 const KeysMaxRows = 1_000_000
 const KeyValuesMaxRows = 1_000_000
+const AllKeyValuesMaxRows = 100_000_000
+const MaxBuckets = 240
+const NoLimit = 1_000_000_000_000
 
 type SampleableTableConfig struct {
 	tableConfig         model.TableConfig
 	samplingTableConfig model.TableConfig
-	useSampling         func(time.Duration) bool
+	sampleSizeRows      uint64
 }
 
 type ReadMetricsInput struct {
-	SampleableConfig SampleableTableConfig
-	ProjectIDs       []int
-	Params           modelInputs.QueryInput
-	Column           string
-	MetricTypes      []modelInputs.MetricAggregator
-	GroupBy          []string
-	BucketCount      *int
-	BucketWindow     *int
-	BucketBy         string
-	Limit            *int
-	LimitAggregator  *modelInputs.MetricAggregator
-	LimitColumn      *string
-	SavedMetricState *SavedMetricState
+	SampleableConfig   SampleableTableConfig
+	ProjectIDs         []int
+	Params             modelInputs.QueryInput
+	Column             string
+	MetricTypes        []modelInputs.MetricAggregator
+	GroupBy            []string
+	BucketCount        *int
+	BucketWindow       *int
+	BucketBy           string
+	Limit              *int
+	LimitAggregator    *modelInputs.MetricAggregator
+	LimitColumn        *string
+	SavedMetricState   *SavedMetricState
+	PredictionSettings *modelInputs.PredictionSettings
+	NoBucketMax        bool
 }
 
 func readObjects[TObj interface{}](ctx context.Context, client *Client, config model.TableConfig, samplingConfig model.TableConfig, projectID int, params modelInputs.QueryInput, pagination Pagination, scanObject func(driver.Rows) (*Edge[TObj], error)) (*Connection[TObj], error) {
+	limit := LogsLimit
+	if pagination.Limit != nil {
+		limit = *pagination.Limit
+	}
+
 	sb := sqlbuilder.NewSelectBuilder()
 	var err error
 	var args []interface{}
@@ -78,7 +90,7 @@ func readObjects[TObj interface{}](ctx context.Context, client *Client, config m
 		if err != nil {
 			return nil, err
 		}
-		beforeSb.Distinct().Limit(LogsLimit/2 + 1)
+		beforeSb.Distinct().Limit(limit/2 + 1)
 
 		atSb, _, err := makeSelectBuilder(
 			innerTableConfig,
@@ -104,7 +116,7 @@ func readObjects[TObj interface{}](ctx context.Context, client *Client, config m
 		if err != nil {
 			return nil, err
 		}
-		afterSb.Distinct().Limit(LogsLimit/2 + 1)
+		afterSb.Distinct().Limit(limit/2 + 1)
 
 		ub := sqlbuilder.UnionAll(beforeSb, atSb, afterSb)
 		sb.Select(outerSelect).
@@ -124,14 +136,14 @@ func readObjects[TObj interface{}](ctx context.Context, client *Client, config m
 			return nil, err
 		}
 
-		fromSb.Distinct().Limit(LogsLimit + 1)
+		fromSb.Distinct().Limit(limit + 1)
 		sb.Select(outerSelect).
 			Distinct().
 			From(config.TableName).
 			Where(sb.Equal("ProjectId", projectID)).
 			Where(sb.In(fmt.Sprintf("(%s)", strings.Join(innerSelect, ",")), fromSb)).
 			OrderBy(orderForward).
-			Limit(LogsLimit + 1)
+			Limit(limit + 1)
 	}
 
 	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
@@ -271,7 +283,7 @@ func expandJSON(logAttributes map[string]string) map[string]interface{} {
 	return out
 }
 
-func KeysAggregated(ctx context.Context, client *Client, tableName string, projectID int, startDate time.Time, endDate time.Time, query *string, typeArg *modelInputs.KeyType) ([]*modelInputs.QueryKey, error) {
+func KeysAggregated(ctx context.Context, client *Client, tableName string, projectID int, startDate time.Time, endDate time.Time, query *string, typeArg *modelInputs.KeyType, event *string) ([]*modelInputs.QueryKey, error) {
 	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_rows_to_read": KeysMaxRows,
 	}))
@@ -289,6 +301,14 @@ func KeysAggregated(ctx context.Context, client *Client, tableName string, proje
 
 	if typeArg != nil && *typeArg == modelInputs.KeyTypeNumeric {
 		sb.Where(sb.Equal("Type", typeArg))
+	}
+
+	if event != nil && *event != "" {
+		sb.Where(
+			sb.Or(
+				fmt.Sprintf("Event = %s", sb.Var(*event)),
+				"Event = ''",
+			))
 	}
 
 	sb.GroupBy("1, 2").
@@ -332,7 +352,7 @@ func KeysAggregated(ctx context.Context, client *Client, tableName string, proje
 	return keys, rows.Err()
 }
 
-func KeyValuesAggregated(ctx context.Context, client *Client, tableName string, projectID int, keyName string, startDate time.Time, endDate time.Time, query *string, limit *int) ([]string, error) {
+func KeyValuesAggregated(ctx context.Context, client *Client, tableName string, projectID int, keyName string, startDate time.Time, endDate time.Time, query *string, limit *int, event *string) ([]string, error) {
 	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_rows_to_read": KeyValuesMaxRows,
 	}))
@@ -354,8 +374,17 @@ func KeyValuesAggregated(ctx context.Context, client *Client, tableName string, 
 		Where(sb.Equal("Key", keyName)).
 		Where(fmt.Sprintf("Value ILIKE %s", sb.Var("%"+searchQuery+"%"))).
 		Where(fmt.Sprintf("Day >= toStartOfDay(%s)", sb.Var(startDate))).
-		Where(fmt.Sprintf("Day <= toStartOfDay(%s)", sb.Var(endDate))).
-		GroupBy("1").
+		Where(fmt.Sprintf("Day <= toStartOfDay(%s)", sb.Var(endDate)))
+
+	if event != nil && *event != "" {
+		sb.Where(
+			sb.Or(
+				fmt.Sprintf("Event = %s", sb.Var(*event)),
+				"Event = ''",
+			))
+	}
+
+	sb.GroupBy("1").
 		OrderBy("2 DESC, 1").
 		Limit(limitCount)
 
@@ -376,6 +405,213 @@ func KeyValuesAggregated(ctx context.Context, client *Client, tableName string, 
 		var (
 			value string
 			count uint64
+		)
+		if err := rows.Scan(&value, &count); err != nil {
+			return nil, err
+		}
+
+		values = append(values, value)
+	}
+
+	rows.Close()
+
+	span.Finish(rows.Err())
+	return values, rows.Err()
+}
+
+func (client *Client) AllKeys(ctx context.Context, projectID int, startDate time.Time, endDate time.Time, query *string, typeArg *modelInputs.KeyType) ([]*modelInputs.QueryKey, error) {
+	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"max_rows_to_read": KeysMaxRows,
+	}))
+
+	limitCount := 25
+
+	allTables := []string{EventKeysTable, LogKeysTable, TraceKeysTable, SessionKeysTable}
+
+	builders := []sqlbuilder.Builder{}
+	for _, table := range allTables {
+		sb := sqlbuilder.NewSelectBuilder()
+		sb.Select("Key, sum(Count) / max(sum(Count)) over () as PctCount").
+			From(table).
+			Where(sb.Equal("ProjectId", projectID)).
+			Where(fmt.Sprintf("Day >= toStartOfDay(%s)", sb.Var(startDate))).
+			Where(fmt.Sprintf("Day <= toStartOfDay(%s)", sb.Var(endDate)))
+
+		if query != nil && *query != "" {
+			sb.Where(fmt.Sprintf("Key ILIKE %s", sb.Var("%"+*query+"%")))
+		}
+
+		if typeArg != nil && *typeArg == modelInputs.KeyTypeNumeric {
+			sb.Where(sb.Equal("Type", typeArg))
+		}
+
+		sb.GroupBy("1").
+			OrderBy("2 DESC, 1").
+			Limit(limitCount)
+
+		builders = append(builders, sb)
+	}
+
+	sb := sqlbuilder.NewSelectBuilder()
+	sql, args := sb.Select("Key, sum(PctCount)").
+		From(sb.BuilderAs(sqlbuilder.UnionAll(builders...), "inner")).
+		GroupBy("1").
+		BuildWithFlavor(sqlbuilder.ClickHouse)
+
+	span, _ := util.StartSpanFromContext(chCtx, "readAllKeys")
+	span.SetAttribute("Query", sql)
+	span.SetAttribute("db.system", "clickhouse")
+
+	rows, err := client.conn.Query(chCtx, sql, args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	type queryKeyWithCount struct {
+		*modelInputs.QueryKey
+		count float64
+	}
+
+	keys := []queryKeyWithCount{}
+	for rows.Next() {
+		var (
+			key   string
+			count float64
+		)
+
+		if err := rows.Scan(&key, &count); err != nil {
+			return nil, err
+		}
+
+		keys = append(keys, queryKeyWithCount{
+			QueryKey: &modelInputs.QueryKey{Name: key},
+			count:    count})
+	}
+	rows.Close()
+	span.Finish(rows.Err())
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	// Add all matching default keys into the results
+	defaultKeys := lo.Map(modelInputs.AllReservedErrorsJoinedKey, func(k modelInputs.ReservedErrorsJoinedKey, _ int) *modelInputs.QueryKey {
+		return &modelInputs.QueryKey{Name: string(k), Type: modelInputs.KeyTypeString}
+	})
+
+	defaultKeys = append(defaultKeys, defaultLogKeys...)
+	defaultKeys = append(defaultKeys, defaultEventKeys...)
+	defaultKeys = append(defaultKeys, defaultTraceKeys...)
+	defaultKeys = append(defaultKeys, defaultSessionsKeys...)
+
+	defaultKeys = lo.Filter(defaultKeys, func(k *modelInputs.QueryKey, _ int) bool {
+		return query == nil || strings.Contains(strings.ToLower(string(k.Name)), strings.ToLower(*query))
+	})
+
+	keys = append(keys, lo.Map(defaultKeys, func(k *modelInputs.QueryKey, _ int) queryKeyWithCount {
+		return queryKeyWithCount{
+			k,
+			1.0}
+	})...)
+
+	grouped := lo.GroupBy(keys, func(k queryKeyWithCount) string {
+		return k.Name
+	})
+
+	keysAggregated := []queryKeyWithCount{}
+	for k, v := range grouped {
+		totalCount := lo.SumBy(v, func(k queryKeyWithCount) float64 {
+			return k.count
+		})
+
+		keysAggregated = append(keysAggregated, queryKeyWithCount{
+			QueryKey: &modelInputs.QueryKey{Name: k},
+			count:    totalCount,
+		})
+	}
+
+	sort.Slice(keysAggregated, func(i, j int) bool {
+		return keysAggregated[i].count > keysAggregated[j].count
+	})
+
+	if len(keysAggregated) > limitCount {
+		keysAggregated = keysAggregated[:limitCount]
+	}
+
+	return lo.Map(keysAggregated, func(k queryKeyWithCount, _ int) *modelInputs.QueryKey {
+		return k.QueryKey
+	}), nil
+}
+
+func (client *Client) AllKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time, query *string, limit *int) ([]string, error) {
+	chCtx := clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
+		"max_rows_to_read": AllKeyValuesMaxRows,
+	}))
+
+	limitCount := 500
+	if limit != nil {
+		limitCount = *limit
+	}
+
+	searchQuery := ""
+	if query != nil {
+		searchQuery = *query
+	}
+
+	allTables := []string{EventKeyValuesTable, LogKeyValuesTable, TraceKeyValuesTable}
+
+	builders := []sqlbuilder.Builder{}
+	for _, table := range allTables {
+		sb := sqlbuilder.NewSelectBuilder()
+		sb.Select("Value, sum(Count) / max(sum(Count)) over () as PctCount").
+			From(table).
+			Where(sb.Equal("ProjectId", projectID)).
+			Where(sb.Equal("Key", keyName)).
+			Where(fmt.Sprintf("Value ILIKE %s", sb.Var("%"+searchQuery+"%"))).
+			Where(fmt.Sprintf("Day >= toStartOfDay(%s)", sb.Var(startDate))).
+			Where(fmt.Sprintf("Day <= toStartOfDay(%s)", sb.Var(endDate))).
+			GroupBy("1").
+			OrderBy("2 DESC, 1").
+			Limit(limitCount)
+		builders = append(builders, sb)
+	}
+
+	// Sessions key values are stored in a different format
+	sessionsSb := sqlbuilder.NewSelectBuilder()
+	sessionsSb.Select("Value, count() / max(count()) over () as PctCount").
+		From(FieldsTable).
+		Where(sessionsSb.Equal("ProjectID", projectID)).
+		Where(sessionsSb.Equal("Name", keyName)).
+		Where(fmt.Sprintf("Value ILIKE %s", sessionsSb.Var("%"+searchQuery+"%"))).
+		Where(fmt.Sprintf("SessionCreatedAt >= %s", sessionsSb.Var(startDate))).
+		Where(fmt.Sprintf("SessionCreatedAt <= %s", sessionsSb.Var(endDate))).
+		GroupBy("1").
+		OrderBy("2 DESC, 1").
+		Limit(limitCount)
+	builders = append(builders, sessionsSb)
+
+	sb := sqlbuilder.NewSelectBuilder()
+	sql, args := sb.Select("Value, sum(PctCount)").
+		From(sb.BuilderAs(sqlbuilder.UnionAll(builders...), "inner")).
+		GroupBy("1").
+		OrderBy("2 DESC").
+		Limit(limitCount).
+		BuildWithFlavor(sqlbuilder.ClickHouse)
+
+	span, _ := util.StartSpanFromContext(chCtx, "readAllKeyValues")
+	span.SetAttribute("Query", sql)
+	span.SetAttribute("db.system", "clickhouse")
+
+	rows, err := client.conn.Query(chCtx, sql, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	values := []string{}
+	for rows.Next() {
+		var (
+			value string
+			count float64
 		)
 		if err := rows.Scan(&value, &count); err != nil {
 			return nil, err
@@ -519,14 +755,14 @@ func matchesQuery[TObj interface{}](row *TObj, config model.TableConfig, filters
 		switch filter.Operator {
 		case listener.OperatorAnd:
 			for _, childFilter := range filter.Filters {
-				if !matchesQuery(row, config, listener.Filters{childFilter}, filter.Operator) {
+				if !matchesQuery[TObj](row, config, listener.Filters{childFilter}, filter.Operator) {
 					return false
 				}
 			}
 		case listener.OperatorOr:
 			var anyMatch bool
 			for _, childFilter := range filter.Filters {
-				if matchesQuery(row, config, listener.Filters{childFilter}, filter.Operator) {
+				if matchesQuery[TObj](row, config, listener.Filters{childFilter}, filter.Operator) {
 					anyMatch = true
 					break
 				}
@@ -535,7 +771,7 @@ func matchesQuery[TObj interface{}](row *TObj, config model.TableConfig, filters
 				return false
 			}
 		case listener.OperatorNot:
-			return !matchesQuery(row, config, listener.Filters{filter.Filters[0]}, filter.Operator)
+			return !matchesQuery[TObj](row, config, listener.Filters{filter.Filters[0]}, filter.Operator)
 		default:
 			matches, err := matchFilter(row, config, filter)
 			if err != nil {
@@ -729,7 +965,89 @@ func (client *Client) saveMetricHistory(ctx context.Context, sb *sqlbuilder.Sele
 	return err
 }
 
+type SamplingStats struct {
+	Database string `ch:"database"`
+	Table    string `ch:"table"`
+	Parts    uint64 `ch:"parts"`
+	Rows     uint64 `ch:"rows"`
+	Marks    uint64 `ch:"marks"`
+}
+
+func (client *Client) getSamplingStats(ctx context.Context, tables []string, projectIds []int, dateRange modelInputs.DateRangeRequiredInput) (map[string]SamplingStats, error) {
+	tables = lo.Uniq(tables)
+	projectIds = lo.Uniq(projectIds)
+
+	builders := []sqlbuilder.Builder{}
+	for _, table := range tables {
+		sb := sqlbuilder.NewSelectBuilder()
+		sb.Select("1")
+		sb.From(table)
+		sb.Where(sb.In("ProjectId", projectIds))
+		sb.Where(sb.GreaterEqualThan("Timestamp", dateRange.StartDate))
+		sb.Where(sb.LessEqualThan("Timestamp", dateRange.EndDate))
+		builders = append(builders, sb)
+	}
+
+	sb := sqlbuilder.UnionAll(builders...)
+	sql, args := sb.BuildWithFlavor(sqlbuilder.ClickHouse)
+	sql = "EXPLAIN ESTIMATE " + sql
+
+	span, ctx := util.StartSpanFromContext(ctx, "getSamplingStats.query")
+	span.SetAttribute("sql", sql)
+	span.SetAttribute("args", args)
+	rows, err := client.conn.Query(
+		ctx,
+		sql,
+		args...,
+	)
+	span.Finish(err)
+	if err != nil {
+		return nil, err
+	}
+
+	results := []SamplingStats{}
+	for rows.Next() {
+		var result SamplingStats
+		if err := rows.ScanStruct(&result); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+
+	statsByTable := lo.KeyBy(results, func(s SamplingStats) string {
+		return s.Table
+	})
+
+	return statsByTable, nil
+}
+
 func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (*modelInputs.MetricsBuckets, error) {
+
+	if input.Params.DateRange == nil {
+		input.Params.DateRange = &modelInputs.DateRangeRequiredInput{
+			StartDate: time.Now().Add(-time.Hour * 24 * 30),
+			EndDate:   time.Now(),
+		}
+	}
+
+	sampleRatio := 0.0
+	if input.SampleableConfig.sampleSizeRows != 0 {
+		originalTable := input.SampleableConfig.tableConfig.TableName
+		samplingTable := input.SampleableConfig.samplingTableConfig.TableName
+
+		samplingStats, err := client.getSamplingStats(ctx,
+			[]string{originalTable, samplingTable},
+			input.ProjectIDs,
+			*input.Params.DateRange)
+		if err != nil {
+			return nil, err
+		}
+
+		if samplingStats[originalTable].Rows > input.SampleableConfig.sampleSizeRows {
+			sampleRatio = float64(input.SampleableConfig.sampleSizeRows) / float64(samplingStats[samplingTable].Rows)
+		}
+	}
+
 	span, ctx := util.StartSpanFromContext(ctx, "clickhouse.readMetrics")
 	span.SetAttribute("project_ids", input.ProjectIDs)
 	span.SetAttribute("table", input.SampleableConfig.tableConfig.TableName)
@@ -738,16 +1056,12 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 	if len(input.MetricTypes) == 0 {
 		return nil, errors.New("no metric types provided")
 	}
-
 	if input.Params.DateRange == nil {
 		input.Params.DateRange = &modelInputs.DateRangeRequiredInput{
 			StartDate: time.Now().Add(-time.Hour * 24 * 30),
 			EndDate:   time.Now(),
 		}
 	}
-	startTimestamp := input.Params.DateRange.StartDate.Unix()
-	endTimestamp := input.Params.DateRange.EndDate.Unix()
-	useSampling := input.SampleableConfig.useSampling(input.Params.DateRange.EndDate.Sub(input.Params.DateRange.StartDate)) && input.SavedMetricState == nil
 
 	nBuckets := 48
 	if input.BucketWindow == nil {
@@ -756,23 +1070,32 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 		} else if input.BucketCount != nil {
 			nBuckets = *input.BucketCount
 		}
-		if nBuckets > 1000 {
-			nBuckets = 1000
+		if nBuckets > MaxBuckets && !input.NoBucketMax {
+			nBuckets = MaxBuckets
 		}
 		if nBuckets < 1 {
 			nBuckets = 1
 		}
 	} else {
-		nBuckets = int((endTimestamp - startTimestamp) / int64(*input.BucketWindow))
+		nBuckets = int(int64(input.Params.DateRange.EndDate.Sub(input.Params.DateRange.StartDate).Seconds()) / int64(*input.BucketWindow))
+		if nBuckets > MaxBuckets && !input.NoBucketMax {
+			nBuckets = MaxBuckets
+			input.Params.DateRange.StartDate = input.Params.DateRange.EndDate.Add(-1 * time.Duration(MaxBuckets**input.BucketWindow) * time.Second)
+		}
 	}
+
+	startTimestamp := input.Params.DateRange.StartDate.Unix()
+	endTimestamp := input.Params.DateRange.EndDate.Unix()
 
 	keysToColumns := input.SampleableConfig.tableConfig.KeysToColumns
 
 	var fromSb *sqlbuilder.SelectBuilder
 	var err error
 	var config model.TableConfig
+	useSampling := sampleRatio != 0
 	if useSampling {
 		config = input.SampleableConfig.samplingTableConfig
+		config.TableName = fmt.Sprintf("%s SAMPLE %f", config.TableName, sampleRatio)
 	} else {
 		config = input.SampleableConfig.tableConfig
 	}
@@ -797,7 +1120,7 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 		return nil, err
 	}
 
-	attributeFields := getAttributeFields(SessionsJoinedTableConfig, filters)
+	attributeFields := getAttributeFields(config, filters)
 
 	applyBlockFilter(fromSb, input)
 
@@ -891,9 +1214,6 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 	if input.Limit != nil {
 		limitCount = *input.Limit
 	}
-	if limitCount > 100 {
-		limitCount = 100
-	}
 	if limitCount < 1 {
 		limitCount = 1
 	}
@@ -933,7 +1253,7 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 			From(config.TableName).
 			Select(strings.Join(colStrs, ", "))
 
-		addAttributes(SessionsJoinedTableConfig, attributeFields, input.ProjectIDs, input.Params, innerSb)
+		addAttributes(config, attributeFields, input.ProjectIDs, input.Params, innerSb)
 
 		innerSb.Where(innerSb.In("ProjectId", input.ProjectIDs)).
 			Where(innerSb.GreaterEqualThan("Timestamp", startTimestamp)).
@@ -950,10 +1270,14 @@ func (client *Client) ReadMetrics(ctx context.Context, input ReadMetricsInput) (
 
 		fromColStrs := []string{}
 		for idx := range input.GroupBy {
-			fromColStrs = append(fromColStrs, fmt.Sprintf("g%d", idx))
+			groupByIndex := fmt.Sprintf("g%d", idx)
+			fromColStrs = append(fromColStrs, groupByIndex)
+			fromSb.Where(fromSb.NotEqual(groupByIndex, ""))
 		}
 
-		fromSb.Where(fromSb.In("("+strings.Join(fromColStrs, ", ")+")", innerSb))
+		if limitCount != NoLimit {
+			fromSb.Where(fromSb.In("("+strings.Join(fromColStrs, ", ")+")", innerSb))
+		}
 	}
 
 	base := 5 + len(input.MetricTypes)

@@ -1,3 +1,15 @@
+## 0.5.4
+
+- Only set up Rails helper methods when available
+
+## 0.5.3
+
+- Call `to_s` on the environment argument passed to `init`
+
+## 0.5.2
+
+- Update dependencies with security vulnerabilities
+
 ## 0.5.1
 
 - Fix bug with SDK controller instrumentation

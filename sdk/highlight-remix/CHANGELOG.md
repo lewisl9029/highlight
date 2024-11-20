@@ -1,5 +1,155 @@
 # @highlight-run/remix
 
+## 2.0.73
+
+### Patch Changes
+
+-   Updated dependencies [847fdc0]
+    -   highlight.run@9.7.1
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@8.0.1
+
+## 2.0.72
+
+### Patch Changes
+
+-   Updated dependencies [ecde630]
+    -   highlight.run@9.7.0
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@8.0.0
+
+## 2.0.71
+
+### Patch Changes
+
+-   Updated dependencies [2d95aba]
+    -   highlight.run@9.5.3
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@7.0.3
+
+## 2.0.70
+
+### Patch Changes
+
+-   Updated dependencies [f06a274]
+    -   @highlight-run/node@3.10.1
+
+## 2.0.69
+
+### Patch Changes
+
+-   Updated dependencies [236afe0]
+    -   @highlight-run/node@3.10.0
+
+## 2.0.68
+
+### Patch Changes
+
+-   Updated dependencies [b02cad4]
+    -   @highlight-run/node@3.9.7
+
+## 2.0.67
+
+### Patch Changes
+
+-   Updated dependencies [d3ba444]
+-   Updated dependencies [21f3cfb]
+    -   @highlight-run/node@3.9.6
+
+## 2.0.66
+
+### Patch Changes
+
+-   Updated dependencies [7becd8b]
+    -   @highlight-run/node@3.9.5
+
+## 2.0.65
+
+### Patch Changes
+
+-   Updated dependencies [df0b226]
+    -   highlight.run@9.5.2
+    -   @highlight-run/node@3.9.4
+    -   @highlight-run/react@7.0.2
+
+## 2.0.64
+
+### Patch Changes
+
+-   Updated dependencies [5194753]
+    -   highlight.run@9.5.1
+    -   @highlight-run/node@3.9.4
+    -   @highlight-run/react@7.0.1
+
+## 2.0.63
+
+### Patch Changes
+
+-   80aa6c7: Update deprecated DataFunctionArgs type in Remix
+-   Updated dependencies [e6d5ad2]
+    -   @highlight-run/node@3.9.4
+
+## 2.0.62
+
+### Patch Changes
+
+-   Updated dependencies [d94533a]
+    -   highlight.run@9.5.0
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@7.0.0
+
+## 2.0.61
+
+### Patch Changes
+
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [72ec866]
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [f43d3b4]
+    -   highlight.run@9.4.4
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.4
+
+## 2.0.60
+
+### Patch Changes
+
+-   Updated dependencies [54557e9]
+    -   highlight.run@9.4.3
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.3
+
+## 2.0.59
+
+### Patch Changes
+
+-   Updated dependencies [5213ca3]
+    -   highlight.run@9.4.2
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.2
+
+## 2.0.58
+
+### Patch Changes
+
+-   Updated dependencies [a95d52b]
+-   Updated dependencies [f432e66]
+    -   highlight.run@9.4.1
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.1
+
+## 2.0.57
+
+### Patch Changes
+
+-   5045b23: fix opentelemetry warning from missing dependencies
+-   Updated dependencies [815faa8]
+-   Updated dependencies [815faa8]
+-   Updated dependencies [5045b23]
+    -   highlight.run@9.4.0
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.0
+
 ## 2.0.56
 
 ### Patch Changes

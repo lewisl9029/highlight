@@ -108,6 +108,7 @@ type ClickhouseField struct {
 	SessionCreatedAt int64
 	SessionID        int64
 	Value            string
+	Timestamp        int64
 }
 
 // These keys show up as recommendations, not in fields table due to high cardinality or post processing booleans
@@ -125,6 +126,7 @@ var defaultSessionsKeys = []*modelInputs.QueryKey{
 	{Name: string(modelInputs.ReservedSessionKeySecureID), Type: modelInputs.KeyTypeString},
 	{Name: string(modelInputs.ReservedSessionKeyViewedByAnyone), Type: modelInputs.KeyTypeBoolean},
 	{Name: string(modelInputs.ReservedSessionKeyViewedByMe), Type: modelInputs.KeyTypeBoolean},
+	{Name: string(modelInputs.ReservedSessionKeyTimestamp), Type: modelInputs.KeyTypeNumeric},
 }
 
 var booleanKeys = map[string]bool{
@@ -177,6 +179,7 @@ func (client *Client) WriteSessions(ctx context.Context, sessions []*model.Sessi
 				Value:            field.Value,
 				SessionID:        int64(session.ID),
 				SessionCreatedAt: session.CreatedAt.UnixMicro(),
+				Timestamp:        field.Timestamp.UnixMicro(),
 			}
 			chFields = append(chFields, &chf)
 		}
@@ -521,8 +524,10 @@ var SessionsJoinedTableConfig = model.TableConfig{
 		string(modelInputs.ReservedSessionKeyPagesVisited):       "PagesVisited",
 		string(modelInputs.ReservedSessionKeySecureID):           "SecureID",
 		string(modelInputs.ReservedSessionKeyState):              "State",
+		string(modelInputs.ReservedSessionKeyTimestamp):          "Timestamp",
 		string(modelInputs.ReservedSessionKeyViewedByAnyone):     "Viewed",
 		string(modelInputs.ReservedSessionKeyWithinBillingQuota): "WithinBillingQuota",
+		string(modelInputs.ReservedSessionKeyUpdatedAt):          "UpdatedAt",
 
 		// deprecated but kept in for backwards compatibility of search
 		string(modelInputs.ReservedSessionKeyViewed):    "Viewed",
@@ -539,9 +544,6 @@ var SessionsJoinedTableConfig = model.TableConfig{
 
 var SessionsSampleableTableConfig = SampleableTableConfig{
 	tableConfig: SessionsJoinedTableConfig,
-	useSampling: func(time.Duration) bool {
-		return false
-	},
 }
 
 func (client *Client) ReadSessionsMetrics(ctx context.Context, projectID int, params modelInputs.QueryInput, column string, metricTypes []modelInputs.MetricAggregator, groupBy []string, nBuckets *int, bucketBy string, bucketWindow *int, limit *int, limitAggregator *modelInputs.MetricAggregator, limitColumn *string) (*modelInputs.MetricsBuckets, error) {
@@ -575,7 +577,7 @@ func (client *Client) ReadWorkspaceSessionCounts(ctx context.Context, projectIDs
 }
 
 func (client *Client) SessionsKeys(ctx context.Context, projectID int, startDate time.Time, endDate time.Time, query *string, typeArg *modelInputs.KeyType) ([]*modelInputs.QueryKey, error) {
-	sessionKeys, err := KeysAggregated(ctx, client, SessionKeysTable, projectID, startDate, endDate, query, typeArg)
+	sessionKeys, err := KeysAggregated(ctx, client, SessionKeysTable, projectID, startDate, endDate, query, typeArg, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -764,81 +766,86 @@ func GetSessionsQueryImpl(admin *model.Admin, params modelInputs.QueryInput, pro
 	return sql, args, useRandomSample, nil
 }
 
-func (client *Client) QuerySessionIds(ctx context.Context, admin *model.Admin, projectId int, count int, params modelInputs.QueryInput, sortField string, page *int, retentionDate time.Time) ([]int64, int64, bool, error) {
+func (client *Client) QuerySessionIds(ctx context.Context, admin *model.Admin, projectId int, count int, params modelInputs.QueryInput, sortField string, page *int, retentionDate time.Time) ([]int64, int64, int64, int64, bool, error) {
 	pageInt := 1
 	if page != nil {
 		pageInt = *page
 	}
 	offset := (pageInt - 1) * count
 
-	sql, args, sampleRuleFound, err := GetSessionsQueryImpl(admin, params, projectId, retentionDate, "ID, count() OVER() AS total", nil, pointy.String(sortField), pointy.Int(count), pointy.Int(offset))
+	sql, args, sampleRuleFound, err := GetSessionsQueryImpl(
+		admin, params, projectId, retentionDate,
+		"ID, count() OVER() AS total, sum(Length) OVER() AS TotalLength, sum(ActiveLength) OVER() AS TotalActiveLength",
+		nil, pointy.String(sortField), pointy.Int(count), pointy.Int(offset),
+	)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, 0, 0, false, err
 	}
 
 	rows, err := client.conn.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, 0, false, err
+		return nil, 0, 0, 0, false, err
 	}
 
 	var ids []int64
 	var total uint64
+	var totalLength, totalActiveLength int64
 	for rows.Next() {
 		var id int64
-		columns := []interface{}{&id, &total}
+		columns := []interface{}{&id, &total, &totalLength, &totalActiveLength}
 		if sampleRuleFound {
 			var hash uint64
 			columns = append(columns, &hash)
 		}
 		if err := rows.Scan(columns...); err != nil {
-			return nil, 0, false, err
+			return nil, 0, 0, 0, false, err
 		}
 		ids = append(ids, id)
 	}
 
-	return ids, int64(total), sampleRuleFound, nil
+	return ids, int64(total), totalLength, totalActiveLength, sampleRuleFound, nil
 }
 
-func (client *Client) QuerySessionHistogram(ctx context.Context, admin *model.Admin, projectId int, params modelInputs.QueryInput, retentionDate time.Time, options modelInputs.DateHistogramOptions) ([]time.Time, []int64, []int64, []int64, error) {
+func (client *Client) QuerySessionHistogram(ctx context.Context, admin *model.Admin, projectId int, params modelInputs.QueryInput, retentionDate time.Time, options modelInputs.DateHistogramOptions) ([]time.Time, []int64, []int64, []int64, []int64, []int64, error) {
 	aggFn, addFn, location, err := getClickhouseHistogramSettings(options)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	selectCols := fmt.Sprintf("%s(CreatedAt, '%s') as time, count() as count, sum(if(HasErrors, 1, 0)) as has_errors", aggFn, location.String())
+	selectCols := fmt.Sprintf("%s(CreatedAt, '%s') as time, count() as count, sum(if(HasErrors, 1, 0)) as has_errors, sum(Length) as total_length, sum(ActiveLength) as active_length", aggFn, location.String())
 
 	orderBy := fmt.Sprintf("1 WITH FILL FROM %s(?, '%s') TO %s(?, '%s') STEP 1", aggFn, location.String(), aggFn, location.String())
 
 	sql, args, _, err := GetSessionsQueryImpl(admin, params, projectId, retentionDate, selectCols, pointy.String("1"), &orderBy, nil, nil)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	args = append(args, *options.Bounds.StartDate, *options.Bounds.EndDate)
-	sql = fmt.Sprintf("SELECT %s(makeDate(0, 0), time), count, has_errors from (%s)", addFn, sql)
+	sql = fmt.Sprintf("SELECT %s(makeDate(0, 0), time), count, has_errors, total_length, active_length from (%s)", addFn, sql)
 
 	rows, err := client.conn.Query(ctx, sql, args...)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
-	bucketTimes := []time.Time{}
-	totals := []int64{}
-	withErrors := []int64{}
-	withoutErrors := []int64{}
+	var bucketTimes []time.Time
+	var totals, withErrors, withoutErrors, inactiveLengths, activeLengths []int64
 	for rows.Next() {
 		var time time.Time
-		var total uint64
-		var withError uint64
-		if err := rows.Scan(&time, &total, &withError); err != nil {
-			return nil, nil, nil, nil, err
+		var total, withError uint64
+		var totalLength, activeLength int64
+		if err := rows.Scan(&time, &total, &withError, &totalLength, &activeLength); err != nil {
+			return nil, nil, nil, nil, nil, nil, err
 		}
 		bucketTimes = append(bucketTimes, time)
 		totals = append(totals, int64(total))
 		withErrors = append(withErrors, int64(withError))
 		withoutErrors = append(withoutErrors, int64(total-withError))
+		inactiveLengths = append(inactiveLengths, totalLength-activeLength)
+		activeLengths = append(activeLengths, activeLength)
 	}
 
-	return bucketTimes, totals, withErrors, withoutErrors, nil
+	return bucketTimes, totals, withErrors, withoutErrors, inactiveLengths, activeLengths, nil
 }
 
 func (client *Client) SessionsLogLines(ctx context.Context, projectID int, params modelInputs.QueryInput) ([]*modelInputs.LogLine, error) {

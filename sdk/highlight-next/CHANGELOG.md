@@ -1,5 +1,164 @@
 # @highlight-run/next
 
+## 7.6.10
+
+### Patch Changes
+
+-   Updated dependencies [847fdc0]
+    -   highlight.run@9.7.1
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@8.0.1
+
+## 7.6.9
+
+### Patch Changes
+
+-   Updated dependencies [ecde630]
+    -   highlight.run@9.7.0
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@8.0.0
+
+## 7.6.8
+
+### Patch Changes
+
+-   Updated dependencies [2d95aba]
+    -   highlight.run@9.5.3
+    -   @highlight-run/node@3.10.1
+    -   @highlight-run/react@7.0.3
+
+## 7.6.7
+
+### Patch Changes
+
+-   Updated dependencies [f06a274]
+    -   @highlight-run/node@3.10.1
+
+## 7.6.6
+
+### Patch Changes
+
+-   236afe0: support span naming in runwithheaders and set a default span name for route middlewares
+-   Updated dependencies [236afe0]
+    -   @highlight-run/node@3.10.0
+
+## 7.6.5
+
+### Patch Changes
+
+-   Updated dependencies [b02cad4]
+    -   @highlight-run/node@3.9.7
+
+## 7.6.4
+
+### Patch Changes
+
+-   Updated dependencies [d3ba444]
+-   Updated dependencies [21f3cfb]
+    -   @highlight-run/node@3.9.6
+    -   @highlight-run/opentelemetry-sdk-workers@1.0.8
+    -   @highlight-run/cloudflare@2.1.9
+
+## 7.6.3
+
+### Patch Changes
+
+-   7becd8b: fix @highlight-run/next sdk breaking HMR with turbopack next.js 14
+-   Updated dependencies [7becd8b]
+    -   @highlight-run/node@3.9.5
+
+## 7.6.2
+
+### Patch Changes
+
+-   Updated dependencies [df0b226]
+    -   highlight.run@9.5.2
+    -   @highlight-run/node@3.9.4
+    -   @highlight-run/react@7.0.2
+
+## 7.6.1
+
+### Patch Changes
+
+-   Updated dependencies [5194753]
+    -   highlight.run@9.5.1
+    -   @highlight-run/node@3.9.4
+    -   @highlight-run/react@7.0.1
+
+## 7.6.0
+
+### Minor Changes
+
+-   e6d5ad2: require next 13 and ensure compatibility with node 16
+
+### Patch Changes
+
+-   a3ff05e: update transient dependencies with security vulnerabilities
+-   Updated dependencies [e6d5ad2]
+    -   @highlight-run/node@3.9.4
+
+## 7.5.31
+
+### Patch Changes
+
+-   Updated dependencies [d94533a]
+    -   highlight.run@9.5.0
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@7.0.0
+
+## 7.5.30
+
+### Patch Changes
+
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [72ec866]
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [f43d3b4]
+    -   highlight.run@9.4.4
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.4
+
+## 7.5.29
+
+### Patch Changes
+
+-   Updated dependencies [54557e9]
+    -   highlight.run@9.4.3
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.3
+
+## 7.5.28
+
+### Patch Changes
+
+-   Updated dependencies [5213ca3]
+    -   highlight.run@9.4.2
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.2
+
+## 7.5.27
+
+### Patch Changes
+
+-   Updated dependencies [a95d52b]
+-   Updated dependencies [f432e66]
+    -   highlight.run@9.4.1
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.1
+
+## 7.5.26
+
+### Patch Changes
+
+-   5045b23: fix opentelemetry warning from missing dependencies
+-   Updated dependencies [815faa8]
+-   Updated dependencies [815faa8]
+-   Updated dependencies [5045b23]
+    -   highlight.run@9.4.0
+    -   @highlight-run/cloudflare@2.1.8
+    -   @highlight-run/node@3.9.3
+    -   @highlight-run/react@6.0.0
+
 ## 7.5.25
 
 ### Patch Changes

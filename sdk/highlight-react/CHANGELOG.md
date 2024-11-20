@@ -1,5 +1,87 @@
 # @highlight-run/react
 
+## 8.0.1
+
+### Patch Changes
+
+-   Updated dependencies [847fdc0]
+    -   highlight.run@9.7.1
+
+## 8.0.0
+
+### Patch Changes
+
+-   Updated dependencies [ecde630]
+    -   highlight.run@9.7.0
+
+## 7.0.3
+
+### Patch Changes
+
+-   Updated dependencies [2d95aba]
+    -   highlight.run@9.5.3
+
+## 7.0.2
+
+### Patch Changes
+
+-   Updated dependencies [df0b226]
+    -   highlight.run@9.5.2
+
+## 7.0.1
+
+### Patch Changes
+
+-   Updated dependencies [5194753]
+    -   highlight.run@9.5.1
+
+## 7.0.0
+
+### Patch Changes
+
+-   Updated dependencies [d94533a]
+    -   highlight.run@9.5.0
+
+## 6.0.4
+
+### Patch Changes
+
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [72ec866]
+-   Updated dependencies [f43d3b4]
+-   Updated dependencies [f43d3b4]
+    -   highlight.run@9.4.4
+
+## 6.0.3
+
+### Patch Changes
+
+-   Updated dependencies [54557e9]
+    -   highlight.run@9.4.3
+
+## 6.0.2
+
+### Patch Changes
+
+-   Updated dependencies [5213ca3]
+    -   highlight.run@9.4.2
+
+## 6.0.1
+
+### Patch Changes
+
+-   Updated dependencies [a95d52b]
+-   Updated dependencies [f432e66]
+    -   highlight.run@9.4.1
+
+## 6.0.0
+
+### Patch Changes
+
+-   Updated dependencies [815faa8]
+-   Updated dependencies [815faa8]
+    -   highlight.run@9.4.0
+
 ## 5.0.4
 
 ### Patch Changes

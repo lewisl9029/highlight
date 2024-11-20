@@ -9,10 +9,10 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 import { H } from 'highlight.run'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
-import { SSRProvider } from 'react-aria'
 import Analytics from '../components/Analytics'
 import { Meta } from '../components/common/Head/Meta'
 import MetaImage from '../public/images/meta-image.jpg'
+import { ErrorBoundary as HighlightErrorBoundary } from '@highlight-run/next/client'
 
 Router.events.on('routeChangeStart', nProgress.start)
 Router.events.on('routeChangeError', nProgress.done)
@@ -36,12 +36,8 @@ H.init('4d7k1xeo', {
 
 function MyApp({ Component, pageProps }: AppProps) {
 	return (
-		<SSRProvider>
+		<HighlightErrorBoundary showDialog>
 			<Head>
-				<title>
-					highlight.io: The open source monitoring platform.
-				</title>
-
 				<link
 					rel="preconnect"
 					href="https://fonts.googleapis.com"
@@ -57,7 +53,7 @@ function MyApp({ Component, pageProps }: AppProps) {
 			<Component {...pageProps} />
 			<SpeedInsights />
 			<Analytics />
-		</SSRProvider>
+		</HighlightErrorBoundary>
 	)
 }
 

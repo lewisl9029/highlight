@@ -35,6 +35,7 @@ import configureElectronHighlight from './environments/electron.js'
 import { HighlightSegmentMiddleware } from './integrations/segment.js'
 import { initializeFetchListener } from './listeners/fetch'
 import { initializeWebSocketListener } from './listeners/web-socket'
+import { getNoopSpan } from '@highlight-run/client/src/otel/utils.js'
 
 enum MetricCategory {
 	Device = 'Device',
@@ -66,9 +67,9 @@ let onHighlightReadyQueue: {
 	options?: OnHighlightReadyOptions
 	func: () => void | Promise<void>
 }[] = []
-let onHighlightReadyTimeout: number | undefined = undefined
+let onHighlightReadyTimeout: ReturnType<typeof setTimeout> | undefined =
+	undefined
 
-let sessionSecureID: string
 let highlight_obj: Highlight
 let first_load_listeners: FirstLoadListeners
 let init_called = false
@@ -103,7 +104,7 @@ const H: HighlightPublicInterface = {
 			}
 
 			let previousSession = getPreviousSessionData()
-			sessionSecureID = GenerateSecureID()
+			let sessionSecureID = GenerateSecureID()
 			if (previousSession?.sessionSecureID) {
 				sessionSecureID = previousSession.sessionSecureID
 			}
@@ -122,22 +123,22 @@ const H: HighlightPublicInterface = {
 					setupBrowserTracing,
 					getTracer: otelGetTracer,
 				}) => {
-					if (options?.enableOtelTracing) {
-						setupBrowserTracing({
-							endpoint: options?.otlpEndpoint,
-							projectId: projectID,
-							sessionSecureId: sessionSecureID,
-							environment: options?.environment ?? 'production',
-							networkRecordingOptions:
-								typeof options?.networkRecording === 'object'
-									? options.networkRecording
-									: undefined,
-							tracingOrigins: options?.tracingOrigins,
-							serviceName:
-								options?.serviceName ?? 'highlight-browser',
-						})
-						getTracer = otelGetTracer
-					}
+					setupBrowserTracing({
+						otlpEndpoint:
+							options?.otlpEndpoint ??
+							'https://otel.highlight.io',
+						projectId: projectID,
+						sessionSecureId: sessionSecureID,
+						environment: options?.environment ?? 'production',
+						networkRecordingOptions:
+							typeof options?.networkRecording === 'object'
+								? options.networkRecording
+								: undefined,
+						tracingOrigins: options?.tracingOrigins,
+						serviceName:
+							options?.serviceName ?? 'highlight-browser',
+					})
+					getTracer = otelGetTracer
 
 					highlight_obj = new Highlight(
 						client_options,
@@ -157,7 +158,7 @@ const H: HighlightPublicInterface = {
 				firstloadVersion,
 				environment: options?.environment || 'production',
 				appVersion: options?.version,
-				sessionSecureID: sessionSecureID,
+				sessionSecureID,
 			}
 			first_load_listeners = new FirstLoadListeners(client_options)
 			if (!options?.manualStart) {
@@ -380,25 +381,24 @@ const H: HighlightPublicInterface = {
 	): any => {
 		const tracer = typeof getTracer === 'function' ? getTracer() : undefined
 		if (!tracer) {
+			const noopSpan = getNoopSpan()
+
 			if (fn === undefined && context === undefined) {
-				;(options as Callback)()
+				return (options as Callback)(noopSpan)
 			} else if (fn === undefined) {
-				;(context as Callback)()
+				return (context as Callback)(noopSpan)
 			} else {
-				fn()
+				return fn(noopSpan)
 			}
-			return
 		}
 
-		const wrapCallback = async (
-			span: Span,
-			callback: (span: Span) => any,
-		) => {
-			try {
-				const result = await callback(span)
-				return result
-			} finally {
+		const wrapCallback = (span: Span, callback: (span: Span) => any) => {
+			const result = callback(span)
+			if (result instanceof Promise) {
+				return result.finally(() => span.end())
+			} else {
 				span.end()
+				return result
 			}
 		}
 
@@ -427,11 +427,18 @@ const H: HighlightPublicInterface = {
 		context?: Context | ((span: Span) => any),
 		fn?: (span: Span) => any,
 	): any => {
-		if (typeof getTracer !== 'function') {
-			return
-		}
+		const tracer = typeof getTracer === 'function' ? getTracer() : undefined
+		if (!tracer) {
+			const noopSpan = getNoopSpan()
 
-		const tracer = getTracer()
+			if (fn === undefined && context === undefined) {
+				return (options as Callback)(noopSpan)
+			} else if (fn === undefined) {
+				return (context as Callback)(noopSpan)
+			} else {
+				return fn(noopSpan)
+			}
+		}
 
 		if (fn === undefined && context === undefined) {
 			return tracer.startActiveSpan(name, options as Callback)
@@ -450,71 +457,100 @@ const H: HighlightPublicInterface = {
 			)
 		}
 	},
-	getSessionURL: async () => {
-		const data = getPreviousSessionData(sessionSecureID)
-		if (data) {
-			return `https://${HIGHLIGHT_URL}/${data.projectID}/sessions/${sessionSecureID}`
-		} else {
-			throw new Error(`Unable to get session URL: ${sessionSecureID}}`)
-		}
-	},
-	getSessionDetails: async () => {
-		const baseUrl = await H.getSessionURL()
-		const sessionData = getPreviousSessionData(sessionSecureID)
-		if (!baseUrl) {
-			throw new Error('Could not get session URL')
-		}
-		const currentSessionTimestamp = sessionData?.sessionStartTime
-		if (!currentSessionTimestamp) {
-			throw new Error('Could not get session start timestamp')
-		}
-		const now = new Date().getTime()
-		const url = new URL(baseUrl)
-		const urlWithTimestamp = new URL(baseUrl)
-		urlWithTimestamp.searchParams.set(
-			'ts',
-			// The delta between when the session recording started and now.
-			((now - currentSessionTimestamp) / 1000).toString(),
-		)
+	getSessionURL: () => {
+		return new Promise((resolve, reject) => {
+			H.onHighlightReady(() => {
+				const secureID = highlight_obj.sessionData.sessionSecureID
+				const data = getPreviousSessionData(secureID)
 
-		return {
-			url: url.toString(),
-			urlWithTimestamp: urlWithTimestamp.toString(),
-		} as SessionDetails
+				if (data) {
+					resolve(
+						`https://${HIGHLIGHT_URL}/${data.projectID}/sessions/${secureID}`,
+					)
+				} else {
+					reject(new Error(`Unable to get session URL: ${secureID}`))
+				}
+			})
+		})
+	},
+	getSessionDetails: () => {
+		return new Promise((resolve, reject) => {
+			H.onHighlightReady(async () => {
+				try {
+					const baseUrl = await H.getSessionURL()
+					if (!baseUrl) {
+						throw new Error('Could not get session URL')
+					}
+
+					const secureID = highlight_obj.sessionData.sessionSecureID
+					const sessionData = getPreviousSessionData(secureID)
+					const currentSessionTimestamp =
+						sessionData?.sessionStartTime
+					if (!currentSessionTimestamp) {
+						throw new Error('Could not get session start timestamp')
+					}
+
+					const now = new Date().getTime()
+					const url = new URL(baseUrl)
+					const urlWithTimestamp = new URL(baseUrl)
+					urlWithTimestamp.searchParams.set(
+						'ts',
+						((now - currentSessionTimestamp) / 1000).toString(),
+					)
+
+					resolve({
+						url: url.toString(),
+						urlWithTimestamp: urlWithTimestamp.toString(),
+						sessionSecureID: secureID,
+					} as SessionDetails)
+				} catch (error) {
+					reject(error)
+				}
+			})
+		})
 	},
 	getRecordingState: () => {
 		return highlight_obj?.state ?? 'NotRecording'
 	},
 	onHighlightReady: (func, options) => {
-		onHighlightReadyQueue.push({ options, func })
-		if (onHighlightReadyTimeout === undefined) {
-			const fn = () => {
-				const newOnHighlightReadyQueue: {
-					options?: OnHighlightReadyOptions
-					func: () => void | Promise<void>
-				}[] = []
-				for (const f of onHighlightReadyQueue) {
-					if (
-						highlight_obj &&
-						(f.options?.waitForReady === false ||
-							highlight_obj.ready)
-					) {
-						f.func()
-					} else {
-						newOnHighlightReadyQueue.push(f)
-					}
-				}
-				onHighlightReadyQueue = newOnHighlightReadyQueue
-				onHighlightReadyTimeout = undefined
-				if (onHighlightReadyQueue.length > 0) {
-					onHighlightReadyTimeout = setTimeout(
-						fn,
-						READY_WAIT_LOOP_MS,
-					) as unknown as number
-				}
-			}
-			fn()
+		// Run the callback immediately if Highlight is already ready
+		if (highlight_obj && highlight_obj.ready) {
+			func()
+			return
 		}
+
+		onHighlightReadyQueue.push({ options, func })
+
+		if (onHighlightReadyTimeout !== undefined) {
+			return
+		}
+
+		const processQueue = () => {
+			const newQueue = onHighlightReadyQueue.filter((item) => {
+				if (
+					!highlight_obj ||
+					(item.options?.waitForReady !== false &&
+						!highlight_obj.ready)
+				) {
+					return true
+				}
+
+				item.func()
+				return false
+			})
+
+			onHighlightReadyQueue = newQueue
+			onHighlightReadyTimeout = undefined
+
+			if (onHighlightReadyQueue.length > 0) {
+				onHighlightReadyTimeout = setTimeout(
+					processQueue,
+					READY_WAIT_LOOP_MS,
+				)
+			}
+		}
+
+		processQueue()
 	},
 }
 
@@ -526,10 +562,25 @@ listenToChromeExtensionMessage()
 initializeFetchListener()
 initializeWebSocketListener()
 
+// Helpers only for testing
+const __testing = {
+	reset: () => {
+		init_called = false
+		highlight_obj = undefined as any
+		onHighlightReadyQueue = []
+		onHighlightReadyTimeout = undefined
+		first_load_listeners = undefined as any
+	},
+	setHighlightObj: (obj: Partial<Highlight>) => {
+		highlight_obj = obj as Highlight
+	},
+}
+
 export {
 	configureElectronHighlight,
 	H,
 	HighlightSegmentMiddleware,
 	MetricCategory,
+	__testing,
 }
 export type { HighlightOptions }

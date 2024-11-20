@@ -25,6 +25,10 @@ export const legendWrapper = style({
 	rowGap: 6,
 })
 
+export const legendLoading = style({
+	height: 42,
+})
+
 export const legendDot = style({
 	borderRadius: '50%',
 	margin: 'auto',
@@ -73,6 +77,22 @@ export const tooltipRow = style({
 export const exemplarButton = style({
 	height: '16px',
 	width: '16px',
+})
+
+export const labelWrapper = style({
+	position: 'absolute',
+	backgroundColor: 'white',
+	border: vars.border.divider,
+	borderRadius: '6px',
+	minWidth: '100px',
+	display: 'flex',
+	flexDirection: 'column',
+	gap: '6px',
+	padding: '8px',
+})
+
+export const labelText = style({
+	lineHeight: '16px',
 })
 
 export const tooltipDot = style({

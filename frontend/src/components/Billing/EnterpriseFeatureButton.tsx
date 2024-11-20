@@ -23,6 +23,10 @@ const FEATURE_DESCRIPTIONS = {
 	'Ingestion Sampling': 'control data ingestion rates and sample data.',
 	'Custom Data Retention':
 		'control data retention beyond the standard retention.',
+	'Jira Integration':
+		'create Jira issues from your highlight.io errors and sessions.',
+	'Teams Integration':
+		'receive highlight.io alerts via Microsoft Teams messages.',
 } as const
 
 type Feature = keyof typeof FEATURE_DESCRIPTIONS
@@ -36,6 +40,7 @@ interface Props {
 	className?: string
 	variant?: 'basic'
 	shown?: true
+	disabled?: boolean
 }
 
 export default function EnterpriseFeatureButton({
@@ -48,6 +53,7 @@ export default function EnterpriseFeatureButton({
 	onShowModal,
 	onClose,
 	shown,
+	disabled,
 }: PropsWithChildren<Props>) {
 	const { currentWorkspace } = useApplicationContext()
 	const { data, loading } = useGetWorkspaceSettingsQuery({
@@ -70,7 +76,7 @@ export default function EnterpriseFeatureButton({
 	>(shown ? 'features' : undefined)
 
 	const checkFeature = useCallback(async () => {
-		if (loading || !data?.workspaceSettings) return
+		if (loading || !data?.workspaceSettings || disabled) return
 		if (!data.workspaceSettings[setting]) {
 			analytics.track(`enterprise-request-${name}`)
 			if (onShowModal) {
@@ -80,7 +86,15 @@ export default function EnterpriseFeatureButton({
 			return
 		}
 		await fn()
-	}, [loading, data?.workspaceSettings, setting, fn, name, onShowModal])
+	}, [
+		loading,
+		data?.workspaceSettings,
+		disabled,
+		setting,
+		fn,
+		name,
+		onShowModal,
+	])
 
 	let action: JSX.Element
 	if (variant === 'basic') {

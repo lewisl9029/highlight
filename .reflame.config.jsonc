@@ -402,12 +402,10 @@
       ],
     },
     "highlight.run": {
-      "version": "9.3.4"
+      "version": "9.4.2"
     },
-    // TODO: create a library for this
-    // Might need a shim entry point for .css?
     "@highlight-run/react": {
-      "version": "5.0.4",
+      "version": "6.0.2"
     },
     "antd": {
       "entryPoints": [

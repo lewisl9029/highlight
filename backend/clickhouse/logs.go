@@ -46,6 +46,7 @@ var defaultLogKeys = []*modelInputs.QueryKey{
 	{Name: string(modelInputs.ReservedLogKeySpanID), Type: modelInputs.KeyTypeString},
 	{Name: string(modelInputs.ReservedLogKeyTraceID), Type: modelInputs.KeyTypeString},
 	{Name: string(modelInputs.ReservedLogKeyMessage), Type: modelInputs.KeyTypeString},
+	{Name: string(modelInputs.ReservedLogKeyTimestamp), Type: modelInputs.KeyTypeNumeric},
 }
 
 var reservedLogKeys = lo.Map(modelInputs.AllReservedLogKey, func(key modelInputs.ReservedLogKey, _ int) string {
@@ -77,7 +78,7 @@ var LogsTableConfig = model.TableConfig{
 }
 
 var logsSamplingTableConfig = model.TableConfig{
-	TableName:        fmt.Sprintf("%s SAMPLE %d", LogsSamplingTable, SamplingRows),
+	TableName:        LogsSamplingTable,
 	KeysToColumns:    logKeysToColumns,
 	ReservedKeys:     reservedLogKeys,
 	BodyColumn:       "Body",
@@ -87,9 +88,7 @@ var logsSamplingTableConfig = model.TableConfig{
 var LogsSampleableTableConfig = SampleableTableConfig{
 	tableConfig:         LogsTableConfig,
 	samplingTableConfig: logsSamplingTableConfig,
-	useSampling: func(d time.Duration) bool {
-		return d >= 24*time.Hour
-	},
+	sampleSizeRows:      20_000_000,
 }
 
 func (client *Client) BatchWriteLogRows(ctx context.Context, logRows []*LogRow) error {
@@ -134,6 +133,7 @@ type Pagination struct {
 	At        *string
 	Direction modelInputs.SortDirection
 	CountOnly bool
+	Limit     *int
 }
 
 func (client *Client) ReadLogs(ctx context.Context, projectID int, params modelInputs.QueryInput, pagination Pagination) (*modelInputs.LogConnection, error) {
@@ -483,7 +483,7 @@ func (client *Client) ReadWorkspaceLogCounts(ctx context.Context, projectIDs []i
 }
 
 func (client *Client) LogsKeys(ctx context.Context, projectID int, startDate time.Time, endDate time.Time, query *string, typeArg *modelInputs.KeyType) ([]*modelInputs.QueryKey, error) {
-	logKeys, err := KeysAggregated(ctx, client, LogKeysTable, projectID, startDate, endDate, query, typeArg)
+	logKeys, err := KeysAggregated(ctx, client, LogKeysTable, projectID, startDate, endDate, query, typeArg, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +503,7 @@ func (client *Client) LogsKeys(ctx context.Context, projectID int, startDate tim
 }
 
 func (client *Client) LogsKeyValues(ctx context.Context, projectID int, keyName string, startDate time.Time, endDate time.Time, query *string, limit *int) ([]string, error) {
-	return KeyValuesAggregated(ctx, client, LogKeyValuesTable, projectID, keyName, startDate, endDate, query, limit)
+	return KeyValuesAggregated(ctx, client, LogKeyValuesTable, projectID, keyName, startDate, endDate, query, limit, nil)
 }
 
 func LogMatchesQuery(logRow *LogRow, filters listener.Filters) bool {

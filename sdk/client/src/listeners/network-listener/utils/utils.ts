@@ -247,30 +247,48 @@ export const matchPerformanceTimingsWithRequestResponsePair = (
  * Returns true if the name is a Highlight network resource.
  * This is used to filter out Highlight requests/responses from showing up on end application's network resources.
  */
-const isHighlightNetworkResourceFilter = (name: string, backendUrl: string) =>
+const isHighlightNetworkResourceFilter = (
+	name: string,
+	highlightEndpoints: string[],
+) =>
 	name
 		.toLocaleLowerCase()
 		.includes(
-			import.meta.env.REACT_APP_PUBLIC_GRAPH_URI ?? 'highlight.io',
+			import.meta.env.REACT_APP_PUBLIC_GRAPH_URI ?? 'pub.highlight.io',
 		) ||
-	name.toLocaleLowerCase().includes('highlight.io') ||
-	name.toLocaleLowerCase().includes(backendUrl)
+	name.toLocaleLowerCase().includes('pub.highlight.io') ||
+	name.toLocaleLowerCase().includes('otel.highlight.io') ||
+	highlightEndpoints.some((backendUrl) =>
+		name.toLocaleLowerCase().includes(backendUrl),
+	)
 
+// Determines whether we store the network request and show it in the session
+// replay, including the body and headers.
 export const shouldNetworkRequestBeRecorded = (
 	url: string,
-	highlightBackendUrl: string,
+	highlightEndpoints: string[],
 	tracingOrigins?: boolean | (string | RegExp)[],
 ) => {
 	return (
-		!isHighlightNetworkResourceFilter(url, highlightBackendUrl) ||
-		shouldNetworkRequestBeTraced(url, tracingOrigins)
+		!isHighlightNetworkResourceFilter(url, highlightEndpoints) ||
+		shouldNetworkRequestBeTraced(url, tracingOrigins ?? [], [])
 	)
 }
 
+// Determines whether we want to attach the x-highlight-request header to the
+// request. We want to avoid adding this to external requests.
 export const shouldNetworkRequestBeTraced = (
 	url: string,
-	tracingOrigins?: boolean | (string | RegExp)[],
+	tracingOrigins: boolean | (string | RegExp)[],
+	urlBlocklist: string[],
 ) => {
+	if (
+		urlBlocklist.some((blockedUrl) =>
+			url.toLowerCase().includes(blockedUrl),
+		)
+	) {
+		return false
+	}
 	let patterns: (string | RegExp)[] = []
 	if (tracingOrigins === true) {
 		patterns = ['localhost', /^\//]
@@ -303,17 +321,13 @@ function makeId(length: number) {
 	return result
 }
 
-export const createNetworkRequestId = (useOtelTraceId?: boolean) => {
+export const createNetworkRequestId = () => {
 	// Long enough to avoid collisions, not long enough to be unguessable
 	const requestId = makeId(10)
 
-	if (useOtelTraceId) {
-		const context = getActiveSpan()
-		const traceId = context?.spanContext().traceId
-		return [getNetworkSessionSecureID(), traceId ?? requestId]
-	}
-
-	return [getNetworkSessionSecureID(), requestId]
+	const context = getActiveSpan()
+	const traceId = context?.spanContext().traceId
+	return [getNetworkSessionSecureID(), traceId ?? requestId]
 }
 
 export const getHighlightRequestHeader = (

@@ -12,6 +12,10 @@ import { parseSearch } from '@/components/Search/utils'
 import { START_PAGE } from '@/components/SearchPagination/SearchPagination'
 import { DateHistogramBucketSize } from '@/graph/generated/schemas'
 import { useSearchTime } from '@/hooks/useSearchTime'
+import {
+	SearchEntry,
+	useSearchHistory,
+} from '@/components/Search/SearchForm/hooks'
 
 export const SORT_COLUMN = 'sort_column'
 export const SORT_DIRECTION = 'sort_direction'
@@ -37,6 +41,7 @@ interface SearchContext extends Partial<ReturnType<typeof useSearchTime>> {
 	setPage: (page: number) => void
 	results: any[]
 	totalCount: number
+	resultFormatted?: string
 	moreResults: number
 	resetMoreResults: () => void
 	histogramBucketSize?: DateHistogramBucketSize
@@ -49,6 +54,10 @@ interface SearchContext extends Partial<ReturnType<typeof useSearchTime>> {
 	aiSuggestion?: AiSuggestion
 	aiSuggestionLoading?: boolean
 	aiSuggestionError?: ApolloError
+	defaultValues?: string[]
+	recentSearches: SearchEntry[]
+	handleSearch: (query: string, queryParts: SearchExpression[]) => void
+	historyLoading: boolean
 }
 
 export const [useSearchContext, SearchContextProvider] =
@@ -63,6 +72,7 @@ interface Props extends Partial<ReturnType<typeof useSearchTime>> {
 	page?: SearchContext['page']
 	setPage?: SearchContext['setPage']
 	results?: SearchContext['results']
+	resultFormatted?: SearchContext['resultFormatted']
 	totalCount?: SearchContext['totalCount']
 	histogramBucketSize?: SearchContext['histogramBucketSize']
 	moreResults?: SearchContext['moreResults']
@@ -82,6 +92,7 @@ export const SearchContext: React.FC<Props> = ({
 	loading = false,
 	initialQuery,
 	results = [],
+	resultFormatted = '',
 	totalCount = 0,
 	moreResults = 0,
 	page = START_PAGE,
@@ -103,11 +114,31 @@ export const SearchContext: React.FC<Props> = ({
 	const [aiQuery, setAiQuery] = useState('')
 	const { queryParts, tokens } = parseSearch(query)
 	const tokenGroups = buildTokenGroups(tokens)
+	const { handleSearch, recentSearches, historyLoading } = useSearchHistory()
+	const handleSubmit = (query: string) => {
+		onSubmit(query)
+		if (query) {
+			const queryParts = parseSearch(query)?.queryParts || []
+			try {
+				const newQueryParts = JSON.parse(
+					JSON.stringify(queryParts || []),
+				)
+				handleSearch?.(query, newQueryParts)
+			} catch (err) {
+				//do nothing
+				console.error(
+					'Something went wrong while parsing the queryParts',
+					err,
+				)
+			}
+		}
+	}
 
 	return (
 		<SearchContextProvider
 			value={{
 				results,
+				resultFormatted,
 				totalCount,
 				moreResults,
 				histogramBucketSize,
@@ -119,7 +150,7 @@ export const SearchContext: React.FC<Props> = ({
 				tokenGroups,
 				page,
 				setQuery,
-				onSubmit,
+				onSubmit: handleSubmit,
 				setPage,
 				resetMoreResults,
 				pollingExpired,
@@ -131,6 +162,9 @@ export const SearchContext: React.FC<Props> = ({
 				aiSuggestion,
 				aiSuggestionLoading,
 				aiSuggestionError,
+				recentSearches,
+				handleSearch,
+				historyLoading,
 				...searchTimeContext,
 			}}
 		>

@@ -7,7 +7,8 @@
 import { H, HandleError } from '@highlight-run/remix/server'
 import type {
 	AppLoadContext,
-	DataFunctionArgs,
+	LoaderFunctionArgs,
+	ActionFunctionArgs,
 	EntryContext,
 } from '@remix-run/node'
 
@@ -29,7 +30,7 @@ const nodeOptions: NodeOptions = {
 
 export function handleError(
 	error: unknown,
-	dataFunctionArgs: DataFunctionArgs,
+	dataFunctionArgs: LoaderFunctionArgs | ActionFunctionArgs,
 ) {
 	const handleError = HandleError(nodeOptions)
 
@@ -55,13 +56,13 @@ export default function handleRequest(
 				responseStatusCode,
 				responseHeaders,
 				remixContext,
-			)
+		  )
 		: handleBrowserRequest(
 				request,
 				responseStatusCode,
 				responseHeaders,
 				remixContext,
-			)
+		  )
 }
 
 function handleBotRequest(

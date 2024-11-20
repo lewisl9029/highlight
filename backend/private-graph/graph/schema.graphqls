@@ -98,6 +98,8 @@ type SessionsReportRow {
 	key: String!
 	email: String!
 	num_sessions: UInt64!
+	first_session: Timestamp!
+	last_session: Timestamp!
 	num_days_visited: UInt64!
 	num_months_visited: UInt64!
 	avg_active_length_mins: Float!
@@ -230,6 +232,12 @@ enum ProductType {
 	Traces
 	Metrics
 	Events
+}
+
+enum SuggestionType {
+	None
+	Value
+	Key
 }
 
 enum IngestReason {
@@ -435,7 +443,6 @@ enum IntegrationType {
 	Slack
 	Linear
 	Zapier
-	Front
 	Vercel
 	Discord
 	ClickUp
@@ -562,6 +569,8 @@ type AllWorkspaceSettings {
 	enable_project_level_access: Boolean!
 	enable_session_export: Boolean!
 	enable_unlisted_sharing: Boolean!
+	enable_jira_integration: Boolean!
+	enable_teams_integration: Boolean!
 }
 
 type Account {
@@ -677,12 +686,6 @@ type ErrorInstance {
 	previous_id: ID
 }
 
-type ErrorField {
-	project_id: Int
-	name: String!
-	value: String!
-}
-
 type ErrorGroup {
 	created_at: Timestamp!
 	updated_at: Timestamp!
@@ -695,7 +698,6 @@ type ErrorGroup {
 	metadata_log: [ErrorMetadata]!
 	mapped_stack_trace: String
 	stack_trace: String
-	fields: [ErrorField]
 	state: ErrorState!
 	snoozed_until: Timestamp
 	environments: String
@@ -1058,6 +1060,8 @@ enum ReservedSessionKey {
 	secure_id
 	service_version
 	state
+	timestamp
+	updated_at
 	viewed_by_anyone
 	viewed_by_me
 	within_billing_quota
@@ -1087,6 +1091,7 @@ enum ReservedEventKey {
 	session_length
 	session_pages_visited
 	state
+	timestamp
 }
 
 enum LogSource {
@@ -1151,6 +1156,8 @@ type MetricBucket {
 	column: MetricColumn!
 	metric_type: MetricAggregator!
 	metric_value: Float
+	yhat_lower: Float
+	yhat_upper: Float
 }
 
 type MetricsBuckets {
@@ -1393,6 +1400,13 @@ input UserPropertyInput {
 	value: String!
 }
 
+input PredictionSettings {
+	changepointPriorScale: Float!
+	intervalWidth: Float!
+	thresholdCondition: ThresholdCondition!
+	intervalSeconds: Int!
+}
+
 type User {
 	id: ID!
 }
@@ -1440,6 +1454,8 @@ type SessionsHistogram {
 	sessions_without_errors: [Int64!]!
 	sessions_with_errors: [Int64!]!
 	total_sessions: [Int64!]!
+	inactive_lengths: [Int64!]!
+	active_lengths: [Int64!]!
 }
 
 type ErrorsHistogram {
@@ -1450,6 +1466,8 @@ type ErrorsHistogram {
 type SessionResults {
 	sessions: [Session!]!
 	totalCount: Int64!
+	totalLength: Int64!
+	totalActiveLength: Int64!
 }
 
 type ErrorResults {
@@ -1596,6 +1614,17 @@ enum AlertState {
 	Error
 }
 
+enum ThresholdType {
+	Constant
+	Anomaly
+}
+
+enum ThresholdCondition {
+	Above
+	Below
+	Outside
+}
+
 enum AlertDestinationType {
 	Slack
 	Discord
@@ -1620,6 +1649,7 @@ input AlertDestinationInput {
 
 type Alert {
 	id: ID!
+	project_id: ID!
 	updated_at: Timestamp!
 	metric_id: String!
 	name: String!
@@ -1633,20 +1663,25 @@ type Alert {
 	destinations: [AlertDestination]!
 
 	# threshold alerts
-	below_threshold: Boolean
 	threshold_value: Float
 	threshold_window: Int
 	threshold_cooldown: Int
+	threshold_type: ThresholdType
+	threshold_condition: ThresholdCondition
 }
 
 type AlertStateChange {
 	id: ID!
 	timestamp: Timestamp!
-	AlertID: ID!
-	State: AlertState!
-	PreviousState: AlertState!
-	Title: String!
-	GroupByKey: String!
+	projectID: ID!
+	alertID: ID!
+	state: AlertState!
+	groupByKey: String!
+}
+
+type AlertStateChangeResults {
+	alertStateChanges: [AlertStateChange]!
+	totalCount: Int64!
 }
 
 type SanitizedSlackChannel {
@@ -1986,23 +2021,37 @@ enum EmailOptOutCategory {
 	SessionDigests
 }
 
+type FunnelStep {
+	title: String!
+	query: String!
+}
+
 type Graph {
 	id: ID!
 	type: String!
 	title: String!
+	description: String!
 	productType: ProductType!
 	query: String!
 	metric: String!
 	functionType: MetricAggregator!
-	groupByKey: String
+	groupByKeys: StringArray
 	bucketByKey: String
 	bucketCount: Int
 	bucketInterval: Int
 	limit: Int
 	limitFunctionType: MetricAggregator
 	limitMetric: String
+	funnelSteps: [FunnelStep!]
 	display: String
 	nullHandling: String
+}
+
+type Variable {
+	key: String!
+	defaultValues: [String!]!
+	suggestionType: SuggestionType!
+	field: String
 }
 
 type Visualization {
@@ -2013,11 +2062,17 @@ type Visualization {
 	updatedByAdmin: SanitizedAdmin
 	graphs: [Graph!]!
 	timePreset: String
+	variables: [Variable!]!
 }
 
 type VisualizationsResponse {
 	count: Int!
 	results: [Visualization!]!
+}
+
+input FunnelStepInput {
+	title: String!
+	query: String!
 }
 
 input GraphInput {
@@ -2030,15 +2085,23 @@ input GraphInput {
 	query: String!
 	metric: String!
 	functionType: MetricAggregator!
-	groupByKey: String
+	groupByKeys: StringArray
 	bucketByKey: String
 	bucketCount: Int
 	bucketInterval: Int
 	limit: Int
 	limitFunctionType: MetricAggregator
 	limitMetric: String
+	funnelSteps: [FunnelStepInput!]
 	display: String
 	nullHandling: String
+}
+
+input VariableInput {
+	key: String!
+	defaultValues: [String!]!
+	suggestionType: SuggestionType!
+	field: String
 }
 
 input VisualizationInput {
@@ -2047,6 +2110,7 @@ input VisualizationInput {
 	name: String
 	graphIds: [ID!]
 	timePreset: String
+	variables: [VariableInput!]
 }
 
 scalar Upload
@@ -2192,11 +2256,6 @@ type Query {
 		params: QueryInput!
 		histogram_options: DateHistogramOptions!
 	): SessionsHistogram!
-	# deprecated - use session_users_report
-	sessions_report(
-		project_id: ID!
-		query: ClickhouseQuery!
-	): [SessionsReportRow!]!
 	session_users_report(
 		project_id: ID!
 		params: QueryInput!
@@ -2211,18 +2270,20 @@ type Query {
 	# gets all the projects of a user
 	field_suggestion(project_id: ID!, name: String!, query: String!): [Field]
 	property_suggestion(project_id: ID!, query: String!, type: String!): [Field]
-	error_field_suggestion(
-		project_id: ID!
-		name: String!
-		query: String!
-	): [ErrorField]
 	projects: [Project]
 	workspaces: [Workspace]
 	workspaces_count: Int64!
 	joinable_workspaces: [Workspace]
 	alerts(project_id: ID!): [Alert]!
 	alert(id: ID!): Alert!
-	alert_state_changes(alert_id: ID!): [AlertStateChange]!
+	alerting_alert_state_changes(
+		alert_id: ID!
+		start_date: Timestamp!
+		end_date: Timestamp!
+		page: Int
+		count: Int
+	): AlertStateChangeResults!
+	last_alert_state_changes(alert_id: ID!): [AlertStateChange]!
 	error_alerts(project_id: ID!): [ErrorAlert]!
 	new_user_alerts(project_id: ID!): [SessionAlert]
 	track_properties_alerts(project_id: ID!): [SessionAlert]!
@@ -2333,8 +2394,8 @@ type Query {
 		before: String
 		at: String
 		direction: SortDirection!
+		limit: Int
 	): LogConnection!
-	sessionLogs(project_id: ID!, params: QueryInput!): [LogEdge!]!
 	logs_histogram(project_id: ID!, params: QueryInput!): LogsHistogram!
 	logs_metrics(
 		project_id: ID!
@@ -2395,6 +2456,7 @@ type Query {
 		before: String
 		at: String
 		direction: SortDirection!
+		limit: Int
 	): TraceConnection!
 	traces_metrics(
 		project_id: ID!
@@ -2479,6 +2541,7 @@ type Query {
 		date_range: DateRangeRequiredInput!
 		query: String
 		type: KeyType
+		event: String
 	): [QueryKey!]!
 	events_key_values(
 		project_id: ID!
@@ -2486,6 +2549,7 @@ type Query {
 		date_range: DateRangeRequiredInput!
 		query: String
 		count: Int
+		event: String
 	): [String!]!
 	events_metrics(
 		project_id: ID!
@@ -2500,6 +2564,14 @@ type Query {
 		limit_aggregator: MetricAggregator
 		limit_column: String
 	): MetricsBuckets!
+	event_sessions(
+		project_id: ID!
+		count: Int!
+		params: QueryInput!
+		sort_field: String
+		sort_desc: Boolean!
+		page: Int
+	): SessionResults!
 	metrics(
 		product_type: ProductType!
 		project_id: ID!
@@ -2513,21 +2585,24 @@ type Query {
 		limit: Int
 		limit_aggregator: MetricAggregator
 		limit_column: String
+		prediction_settings: PredictionSettings
 	): MetricsBuckets!
 	keys(
-		product_type: ProductType!
+		product_type: ProductType
 		project_id: ID!
 		date_range: DateRangeRequiredInput!
 		query: String
 		type: KeyType
+		event: String
 	): [QueryKey!]!
 	key_values(
-		product_type: ProductType!
+		product_type: ProductType
 		project_id: ID!
 		key_name: String!
 		date_range: DateRangeRequiredInput!
 		query: String
 		count: Int
+		event: String
 	): [String!]!
 	visualization(id: ID!): Visualization!
 	visualizations(
@@ -2537,6 +2612,7 @@ type Query {
 		offset: Int!
 	): VisualizationsResponse!
 	graph(id: ID!): Graph!
+	graph_templates: [Graph!]!
 	log_lines(
 		product_type: ProductType!
 		project_id: ID!
@@ -2855,10 +2931,12 @@ type Mutation {
 		function_column: String
 		query: String
 		group_by_key: String
-		below_threshold: Boolean
+		default: Boolean
 		threshold_value: Float
 		threshold_window: Int
 		threshold_cooldown: Int
+		threshold_type: ThresholdType
+		threshold_condition: ThresholdCondition
 		destinations: [AlertDestinationInput!]!
 	): Alert
 	updateAlert(
@@ -2870,10 +2948,11 @@ type Mutation {
 		function_column: String
 		query: String
 		group_by_key: String
-		below_threshold: Boolean
 		threshold_value: Float
 		threshold_window: Int
 		threshold_cooldown: Int
+		threshold_type: ThresholdType
+		threshold_condition: ThresholdCondition
 		destinations: [AlertDestinationInput!]
 	): Alert
 	updateAlertDisabled(
@@ -2882,21 +2961,6 @@ type Mutation {
 		disabled: Boolean!
 	): Boolean!
 	deleteAlert(project_id: ID!, alert_id: ID!): Boolean!
-	createErrorAlert(
-		project_id: ID!
-		name: String!
-		count_threshold: Int!
-		threshold_window: Int!
-		slack_channels: [SanitizedSlackChannelInput]!
-		discord_channels: [DiscordChannelInput!]!
-		microsoft_teams_channels: [MicrosoftTeamsChannelInput!]!
-		webhook_destinations: [WebhookDestinationInput!]!
-		emails: [String]!
-		query: String!
-		regex_groups: [String]!
-		frequency: Int!
-		default: Boolean
-	): ErrorAlert
 	updateErrorAlert(
 		project_id: ID!
 		name: String
@@ -2932,10 +2996,8 @@ type Mutation {
 	): MetricMonitor
 
 	updateSessionAlert(id: ID!, input: SessionAlertInput!): SessionAlert
-	createSessionAlert(input: SessionAlertInput!): SessionAlert
 	deleteSessionAlert(project_id: ID!, session_alert_id: ID!): SessionAlert
 	updateLogAlert(id: ID!, input: LogAlertInput!): LogAlert
-	createLogAlert(input: LogAlertInput!): LogAlert
 	deleteLogAlert(project_id: ID!, id: ID!): LogAlert
 	updateLogAlertIsDisabled(
 		id: ID!

@@ -81,7 +81,11 @@ import { PythonGCPTracesContent } from './traces/python/gcp'
 import { PythonManualTracesContent } from './traces/python/manual'
 import { PythonAITracesContent } from './traces/python/python-ai'
 import { PythonLibrariesTracesContent } from './traces/python/python-libraries'
+import { RubyRailsTracesContent } from './traces/ruby/rails'
+import { RubyOtherTracesContent } from './traces/ruby/other'
 import { RustTracesContent } from './traces/rust'
+import { AWSLambdaContent } from './traces/serverless/lambda'
+import { JSHonoContent } from './backend/js/hono'
 
 export type QuickStartOptions = {
 	title: string
@@ -116,6 +120,7 @@ export type QuickStartStep = {
 
 export enum QuickStartType {
 	Angular = 'angular',
+	AWSLambda = 'aws-lambda',
 	Electron = 'electron',
 	React = 'react',
 	Remix = 'remix',
@@ -145,6 +150,7 @@ export enum QuickStartType {
 	GoGorm = 'gorm',
 	GoLogrus = 'logrus',
 	GoOther = 'other',
+	JSHono = 'hono',
 	JSApollo = 'apollo',
 	JSAWSFn = 'aws-lambda-node',
 	JSCloudflare = 'cloudflare',
@@ -237,6 +243,7 @@ export const quickStartContent = {
 			[QuickStartType.JSCloudflare]: JSCloudflareContent,
 			[QuickStartType.JSExpress]: JSExpressContent,
 			[QuickStartType.JSFirebase]: JSFirebaseContent,
+			[QuickStartType.JSHono]: JSHonoContent,
 			[QuickStartType.JSNodejs]: JSNodeContent,
 			[QuickStartType.JSNestjs]: JSNestContent,
 			[QuickStartType.JStRPC]: JStRPCContent,
@@ -447,6 +454,19 @@ export const quickStartContent = {
 			logoUrl: siteUrl('/images/quickstart/rust.svg'),
 			[QuickStartType.RustOther]: RustTracesContent,
 			[QuickStartType.RustActix]: RustTracesContent,
+		},
+		serverless: {
+			title: 'Serverless',
+			subtitle: 'Install tracing in your Serverless application.',
+			logoUrl: siteUrl('/images/quickstart/serverless.svg'),
+			[QuickStartType.AWSLambda]: AWSLambdaContent,
+		},
+		ruby: {
+			title: 'Ruby',
+			subtitle: 'Install tracing in your Ruby application.',
+			logoUrl: siteUrl('/images/quickstart/ruby.svg'),
+			[QuickStartType.RubyRails]: RubyRailsTracesContent,
+			[QuickStartType.RubyOther]: RubyOtherTracesContent,
 		},
 	},
 	other: {

@@ -4,7 +4,10 @@ import {
 	W3CBaggagePropagator,
 	W3CTraceContextPropagator,
 } from '@opentelemetry/core'
-import { registerInstrumentations } from '@opentelemetry/instrumentation'
+import {
+	Instrumentation,
+	registerInstrumentations,
+} from '@opentelemetry/instrumentation'
 import { DocumentLoadInstrumentation } from '@opentelemetry/instrumentation-document-load'
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch'
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request'
@@ -12,25 +15,20 @@ import { Resource } from '@opentelemetry/resources'
 import {
 	BatchSpanProcessor,
 	ConsoleSpanExporter,
+	PropagateTraceHeaderCorsUrls,
 	ReadableSpan,
 	SimpleSpanProcessor,
 	StackContextManager,
 	WebTracerProvider,
 } from '@opentelemetry/sdk-trace-web'
-import {
-	SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-	SEMRESATTRS_SERVICE_NAME,
-} from '@opentelemetry/semantic-conventions'
+import * as SemanticAttributes from '@opentelemetry/semantic-conventions'
 import { parse } from 'graphql'
 import { getResponseBody } from '../listeners/network-listener/utils/fetch-listener'
 import {
 	DEFAULT_URL_BLOCKLIST,
 	sanitizeHeaders,
 } from '../listeners/network-listener/utils/network-sanitizer'
-import {
-	shouldNetworkRequestBeRecorded,
-	shouldNetworkRequestBeTraced,
-} from '../listeners/network-listener/utils/utils'
+import { shouldNetworkRequestBeRecorded } from '../listeners/network-listener/utils/utils'
 import {
 	BrowserXHR,
 	getBodyThatShouldBeRecorded,
@@ -42,8 +40,8 @@ import { UserInteractionInstrumentation } from './user-interaction'
 export type BrowserTracingConfig = {
 	projectId: string | number
 	sessionSecureId: string
+	otlpEndpoint: string
 	backendUrl?: string
-	endpoint?: string
 	environment?: string
 	networkRecordingOptions?: NetworkRecordingOptions
 	serviceName?: string
@@ -70,14 +68,14 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 		...DEFAULT_URL_BLOCKLIST,
 	]
 	const isDebug = import.meta.env.DEBUG === 'true'
-	const endpoint = config.endpoint ?? 'https://otel.highlight.io:4318'
 	const environment = config.environment ?? 'production'
 
 	provider = new WebTracerProvider({
 		resource: new Resource({
-			[SEMRESATTRS_SERVICE_NAME]:
+			[SemanticAttributes.ATTR_SERVICE_NAME]:
 				config.serviceName ?? 'highlight-browser',
-			[SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: environment,
+			[SemanticAttributes.SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]:
+				environment,
 			'highlight.project_id': config.projectId,
 			'highlight.session_id': config.sessionSecureId,
 		}),
@@ -91,7 +89,7 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 	}
 
 	const exporter = new OTLPTraceExporterBrowserWithXhrRetry({
-		url: endpoint + '/v1/traces',
+		url: config.otlpEndpoint + '/v1/traces',
 		concurrencyLimit: 10,
 		// Using any because we were getting an error importing CompressionAlgorithm
 		// from @opentelemetry/otlp-exporter-base.
@@ -103,18 +101,23 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 	})
 	provider.addSpanProcessor(spanProcessor)
 
-	registerInstrumentations({
-		instrumentations: [
-			new DocumentLoadInstrumentation({
-				applyCustomAttributesOnSpan: {
-					documentLoad: assignDocumentDurations,
-					documentFetch: assignDocumentDurations,
-					resourceFetch: assignResourceFetchDurations,
-				},
-			}),
-			new UserInteractionInstrumentation(),
+	let instrumentations: Instrumentation[] = [
+		new DocumentLoadInstrumentation({
+			applyCustomAttributesOnSpan: {
+				documentLoad: assignDocumentDurations,
+				documentFetch: assignDocumentDurations,
+				resourceFetch: assignResourceFetchDurations,
+			},
+		}),
+		new UserInteractionInstrumentation(),
+	]
+
+	if (config.networkRecordingOptions?.enabled) {
+		instrumentations.push(
 			new FetchInstrumentation({
-				propagateTraceHeaderCorsUrls: /.*/,
+				propagateTraceHeaderCorsUrls: getCorsUrlsPattern(
+					config.tracingOrigins,
+				),
 				applyCustomAttributesOnSpan: async (
 					span,
 					request,
@@ -152,8 +155,13 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 					span.setAttribute('http.response.body', body)
 				},
 			}),
+		)
+
+		instrumentations.push(
 			new XMLHttpRequestInstrumentation({
-				propagateTraceHeaderCorsUrls: /.*/,
+				propagateTraceHeaderCorsUrls: getCorsUrlsPattern(
+					config.tracingOrigins,
+				),
 				applyCustomAttributesOnSpan: (span, xhr) => {
 					const browserXhr = xhr as BrowserXHR
 					const readableSpan = span as unknown as ReadableSpan
@@ -184,8 +192,10 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 					span.setAttribute('http.request.body', recordedBody)
 				},
 			}),
-		],
-	})
+		)
+	}
+
+	registerInstrumentations({ instrumentations })
 
 	const contextManager = new StackContextManager()
 	contextManager.enable()
@@ -197,6 +207,7 @@ export const setupBrowserTracing = (config: BrowserTracingConfig) => {
 				new W3CBaggagePropagator(),
 				new CustomTraceContextPropagator({
 					backendUrl,
+					otlpEndpoint: config.otlpEndpoint,
 					tracingOrigins: config.tracingOrigins,
 					urlBlocklist,
 				}),
@@ -217,19 +228,20 @@ class CustomBatchSpanProcessor extends BatchSpanProcessor {
 
 type CustomTraceContextPropagatorConfig = {
 	backendUrl: string
+	otlpEndpoint: string
 	tracingOrigins: BrowserTracingConfig['tracingOrigins']
 	urlBlocklist: string[]
 }
 
 class CustomTraceContextPropagator extends W3CTraceContextPropagator {
-	private backendUrl: string
+	private highlightEndpoints: string[]
 	private tracingOrigins: BrowserTracingConfig['tracingOrigins']
 	private urlBlocklist: string[]
 
 	constructor(config: CustomTraceContextPropagatorConfig) {
 		super()
 
-		this.backendUrl = config.backendUrl
+		this.highlightEndpoints = [config.backendUrl, config.otlpEndpoint]
 		this.tracingOrigins = config.tracingOrigins
 		this.urlBlocklist = config.urlBlocklist
 	}
@@ -248,7 +260,7 @@ class CustomTraceContextPropagator extends W3CTraceContextPropagator {
 		if (typeof url === 'string') {
 			const shouldRecord = shouldRecordRequest(
 				url,
-				this.backendUrl,
+				this.highlightEndpoints,
 				this.tracingOrigins,
 				this.urlBlocklist,
 			)
@@ -330,6 +342,9 @@ const enhanceSpanWithHttpRequestAttributes = (
 	networkRecordingOptions?: NetworkRecordingOptions,
 ) => {
 	const stringBody = typeof body === 'string' ? body : String(body)
+	const readableSpan = span as unknown as ReadableSpan
+	const url = readableSpan.attributes['http.url'] as string
+	const urlObject = new URL(url)
 
 	let parsedBody
 	try {
@@ -355,12 +370,24 @@ const enhanceSpanWithHttpRequestAttributes = (
 		'highlight.type': 'http.request',
 		'http.request.headers': JSON.stringify(sanitizedHeaders),
 		'http.request.body': stringBody,
+		[SemanticAttributes.ATTR_URL_FULL]: url,
+		[SemanticAttributes.ATTR_URL_PATH]: urlObject.pathname,
+		[SemanticAttributes.ATTR_URL_QUERY]: urlObject.search,
 	})
+
+	if (urlObject.searchParams.size > 0) {
+		span.setAttributes({
+			// Custom attribute that displays query string params as an object.
+			['url.query_params']: JSON.stringify(
+				Object.fromEntries(urlObject.searchParams),
+			),
+		})
+	}
 }
 
 const shouldRecordRequest = (
 	url: string,
-	backendUrl: string,
+	highlightEndpoints: string[],
 	tracingOrigins: BrowserTracingConfig['tracingOrigins'],
 	urlBlocklist: string[],
 ) => {
@@ -371,20 +398,11 @@ const shouldRecordRequest = (
 		return false
 	}
 
-	// Potential future refactor: shouldNetworkRequestBeRecorded also calls
-	// shouldNetworkRequestBeTraced, but it returns true for all non-Highlight
-	// resources. Following existing patterns here, but we may want to decouple
-	// these two functions and refactor some of the request filtering logic.
-	const shouldRecord = shouldNetworkRequestBeRecorded(
+	return shouldNetworkRequestBeRecorded(
 		url,
-		backendUrl,
+		highlightEndpoints,
 		tracingOrigins,
 	)
-	if (!shouldRecord) {
-		return false
-	}
-
-	return shouldNetworkRequestBeTraced(url, tracingOrigins)
 }
 
 const assignDocumentDurations = (span: api.Span) => {
@@ -504,4 +522,18 @@ const humanizeDuration = (nanoseconds: number): string => {
 	} else {
 		return `${Number(nanoseconds.toFixed(1))}ns`
 	}
+}
+
+export const getCorsUrlsPattern = (
+	tracingOrigins: BrowserTracingConfig['tracingOrigins'],
+): PropagateTraceHeaderCorsUrls => {
+	if (tracingOrigins === true) {
+		return [/localhost/, /^\//, new RegExp(window.location.host)]
+	} else if (Array.isArray(tracingOrigins)) {
+		return tracingOrigins.map((pattern) =>
+			typeof pattern === 'string' ? new RegExp(pattern) : pattern,
+		)
+	}
+
+	return /^$/ // Match nothing if tracingOrigins is false or undefined
 }

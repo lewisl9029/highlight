@@ -1,10 +1,13 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
+	Badge,
 	Box,
 	Button,
 	IconSolidArrowsExpand,
+	IconSolidCursorClick,
 	IconSolidDesktopComputer,
+	IconSolidDocumentDownload,
 	IconSolidDotsHorizontal,
 	IconSolidDuplicate,
 	IconSolidPencil,
@@ -20,6 +23,7 @@ export const DashboardCard = ({
 	id,
 	onClone,
 	onDelete,
+	onDownload,
 	onExpand,
 	onEdit,
 	children,
@@ -27,6 +31,7 @@ export const DashboardCard = ({
 	id: string
 	onClone?: () => void
 	onDelete?: () => void
+	onDownload?: () => void
 	onExpand?: () => void
 	onEdit?: () => void
 }>) => {
@@ -57,7 +62,9 @@ export const DashboardCard = ({
 			onMouseEnter={() => {
 				setGraphHover(true)
 			}}
-			onMouseLeave={() => {}}
+			onMouseLeave={() => {
+				setGraphHover(false)
+			}}
 		>
 			<Box
 				borderRadius="6"
@@ -71,98 +78,126 @@ export const DashboardCard = ({
 			>
 				{graphHover && (
 					<Box cssClass={style.buttonContainer}>
-						<Button
-							size="xSmall"
-							emphasis="low"
-							kind="secondary"
-							iconLeft={
-								<IconSolidArrowsExpand
-									style={{
-										cursor: isDragging
-											? 'grabbing'
-											: 'grab',
-									}}
-								/>
-							}
-							ref={setActivatorNodeRef}
-							{...listeners}
-							style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-						/>
-						{onEdit !== undefined && (
+						<Box>
 							<Button
 								size="xSmall"
 								emphasis="low"
 								kind="secondary"
-								iconLeft={<IconSolidPencil />}
-								onClick={onEdit}
+								iconLeft={
+									<IconSolidArrowsExpand
+										style={{
+											cursor: isDragging
+												? 'grabbing'
+												: 'grab',
+										}}
+									/>
+								}
+								ref={setActivatorNodeRef}
+								{...listeners}
+								style={{
+									cursor: isDragging ? 'grabbing' : 'grab',
+								}}
 							/>
-						)}
-						{(onExpand || onDelete || onClone) && (
-							<Menu>
-								<Menu.Button
+							{onEdit !== undefined && (
+								<Button
 									size="xSmall"
 									emphasis="low"
 									kind="secondary"
-									iconLeft={<IconSolidDotsHorizontal />}
-									onClick={(e: any) => {
-										e.stopPropagation()
-									}}
+									iconLeft={<IconSolidPencil />}
+									onClick={onEdit}
 								/>
-								<Menu.List>
-									{onExpand && (
-										<Menu.Item
-											onClick={(e) => {
-												e.stopPropagation()
-												onExpand()
-											}}
-										>
-											<Box
-												display="flex"
-												alignItems="center"
-												gap="4"
+							)}
+							{(onExpand || onDelete || onClone) && (
+								<Menu>
+									<Menu.Button
+										size="xSmall"
+										emphasis="low"
+										kind="secondary"
+										iconLeft={<IconSolidDotsHorizontal />}
+										onClick={(e: any) => {
+											e.stopPropagation()
+										}}
+									/>
+									<Menu.List>
+										{onExpand && (
+											<Menu.Item
+												onClick={(e) => {
+													e.stopPropagation()
+													onExpand()
+												}}
 											>
-												<IconSolidDesktopComputer />
-												Expand metric view
-											</Box>
-										</Menu.Item>
-									)}
-									{onClone && (
-										<Menu.Item
-											onClick={(e) => {
-												e.stopPropagation()
-												onClone()
-											}}
-										>
-											<Box
-												display="flex"
-												alignItems="center"
-												gap="4"
+												<Box
+													display="flex"
+													alignItems="center"
+													gap="4"
+												>
+													<IconSolidDesktopComputer />
+													Expand metric view
+												</Box>
+											</Menu.Item>
+										)}
+										{onDownload && (
+											<Menu.Item
+												onClick={(e) => {
+													e.stopPropagation()
+													onDownload()
+												}}
 											>
-												<IconSolidDuplicate />
-												Clone metric view
-											</Box>
-										</Menu.Item>
-									)}
-									{onDelete && (
-										<Menu.Item
-											onClick={(e) => {
-												e.stopPropagation()
-												onDelete()
-											}}
-										>
-											<Box
-												display="flex"
-												alignItems="center"
-												gap="4"
+												<Box
+													display="flex"
+													alignItems="center"
+													gap="4"
+												>
+													<IconSolidDocumentDownload />
+													Download CSV
+												</Box>
+											</Menu.Item>
+										)}
+										{onClone && (
+											<Menu.Item
+												onClick={(e) => {
+													e.stopPropagation()
+													onClone()
+												}}
 											>
-												<IconSolidTrash />
-												Delete metric view
-											</Box>
-										</Menu.Item>
-									)}
-								</Menu.List>
-							</Menu>
-						)}
+												<Box
+													display="flex"
+													alignItems="center"
+													gap="4"
+												>
+													<IconSolidDuplicate />
+													Clone metric view
+												</Box>
+											</Menu.Item>
+										)}
+										{onDelete && (
+											<Menu.Item
+												onClick={(e) => {
+													e.stopPropagation()
+													onDelete()
+												}}
+											>
+												<Box
+													display="flex"
+													alignItems="center"
+													gap="4"
+												>
+													<IconSolidTrash />
+													Delete metric view
+												</Box>
+											</Menu.Item>
+										)}
+									</Menu.List>
+								</Menu>
+							)}
+						</Box>
+						<Badge
+							variant="gray"
+							size="small"
+							iconStart={<IconSolidCursorClick />}
+							label="Click to drilldown"
+							cssClass={style.drilldownHint}
+						/>
 					</Box>
 				)}
 				{children}

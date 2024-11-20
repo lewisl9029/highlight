@@ -22,7 +22,6 @@ import {
 	IconSolidArrowSmRight,
 	IconSolidAtSymbol,
 	IconSolidChartBar,
-	IconSolidChat,
 	IconSolidCheck,
 	IconSolidCog,
 	IconSolidDesktopComputer,
@@ -59,7 +58,6 @@ import analytics from '@util/analytics'
 import { auth } from '@util/auth'
 import { isProjectWithinTrial } from '@util/billing/billing'
 import { titleCaseString } from '@util/string'
-import { showSupportMessage } from '@util/window'
 import { Divider } from 'antd'
 import clsx from 'clsx'
 import moment from 'moment'
@@ -75,6 +73,7 @@ import { generateRandomColor } from '@/util/color'
 import { CalendlyButton } from '../CalendlyModal/CalendlyButton'
 import { CommandBar as CommandBarV1 } from './CommandBar/CommandBar'
 import styles from './Header.module.css'
+import InkeepChatSupportMenuItem from '@/components/Header/InkeepChatSupportMenuItem'
 
 type Props = {
 	fullyIntegrated?: boolean
@@ -704,7 +703,7 @@ export const Header: React.FC<Props> = ({ fullyIntegrated }) => {
 																			</Menu.Item>
 																		)
 																	},
-																)}
+															  )}
 														<Divider className="mb-0 mt-1" />
 														<Link
 															to="/new"
@@ -769,31 +768,7 @@ export const Header: React.FC<Props> = ({ fullyIntegrated }) => {
 													</Menu.List>
 												</Menu>
 											</Menu.Item>
-											<Menu.Item
-												onClick={async () =>
-													await showSupportMessage(
-														`Read out on Discord if you need technical help. For sales / billing questions, 
-														please send us an email at sales@highlight.run.`,
-													)
-												}
-											>
-												<Box
-													display="flex"
-													alignItems="center"
-													gap="4"
-												>
-													<IconSolidChat
-														size={14}
-														color={
-															vars.theme
-																.interactive
-																.fill.secondary
-																.content.text
-														}
-													/>
-													Chat / Support
-												</Box>
-											</Menu.Item>
+											<InkeepChatSupportMenuItem />
 											<a
 												href="https://www.highlight.io/docs"
 												className={linkStyle}
@@ -984,8 +959,8 @@ const BillingBanner: React.FC = () => {
 
 	if (!bannerMessage && !hasTrial) {
 		const isLaunchWeek = moment().isBetween(
-			'2024-07-29T16:00:00Z', // 9AM PST
-			'2024-08-03T16:00:00Z',
+			'2024-10-21T13:00:00Z', // 6AM PST
+			'2024-10-26T13:00:00Z',
 		)
 		if (isLaunchWeek) {
 			return <LaunchWeekBanner />
@@ -1093,10 +1068,10 @@ const LaunchWeekBanner = () => {
 
 	const bannerMessage = (
 		<span>
-			Launch Week 6 is here.{' '}
+			Launch Week 7 is here.{' '}
 			<a
 				target="_blank"
-				href="https://www.youtube.com/playlist?list=PLtIz-bpzHkhhXNuWXTohSbozKz3t-WjOR"
+				href="https://dub.highlight.io/lw7-playlist"
 				className={styles.trialLink}
 				rel="noreferrer"
 			>

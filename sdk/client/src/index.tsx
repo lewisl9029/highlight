@@ -136,7 +136,6 @@ export type HighlightClassOptions = {
 	storageMode?: 'sessionStorage' | 'localStorage'
 	skipCookieSessionDataLoad?: true
 	sendMode?: 'webworker' | 'local'
-	enableOtelTracing?: HighlightOptions['enableOtelTracing']
 	otlpEndpoint?: HighlightOptions['otlpEndpoint']
 }
 
@@ -516,13 +515,6 @@ export class Highlight {
 	}
 
 	async initialize(options?: StartOptions): Promise<undefined> {
-		this.logger.log(
-			`Initializing...`,
-			options,
-			this.sessionData,
-			this.options,
-		)
-
 		if (
 			(navigator?.webdriver && !window.Cypress) ||
 			navigator?.userAgent?.includes('Googlebot') ||
@@ -537,6 +529,13 @@ export class Highlight {
 				await this._reset(options)
 				return
 			}
+
+			this.logger.log(
+				`Initializing...`,
+				options,
+				this.sessionData,
+				this.options,
+			)
 
 			this.sessionData =
 				getPreviousSessionData(this.sessionData.sessionSecureID) ??
@@ -757,7 +756,7 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 						? {
 								debug: this.logger.log,
 								warn: HighlightWarning,
-							}
+						  }
 						: undefined,
 			})
 
@@ -921,10 +920,6 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 					} else {
 						this.addCustomEvent<string>('Navigate', url)
 					}
-					highlightThis.addProperties(
-						{ 'visited-url': url },
-						{ type: 'session' },
-					)
 				}),
 			)
 
@@ -1001,7 +996,7 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 												category:
 													MetricCategory.Performance,
 												group: window.location.href,
-											}
+										  }
 										: undefined,
 								)
 								.filter((m) => m) as {
@@ -1402,11 +1397,15 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 	}
 
 	private takeFullSnapshot() {
+		if (!this._recordStop) {
+			this.logger.log(`skipping full snapshot as rrweb is not running`)
+			return
+		}
 		this.logger.log(`taking full snapshot`, {
 			bytesSinceSnapshot: this._eventBytesSinceSnapshot,
 			lastSnapshotTime: this._lastSnapshotTime,
 		})
-		record.takeFullSnapshot(true)
+		record.takeFullSnapshot()
 		this._eventBytesSinceSnapshot = 0
 		this._lastSnapshotTime = new Date().getTime()
 	}

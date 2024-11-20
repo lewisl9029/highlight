@@ -32,9 +32,16 @@ export type CustomColumn<T, TIn> = {
 	type: TIn
 	size: string
 	accessor: (row: T) => any
+	onClick?: (edge: any) => void
 }
 
-type LogColumnType = 'string' | 'datetime' | 'session' | 'level' | 'body'
+type LogColumnType =
+	| 'string'
+	| 'datetime'
+	| 'session'
+	| 'level'
+	| 'body'
+	| 'go-to-log'
 export type LogCustomColumn = CustomColumn<LogEdge, LogColumnType>
 
 type TraceColumnType =
@@ -68,6 +75,7 @@ type Props<T> = {
 	selectedColumns: SerializedColumn[]
 	standardColumns: Record<string, SerializedColumn>
 	setSelectedColumns: (columns: SerializedColumn[]) => void
+	preventKeySearch?: boolean
 }
 
 export const CustomColumnPopover = <T,>({
@@ -76,6 +84,7 @@ export const CustomColumnPopover = <T,>({
 	selectedColumns,
 	standardColumns,
 	setSelectedColumns,
+	preventKeySearch,
 }: Props<T>) => {
 	const { project_id } = useParams()
 	const [query, setQuery] = useState<string>('')
@@ -90,7 +99,7 @@ export const CustomColumnPopover = <T,>({
 	const [getKeys, { data, loading }] = useGetKeysLazyQuery()
 
 	useEffect(() => {
-		if (debouncedQuery) {
+		if (!preventKeySearch && debouncedQuery) {
 			getKeys({
 				variables: {
 					product_type: productType,
@@ -103,17 +112,22 @@ export const CustomColumnPopover = <T,>({
 				},
 			})
 		}
-	}, [debouncedQuery, startDate, endDate, productType, project_id, getKeys])
+	}, [
+		debouncedQuery,
+		startDate,
+		endDate,
+		productType,
+		project_id,
+		getKeys,
+		preventKeySearch,
+	])
 
 	const defaultColumnOptions = useMemo(() => {
-		const seletedColumnHash = selectedColumns.reduce(
-			(acc, column) => {
-				acc[column.id] = column
+		const seletedColumnHash = selectedColumns.reduce((acc, column) => {
+			acc[column.id] = column
 
-				return acc
-			},
-			{} as Record<string, SerializedColumn>,
-		)
+			return acc
+		}, {} as Record<string, SerializedColumn>)
 
 		const defaultColumnHash = {
 			...seletedColumnHash,
@@ -148,14 +162,11 @@ export const CustomColumnPopover = <T,>({
 	}, [data, debouncedQuery, standardColumns])
 
 	const allColumnsHash = useMemo(() => {
-		return [...selectedColumns, ...columnOptions].reduce(
-			(acc, column) => {
-				acc[column.id] = column
+		return [...selectedColumns, ...columnOptions].reduce((acc, column) => {
+			acc[column.id] = column
 
-				return acc
-			},
-			{} as Record<string, SerializedColumn>,
-		)
+			return acc
+		}, {} as Record<string, SerializedColumn>)
 	}, [selectedColumns, columnOptions])
 
 	const handleColumnValueChange = (updatedValue: string[]) => {
@@ -175,7 +186,7 @@ export const CustomColumnPopover = <T,>({
 						{o.id}
 					</Text>
 				),
-			}))
+		  }))
 
 	return (
 		<ComboboxSelect

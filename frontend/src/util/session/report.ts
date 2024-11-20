@@ -7,12 +7,14 @@ import {
 import { Maybe, Session, SessionsReportRow } from '@graph/schemas'
 import { useProjectId } from '@hooks/useProjectId'
 import moment from 'moment/moment'
+import { TIME_METRICS } from '@pages/Graphing/constants'
 
-const processRows = <
+export const processRows = <
 	T extends { __typename?: Maybe<string>; user_properties?: Maybe<string> },
 >(
 	inputs: T[],
 	ignoreKeys: Set<keyof T> = new Set<keyof T>([]),
+	metric?: string,
 ) => {
 	ignoreKeys.add('user_properties')
 	ignoreKeys.add('__typename')
@@ -29,6 +31,15 @@ const processRows = <
 			input = { ...input, ...JSON.parse(input.user_properties ?? '') }
 		} catch (e) {}
 		Object.keys(input).forEach((key, idx) => {
+			if (!key.length) {
+				let suffix = ''
+				if (metric && Object.hasOwn(TIME_METRICS, metric)) {
+					suffix = ` (${
+						TIME_METRICS[metric as keyof typeof TIME_METRICS]
+					})`
+				}
+				key = metric ? `${metric}${suffix}` : 'Value'
+			}
 			if (!keys.hasOwnProperty(key)) {
 				keys[key as keyof T] = idx
 			}
@@ -38,16 +49,20 @@ const processRows = <
 		...Object.keys(keys).filter((k) => !ignoreKeys.has(k as keyof T)),
 	])
 
-	for (const session of inputs) {
-		let data = session
+	for (const input of inputs) {
+		let data = input
 		try {
-			data = { ...data, ...JSON.parse(session.user_properties ?? '') }
+			data = { ...data, ...JSON.parse(input.user_properties ?? '') }
 		} catch (e) {}
 		rows.push(
 			Object.entries(keys)
 				.filter(([k]) => !ignoreKeys.has(k as keyof T))
 				.sort(([, idx1], [_, idx2]) => idx1 - idx2)
-				.map(([k]) => data[k as keyof T]),
+				.map(([k]) =>
+					Object.hasOwn(data, k)
+						? data[k as keyof T]
+						: data['' as keyof T],
+				),
 		)
 	}
 	return rows
@@ -98,7 +113,7 @@ const getSessionRows = (sessions: Session[]) => {
 	return processRows(sessions, new Set<keyof Session>(['id', 'event_counts']))
 }
 
-const exportFile = async (name: string, content: string) => {
+export const exportFile = async (name: string, content: string) => {
 	const blob = new Blob([content], { type: 'text/csv' })
 	const link = document.createElement('a')
 	link.setAttribute('href', window.URL.createObjectURL(blob))

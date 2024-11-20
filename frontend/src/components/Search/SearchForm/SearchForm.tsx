@@ -56,8 +56,7 @@ import {
 import { ProductType, SavedSegmentEntityType } from '@/graph/generated/schemas'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useApplicationContext } from '@/routers/AppRouter/context/ApplicationContext'
-import { formatNumber } from '@/util/numbers'
-
+import { SearchEntry } from './hooks'
 import { AiSearch } from './AiSearch'
 import * as styles from './SearchForm.css'
 
@@ -85,7 +84,7 @@ export const SEARCH_OPERATORS = [
 	...CONTAINS_OPERATOR,
 	...MATCHES_OPERATOR,
 ] as const
-export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
+export type SearchOperator = typeof SEARCH_OPERATORS[number]
 
 type Creatable = {
 	label: string
@@ -115,7 +114,7 @@ export type SearchFormProps = {
 	savedSegmentType?: SavedSegmentEntityType
 	textAreaRef?: React.RefObject<HTMLTextAreaElement>
 	isPanelView?: boolean
-	resultCount?: number
+	resultFormatted?: string
 	loading?: boolean
 	creatables?: { [key: string]: Creatable }
 	enableAIMode?: boolean
@@ -137,7 +136,7 @@ const SearchForm: React.FC<SearchFormProps> = ({
 	savedSegmentType,
 	textAreaRef,
 	isPanelView,
-	resultCount,
+	resultFormatted,
 	loading,
 	creatables,
 	enableAIMode,
@@ -263,14 +262,11 @@ const SearchForm: React.FC<SearchFormProps> = ({
 									<Box display="flex" alignItems="center">
 										{loading ? (
 											<LoadingBox />
-										) : (
-											resultCount != null && (
-												<Text color="weak">
-													{formatNumber(resultCount)}{' '}
-													results
-												</Text>
-											)
-										)}
+										) : resultFormatted ? (
+											<Text color="weak">
+												{resultFormatted}
+											</Text>
+										) : null}
 									</Box>
 									{SegmentMenu}
 								</Stack>
@@ -335,8 +331,10 @@ export const Search: React.FC<{
 	textAreaRef?: React.RefObject<HTMLTextAreaElement>
 	hasAdditonalActions?: boolean
 	creatables?: { [key: string]: Creatable }
+	defaultValueOptions?: string[]
 	enableAIMode?: boolean
 	aiSupportedSearch?: boolean
+	event?: string
 }> = ({
 	startDate,
 	endDate,
@@ -346,8 +344,10 @@ export const Search: React.FC<{
 	productType,
 	hasAdditonalActions,
 	creatables,
+	defaultValueOptions,
 	enableAIMode,
 	aiSupportedSearch,
+	event,
 }) => {
 	const {
 		disabled,
@@ -358,6 +358,7 @@ export const Search: React.FC<{
 		onSubmit,
 		setQuery,
 		setAiMode,
+		recentSearches,
 	} = useSearchContext()
 	const navigate = useNavigate()
 	const { currentWorkspace } = useApplicationContext()
@@ -410,12 +411,19 @@ export const Search: React.FC<{
 		!!activePart.value?.length
 
 	let visibleItems: SearchResult[] = showValues
-		? getVisibleValues(activePart, values)
+		? getVisibleValues(
+				activePart,
+				(defaultValueOptions ?? []).concat(values ?? []),
+		  )
 		: getVisibleKeys(query, activePart, keys)
 
 	// Show operators when we have an exact match for a key
 	const keyMatch = visibleItems.find((item) => item.name === activePart.text)
 	const showOperators = !!keyMatch
+
+	const visibleRecentSearch = recentSearches.filter((history) => {
+		return stringifySearchQuery(history.queryParts).indexOf(query) > -1
+	})
 
 	if (showOperators) {
 		let operators = [] as string[]
@@ -447,7 +455,7 @@ export const Search: React.FC<{
 				({
 					name: operator,
 					type: 'Operator',
-				}) as SearchResult,
+				} as SearchResult),
 		)
 	}
 
@@ -481,6 +489,7 @@ export const Search: React.FC<{
 					end_date: moment(endDate).format(TIME_FORMAT),
 				},
 				query: debouncedValue,
+				event: event,
 			},
 			fetchPolicy: 'cache-first',
 			onCompleted: (data) => {
@@ -495,6 +504,7 @@ export const Search: React.FC<{
 		project_id,
 		getKeys,
 		productType,
+		event,
 	])
 
 	useEffect(() => {
@@ -527,6 +537,7 @@ export const Search: React.FC<{
 				},
 				query: debouncedValue,
 				count: 25,
+				event: event,
 			},
 			fetchPolicy: 'cache-first',
 			onCompleted: (data) => {
@@ -543,6 +554,7 @@ export const Search: React.FC<{
 		project_id,
 		showValues,
 		startDate,
+		event,
 	])
 
 	useEffect(() => {
@@ -638,6 +650,19 @@ export const Search: React.FC<{
 		comboboxStore.setState('moves', 0)
 	}
 
+	const handleHistorySelction = (
+		query: string,
+		queryParts: SearchExpression[],
+	) => {
+		const newQuery = stringifySearchQuery(queryParts)
+		startTransition(() => {
+			submitQuery(newQuery)
+			comboboxStore.setOpen(false)
+		})
+		setCursorIndex(newQuery.length)
+		comboboxStore.setActiveId(null)
+	}
+
 	const handleRemoveItem = (index: number) => {
 		let newTokenGroups = [...tokenGroups]
 		newTokenGroups.splice(index, 1)
@@ -694,7 +719,9 @@ export const Search: React.FC<{
 				margin="auto"
 			>
 				<Box
-					cssClass={styles.comboboxTagsContainer}
+					cssClass={clsx(styles.comboboxTagsContainer, {
+						[styles.comboboxTagsContainerDisabled]: disabled,
+					})}
 					style={{
 						left: hideIcon ? 4 : 2,
 						paddingLeft: hideIcon ? 2 : 38,
@@ -822,7 +849,7 @@ export const Search: React.FC<{
 											? setAiMode(true)
 											: navigate(
 													`/w/${workspaceId}/harold-ai`,
-												)
+											  )
 									}
 									store={comboboxStore}
 								>
@@ -880,6 +907,58 @@ export const Search: React.FC<{
 								</Combobox.Item>
 							</Combobox.Group>
 						)}
+						{!showValues &&
+							!showOperators &&
+							visibleRecentSearch.length > 0 && (
+								<Combobox.Group
+									className={styles.comboboxGroup}
+									store={comboboxStore}
+								>
+									<Combobox.GroupLabel store={comboboxStore}>
+										<Box px="10" py="6">
+											<Text
+												color="moderate"
+												size="xxSmall"
+											>
+												Recent
+											</Text>
+										</Box>
+									</Combobox.GroupLabel>
+
+									{visibleRecentSearch.map(
+										(data: SearchEntry, index: number) => {
+											return (
+												<Combobox.Item
+													className={
+														styles.comboboxItem
+													}
+													key={index}
+													onClick={() => {
+														handleHistorySelction(
+															data.query,
+															data.queryParts,
+														)
+													}}
+													store={comboboxStore}
+													value={data.query}
+													hideOnClick={false}
+													setValueOnClick={false}
+													title={data.title}
+												>
+													<Text
+														color="secondaryContentText"
+														lines="1"
+														family="monospace"
+													>
+														{data.query}
+													</Text>
+													<Badge label="History" />
+												</Combobox.Item>
+											)
+										},
+									)}
+								</Combobox.Group>
+							)}
 						{loading && (
 							<Combobox.Group
 								className={styles.comboboxGroup}

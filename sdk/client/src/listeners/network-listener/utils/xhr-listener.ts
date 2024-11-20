@@ -24,12 +24,11 @@ export interface BrowserXHR extends XMLHttpRequest {
  */
 export const XHRListener = (
 	callback: NetworkListenerCallback,
-	backendUrl: string,
+	highlightEndpoints: string[],
 	tracingOrigins: boolean | (string | RegExp)[],
 	urlBlocklist: string[],
 	bodyKeysToRedact: string[],
 	bodyKeysToRecord: string[] | undefined,
-	otelEnabled: boolean,
 ) => {
 	const XHR = XMLHttpRequest.prototype
 
@@ -71,7 +70,7 @@ export const XHRListener = (
 		if (
 			!shouldNetworkRequestBeRecorded(
 				this._url,
-				backendUrl,
+				highlightEndpoints,
 				tracingOrigins,
 			)
 		) {
@@ -79,8 +78,14 @@ export const XHRListener = (
 			return originalSend.apply(this, arguments)
 		}
 
-		const [sessionSecureID, requestId] = createNetworkRequestId(otelEnabled)
-		if (shouldNetworkRequestBeTraced(this._url, tracingOrigins)) {
+		const [sessionSecureID, requestId] = createNetworkRequestId()
+		if (
+			shouldNetworkRequestBeTraced(
+				this._url,
+				tracingOrigins,
+				urlBlocklist,
+			)
+		) {
 			this.setRequestHeader(
 				HIGHLIGHT_REQUEST_HEADER,
 				getHighlightRequestHeader(sessionSecureID, requestId),

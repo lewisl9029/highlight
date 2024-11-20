@@ -103,13 +103,17 @@ type AlertDestinationInput struct {
 }
 
 type AlertStateChange struct {
-	ID            int        `json:"id"`
-	Timestamp     time.Time  `json:"timestamp"`
-	AlertID       int        `json:"AlertID"`
-	State         AlertState `json:"State"`
-	PreviousState AlertState `json:"PreviousState"`
-	Title         string     `json:"Title"`
-	GroupByKey    string     `json:"GroupByKey"`
+	ID         int        `json:"id"`
+	Timestamp  time.Time  `json:"timestamp"`
+	ProjectID  int        `json:"projectID"`
+	AlertID    int        `json:"alertID"`
+	State      AlertState `json:"state"`
+	GroupByKey string     `json:"groupByKey"`
+}
+
+type AlertStateChangeResults struct {
+	AlertStateChanges []*AlertStateChange `json:"alertStateChanges"`
+	TotalCount        int64               `json:"totalCount"`
 }
 
 type AllProjectSettings struct {
@@ -386,6 +390,16 @@ type ErrorTrace struct {
 	EnhancementVersion         *string             `json:"enhancementVersion,omitempty"`
 }
 
+type FunnelStep struct {
+	Title string `json:"title"`
+	Query string `json:"query"`
+}
+
+type FunnelStepInput struct {
+	Title string `json:"title"`
+	Query string `json:"query"`
+}
+
 type GitHubRepo struct {
 	RepoID string `json:"repo_id"`
 	Name   string `json:"name"`
@@ -399,24 +413,25 @@ type GitlabProject struct {
 }
 
 type GraphInput struct {
-	ID                *int              `json:"id,omitempty"`
-	VisualizationID   int               `json:"visualizationId"`
-	AfterGraphID      *int              `json:"afterGraphId,omitempty"`
-	Type              string            `json:"type"`
-	Title             string            `json:"title"`
-	ProductType       ProductType       `json:"productType"`
-	Query             string            `json:"query"`
-	Metric            string            `json:"metric"`
-	FunctionType      MetricAggregator  `json:"functionType"`
-	GroupByKey        *string           `json:"groupByKey,omitempty"`
-	BucketByKey       *string           `json:"bucketByKey,omitempty"`
-	BucketCount       *int              `json:"bucketCount,omitempty"`
-	BucketInterval    *int              `json:"bucketInterval,omitempty"`
-	Limit             *int              `json:"limit,omitempty"`
-	LimitFunctionType *MetricAggregator `json:"limitFunctionType,omitempty"`
-	LimitMetric       *string           `json:"limitMetric,omitempty"`
-	Display           *string           `json:"display,omitempty"`
-	NullHandling      *string           `json:"nullHandling,omitempty"`
+	ID                *int               `json:"id,omitempty"`
+	VisualizationID   int                `json:"visualizationId"`
+	AfterGraphID      *int               `json:"afterGraphId,omitempty"`
+	Type              string             `json:"type"`
+	Title             string             `json:"title"`
+	ProductType       ProductType        `json:"productType"`
+	Query             string             `json:"query"`
+	Metric            string             `json:"metric"`
+	FunctionType      MetricAggregator   `json:"functionType"`
+	GroupByKeys       pq.StringArray     `json:"groupByKeys,omitempty"`
+	BucketByKey       *string            `json:"bucketByKey,omitempty"`
+	BucketCount       *int               `json:"bucketCount,omitempty"`
+	BucketInterval    *int               `json:"bucketInterval,omitempty"`
+	Limit             *int               `json:"limit,omitempty"`
+	LimitFunctionType *MetricAggregator  `json:"limitFunctionType,omitempty"`
+	LimitMetric       *string            `json:"limitMetric,omitempty"`
+	FunnelSteps       []*FunnelStepInput `json:"funnelSteps,omitempty"`
+	Display           *string            `json:"display,omitempty"`
+	NullHandling      *string            `json:"nullHandling,omitempty"`
 }
 
 type HeightList struct {
@@ -601,6 +616,8 @@ type MetricBucket struct {
 	Column      MetricColumn     `json:"column"`
 	MetricType  MetricAggregator `json:"metric_type"`
 	MetricValue *float64         `json:"metric_value,omitempty"`
+	YhatLower   *float64         `json:"yhat_lower,omitempty"`
+	YhatUpper   *float64         `json:"yhat_upper,omitempty"`
 }
 
 type MetricPreview struct {
@@ -675,6 +692,13 @@ type Plan struct {
 	ErrorsRate          float64                     `json:"errorsRate"`
 	LogsRate            float64                     `json:"logsRate"`
 	TracesRate          float64                     `json:"tracesRate"`
+}
+
+type PredictionSettings struct {
+	ChangepointPriorScale float64            `json:"changepointPriorScale"`
+	IntervalWidth         float64            `json:"intervalWidth"`
+	ThresholdCondition    ThresholdCondition `json:"thresholdCondition"`
+	IntervalSeconds       int                `json:"intervalSeconds"`
 }
 
 type QueryInput struct {
@@ -830,18 +854,20 @@ type SessionQuery struct {
 }
 
 type SessionsReportRow struct {
-	Key                   string  `json:"key"`
-	Email                 string  `json:"email"`
-	NumSessions           uint64  `json:"num_sessions"`
-	NumDaysVisited        uint64  `json:"num_days_visited"`
-	NumMonthsVisited      uint64  `json:"num_months_visited"`
-	AvgActiveLengthMins   float64 `json:"avg_active_length_mins"`
-	MaxActiveLengthMins   float64 `json:"max_active_length_mins"`
-	TotalActiveLengthMins float64 `json:"total_active_length_mins"`
-	AvgLengthMins         float64 `json:"avg_length_mins"`
-	MaxLengthMins         float64 `json:"max_length_mins"`
-	TotalLengthMins       float64 `json:"total_length_mins"`
-	Location              string  `json:"location"`
+	Key                   string    `json:"key"`
+	Email                 string    `json:"email"`
+	NumSessions           uint64    `json:"num_sessions"`
+	FirstSession          time.Time `json:"first_session"`
+	LastSession           time.Time `json:"last_session"`
+	NumDaysVisited        uint64    `json:"num_days_visited"`
+	NumMonthsVisited      uint64    `json:"num_months_visited"`
+	AvgActiveLengthMins   float64   `json:"avg_active_length_mins"`
+	MaxActiveLengthMins   float64   `json:"max_active_length_mins"`
+	TotalActiveLengthMins float64   `json:"total_active_length_mins"`
+	AvgLengthMins         float64   `json:"avg_length_mins"`
+	MaxLengthMins         float64   `json:"max_length_mins"`
+	TotalLengthMins       float64   `json:"total_length_mins"`
+	Location              string    `json:"location"`
 }
 
 type SlackSyncResponse struct {
@@ -1001,6 +1027,20 @@ type UserPropertyInput struct {
 	Value string `json:"value"`
 }
 
+type Variable struct {
+	Key            string         `json:"key"`
+	DefaultValues  []string       `json:"defaultValues"`
+	SuggestionType SuggestionType `json:"suggestionType"`
+	Field          *string        `json:"field,omitempty"`
+}
+
+type VariableInput struct {
+	Key            string         `json:"key"`
+	DefaultValues  []string       `json:"defaultValues"`
+	SuggestionType SuggestionType `json:"suggestionType"`
+	Field          *string        `json:"field,omitempty"`
+}
+
 type VercelEnv struct {
 	ID              string `json:"id"`
 	Key             string `json:"key"`
@@ -1025,11 +1065,12 @@ type VercelProjectMappingInput struct {
 }
 
 type VisualizationInput struct {
-	ID         *int    `json:"id,omitempty"`
-	ProjectID  int     `json:"projectId"`
-	Name       *string `json:"name,omitempty"`
-	GraphIds   []int   `json:"graphIds,omitempty"`
-	TimePreset *string `json:"timePreset,omitempty"`
+	ID         *int             `json:"id,omitempty"`
+	ProjectID  int              `json:"projectId"`
+	Name       *string          `json:"name,omitempty"`
+	GraphIds   []int            `json:"graphIds,omitempty"`
+	TimePreset *string          `json:"timePreset,omitempty"`
+	Variables  []*VariableInput `json:"variables,omitempty"`
 }
 
 type WebSocketEvent struct {
@@ -1373,7 +1414,6 @@ const (
 	IntegrationTypeSlack          IntegrationType = "Slack"
 	IntegrationTypeLinear         IntegrationType = "Linear"
 	IntegrationTypeZapier         IntegrationType = "Zapier"
-	IntegrationTypeFront          IntegrationType = "Front"
 	IntegrationTypeVercel         IntegrationType = "Vercel"
 	IntegrationTypeDiscord        IntegrationType = "Discord"
 	IntegrationTypeClickUp        IntegrationType = "ClickUp"
@@ -1390,7 +1430,6 @@ var AllIntegrationType = []IntegrationType{
 	IntegrationTypeSlack,
 	IntegrationTypeLinear,
 	IntegrationTypeZapier,
-	IntegrationTypeFront,
 	IntegrationTypeVercel,
 	IntegrationTypeDiscord,
 	IntegrationTypeClickUp,
@@ -1405,7 +1444,7 @@ var AllIntegrationType = []IntegrationType{
 
 func (e IntegrationType) IsValid() bool {
 	switch e {
-	case IntegrationTypeSlack, IntegrationTypeLinear, IntegrationTypeZapier, IntegrationTypeFront, IntegrationTypeVercel, IntegrationTypeDiscord, IntegrationTypeClickUp, IntegrationTypeHeight, IntegrationTypeGitHub, IntegrationTypeJira, IntegrationTypeMicrosoftTeams, IntegrationTypeGitLab, IntegrationTypeHeroku, IntegrationTypeCloudflare:
+	case IntegrationTypeSlack, IntegrationTypeLinear, IntegrationTypeZapier, IntegrationTypeVercel, IntegrationTypeDiscord, IntegrationTypeClickUp, IntegrationTypeHeight, IntegrationTypeGitHub, IntegrationTypeJira, IntegrationTypeMicrosoftTeams, IntegrationTypeGitLab, IntegrationTypeHeroku, IntegrationTypeCloudflare:
 		return true
 	}
 	return false
@@ -2218,6 +2257,7 @@ const (
 	ReservedEventKeySessionLength       ReservedEventKey = "session_length"
 	ReservedEventKeySessionPagesVisited ReservedEventKey = "session_pages_visited"
 	ReservedEventKeyState               ReservedEventKey = "state"
+	ReservedEventKeyTimestamp           ReservedEventKey = "timestamp"
 )
 
 var AllReservedEventKey = []ReservedEventKey{
@@ -2239,11 +2279,12 @@ var AllReservedEventKey = []ReservedEventKey{
 	ReservedEventKeySessionLength,
 	ReservedEventKeySessionPagesVisited,
 	ReservedEventKeyState,
+	ReservedEventKeyTimestamp,
 }
 
 func (e ReservedEventKey) IsValid() bool {
 	switch e {
-	case ReservedEventKeyBrowserName, ReservedEventKeyBrowserVersion, ReservedEventKeyCity, ReservedEventKeyCountry, ReservedEventKeyEnvironment, ReservedEventKeyEvent, ReservedEventKeyFirstSession, ReservedEventKeyIdentified, ReservedEventKeyIdentifier, ReservedEventKeyIP, ReservedEventKeyOsName, ReservedEventKeyOsVersion, ReservedEventKeySecureSessionID, ReservedEventKeyServiceVersion, ReservedEventKeySessionActiveLength, ReservedEventKeySessionLength, ReservedEventKeySessionPagesVisited, ReservedEventKeyState:
+	case ReservedEventKeyBrowserName, ReservedEventKeyBrowserVersion, ReservedEventKeyCity, ReservedEventKeyCountry, ReservedEventKeyEnvironment, ReservedEventKeyEvent, ReservedEventKeyFirstSession, ReservedEventKeyIdentified, ReservedEventKeyIdentifier, ReservedEventKeyIP, ReservedEventKeyOsName, ReservedEventKeyOsVersion, ReservedEventKeySecureSessionID, ReservedEventKeyServiceVersion, ReservedEventKeySessionActiveLength, ReservedEventKeySessionLength, ReservedEventKeySessionPagesVisited, ReservedEventKeyState, ReservedEventKeyTimestamp:
 		return true
 	}
 	return false
@@ -2355,6 +2396,8 @@ const (
 	ReservedSessionKeySecureID           ReservedSessionKey = "secure_id"
 	ReservedSessionKeyServiceVersion     ReservedSessionKey = "service_version"
 	ReservedSessionKeyState              ReservedSessionKey = "state"
+	ReservedSessionKeyTimestamp          ReservedSessionKey = "timestamp"
+	ReservedSessionKeyUpdatedAt          ReservedSessionKey = "updated_at"
 	ReservedSessionKeyViewedByAnyone     ReservedSessionKey = "viewed_by_anyone"
 	ReservedSessionKeyViewedByMe         ReservedSessionKey = "viewed_by_me"
 	ReservedSessionKeyWithinBillingQuota ReservedSessionKey = "within_billing_quota"
@@ -2388,6 +2431,8 @@ var AllReservedSessionKey = []ReservedSessionKey{
 	ReservedSessionKeySecureID,
 	ReservedSessionKeyServiceVersion,
 	ReservedSessionKeyState,
+	ReservedSessionKeyTimestamp,
+	ReservedSessionKeyUpdatedAt,
 	ReservedSessionKeyViewedByAnyone,
 	ReservedSessionKeyViewedByMe,
 	ReservedSessionKeyWithinBillingQuota,
@@ -2398,7 +2443,7 @@ var AllReservedSessionKey = []ReservedSessionKey{
 
 func (e ReservedSessionKey) IsValid() bool {
 	switch e {
-	case ReservedSessionKeyActiveLength, ReservedSessionKeyBrowserName, ReservedSessionKeyBrowserVersion, ReservedSessionKeyCity, ReservedSessionKeyCompleted, ReservedSessionKeyCountry, ReservedSessionKeyEnvironment, ReservedSessionKeyExcluded, ReservedSessionKeyFirstTime, ReservedSessionKeyHasComments, ReservedSessionKeyHasErrors, ReservedSessionKeyHasRageClicks, ReservedSessionKeyIdentified, ReservedSessionKeyIdentifier, ReservedSessionKeyIP, ReservedSessionKeyLength, ReservedSessionKeyNormalness, ReservedSessionKeyOsName, ReservedSessionKeyOsVersion, ReservedSessionKeyPagesVisited, ReservedSessionKeySample, ReservedSessionKeySecureID, ReservedSessionKeyServiceVersion, ReservedSessionKeyState, ReservedSessionKeyViewedByAnyone, ReservedSessionKeyViewedByMe, ReservedSessionKeyWithinBillingQuota, ReservedSessionKeyLocState, ReservedSessionKeyProcessed, ReservedSessionKeyViewed:
+	case ReservedSessionKeyActiveLength, ReservedSessionKeyBrowserName, ReservedSessionKeyBrowserVersion, ReservedSessionKeyCity, ReservedSessionKeyCompleted, ReservedSessionKeyCountry, ReservedSessionKeyEnvironment, ReservedSessionKeyExcluded, ReservedSessionKeyFirstTime, ReservedSessionKeyHasComments, ReservedSessionKeyHasErrors, ReservedSessionKeyHasRageClicks, ReservedSessionKeyIdentified, ReservedSessionKeyIdentifier, ReservedSessionKeyIP, ReservedSessionKeyLength, ReservedSessionKeyNormalness, ReservedSessionKeyOsName, ReservedSessionKeyOsVersion, ReservedSessionKeyPagesVisited, ReservedSessionKeySample, ReservedSessionKeySecureID, ReservedSessionKeyServiceVersion, ReservedSessionKeyState, ReservedSessionKeyTimestamp, ReservedSessionKeyUpdatedAt, ReservedSessionKeyViewedByAnyone, ReservedSessionKeyViewedByMe, ReservedSessionKeyWithinBillingQuota, ReservedSessionKeyLocState, ReservedSessionKeyProcessed, ReservedSessionKeyViewed:
 		return true
 	}
 	return false
@@ -3016,5 +3061,132 @@ func (e *SubscriptionInterval) UnmarshalGQL(v interface{}) error {
 }
 
 func (e SubscriptionInterval) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+type SuggestionType string
+
+const (
+	SuggestionTypeNone  SuggestionType = "None"
+	SuggestionTypeValue SuggestionType = "Value"
+	SuggestionTypeKey   SuggestionType = "Key"
+)
+
+var AllSuggestionType = []SuggestionType{
+	SuggestionTypeNone,
+	SuggestionTypeValue,
+	SuggestionTypeKey,
+}
+
+func (e SuggestionType) IsValid() bool {
+	switch e {
+	case SuggestionTypeNone, SuggestionTypeValue, SuggestionTypeKey:
+		return true
+	}
+	return false
+}
+
+func (e SuggestionType) String() string {
+	return string(e)
+}
+
+func (e *SuggestionType) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = SuggestionType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid SuggestionType", str)
+	}
+	return nil
+}
+
+func (e SuggestionType) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+type ThresholdCondition string
+
+const (
+	ThresholdConditionAbove   ThresholdCondition = "Above"
+	ThresholdConditionBelow   ThresholdCondition = "Below"
+	ThresholdConditionOutside ThresholdCondition = "Outside"
+)
+
+var AllThresholdCondition = []ThresholdCondition{
+	ThresholdConditionAbove,
+	ThresholdConditionBelow,
+	ThresholdConditionOutside,
+}
+
+func (e ThresholdCondition) IsValid() bool {
+	switch e {
+	case ThresholdConditionAbove, ThresholdConditionBelow, ThresholdConditionOutside:
+		return true
+	}
+	return false
+}
+
+func (e ThresholdCondition) String() string {
+	return string(e)
+}
+
+func (e *ThresholdCondition) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ThresholdCondition(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ThresholdCondition", str)
+	}
+	return nil
+}
+
+func (e ThresholdCondition) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+type ThresholdType string
+
+const (
+	ThresholdTypeConstant ThresholdType = "Constant"
+	ThresholdTypeAnomaly  ThresholdType = "Anomaly"
+)
+
+var AllThresholdType = []ThresholdType{
+	ThresholdTypeConstant,
+	ThresholdTypeAnomaly,
+}
+
+func (e ThresholdType) IsValid() bool {
+	switch e {
+	case ThresholdTypeConstant, ThresholdTypeAnomaly:
+		return true
+	}
+	return false
+}
+
+func (e ThresholdType) String() string {
+	return string(e)
+}
+
+func (e *ThresholdType) UnmarshalGQL(v interface{}) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ThresholdType(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ThresholdType", str)
+	}
+	return nil
+}
+
+func (e ThresholdType) MarshalGQL(w io.Writer) {
 	fmt.Fprint(w, strconv.Quote(e.String()))
 }

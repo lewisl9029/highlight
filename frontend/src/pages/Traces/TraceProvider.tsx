@@ -10,7 +10,7 @@ import {
 	getTraceTimes,
 	organizeSpansForFlameGraph,
 	organizeSpansWithChildren,
-	traceSortFn,
+	traceSortByStartTimeFn,
 } from '@/pages/Traces/utils'
 
 type TraceContext = {
@@ -131,7 +131,7 @@ export const TraceProvider: React.FC<React.PropsWithChildren<Props>> = ({
 			return []
 		}
 
-		const spans = [...data.trace.trace].sort(traceSortFn)
+		const spans = [...data.trace.trace].sort(traceSortByStartTimeFn)
 		return organizeSpansWithChildren(spans)
 	}, [data?.trace?.trace])
 
@@ -147,6 +147,19 @@ export const TraceProvider: React.FC<React.PropsWithChildren<Props>> = ({
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [spanId])
+
+	secureSessionId = useMemo(() => {
+		if (!!secureSessionId) {
+			return secureSessionId
+		}
+
+		if (!!data?.trace?.trace) {
+			return data?.trace?.trace.find((span) => span.secureSessionID)
+				?.secureSessionID
+		}
+
+		return undefined
+	}, [data?.trace?.trace, secureSessionId])
 
 	return (
 		<TraceContext.Provider
@@ -165,7 +178,7 @@ export const TraceProvider: React.FC<React.PropsWithChildren<Props>> = ({
 				traces,
 				spans,
 				error,
-				secureSessionId: firstSpan?.secureSessionID,
+				secureSessionId,
 				setHoveredSpan,
 				setSelectedSpan,
 			}}

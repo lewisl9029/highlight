@@ -130,7 +130,6 @@ export enum AdminRole {
 
 export type Alert = {
 	__typename?: 'Alert'
-	below_threshold?: Maybe<Scalars['Boolean']>
 	destinations: Array<Maybe<AlertDestination>>
 	disabled: Scalars['Boolean']
 	function_column?: Maybe<Scalars['String']>
@@ -141,8 +140,11 @@ export type Alert = {
 	metric_id: Scalars['String']
 	name: Scalars['String']
 	product_type: ProductType
+	project_id: Scalars['ID']
 	query?: Maybe<Scalars['String']>
+	threshold_condition?: Maybe<ThresholdCondition>
 	threshold_cooldown?: Maybe<Scalars['Int']>
+	threshold_type?: Maybe<ThresholdType>
 	threshold_value?: Maybe<Scalars['Float']>
 	threshold_window?: Maybe<Scalars['Int']>
 	updated_at: Scalars['Timestamp']
@@ -182,13 +184,18 @@ export enum AlertState {
 
 export type AlertStateChange = {
 	__typename?: 'AlertStateChange'
-	AlertID: Scalars['ID']
-	GroupByKey: Scalars['String']
-	PreviousState: AlertState
-	State: AlertState
-	Title: Scalars['String']
+	alertID: Scalars['ID']
+	groupByKey: Scalars['String']
 	id: Scalars['ID']
+	projectID: Scalars['ID']
+	state: AlertState
 	timestamp: Scalars['Timestamp']
+}
+
+export type AlertStateChangeResults = {
+	__typename?: 'AlertStateChangeResults'
+	alertStateChanges: Array<Maybe<AlertStateChange>>
+	totalCount: Scalars['Int64']
 }
 
 export type AllProjectSettings = {
@@ -224,9 +231,11 @@ export type AllWorkspaceSettings = {
 	enable_grafana_dashboard: Scalars['Boolean']
 	enable_ingest_filtering: Scalars['Boolean']
 	enable_ingest_sampling: Scalars['Boolean']
+	enable_jira_integration: Scalars['Boolean']
 	enable_network_traces: Scalars['Boolean']
 	enable_project_level_access: Scalars['Boolean']
 	enable_session_export: Scalars['Boolean']
+	enable_teams_integration: Scalars['Boolean']
 	enable_unlisted_sharing: Scalars['Boolean']
 	workspace_id: Scalars['ID']
 }
@@ -539,13 +548,6 @@ export type ErrorDistributionItem = {
 	value: Scalars['Int64']
 }
 
-export type ErrorField = {
-	__typename?: 'ErrorField'
-	name: Scalars['String']
-	project_id?: Maybe<Scalars['Int']>
-	value: Scalars['String']
-}
-
 export type ErrorGroup = {
 	__typename?: 'ErrorGroup'
 	created_at: Scalars['Timestamp']
@@ -554,7 +556,6 @@ export type ErrorGroup = {
 	error_metrics: Array<ErrorDistributionItem>
 	error_tag?: Maybe<ErrorTag>
 	event: Array<Maybe<Scalars['String']>>
-	fields?: Maybe<Array<Maybe<ErrorField>>>
 	first_occurrence?: Maybe<Scalars['Timestamp']>
 	id: Scalars['ID']
 	is_public: Scalars['Boolean']
@@ -738,6 +739,17 @@ export type Field = {
 	value: Scalars['String']
 }
 
+export type FunnelStep = {
+	__typename?: 'FunnelStep'
+	query: Scalars['String']
+	title: Scalars['String']
+}
+
+export type FunnelStepInput = {
+	query: Scalars['String']
+	title: Scalars['String']
+}
+
 export type GitHubRepo = {
 	__typename?: 'GitHubRepo'
 	key: Scalars['String']
@@ -757,9 +769,11 @@ export type Graph = {
 	bucketByKey?: Maybe<Scalars['String']>
 	bucketCount?: Maybe<Scalars['Int']>
 	bucketInterval?: Maybe<Scalars['Int']>
+	description: Scalars['String']
 	display?: Maybe<Scalars['String']>
 	functionType: MetricAggregator
-	groupByKey?: Maybe<Scalars['String']>
+	funnelSteps?: Maybe<Array<FunnelStep>>
+	groupByKeys?: Maybe<Scalars['StringArray']>
 	id: Scalars['ID']
 	limit?: Maybe<Scalars['Int']>
 	limitFunctionType?: Maybe<MetricAggregator>
@@ -779,7 +793,8 @@ export type GraphInput = {
 	bucketInterval?: InputMaybe<Scalars['Int']>
 	display?: InputMaybe<Scalars['String']>
 	functionType: MetricAggregator
-	groupByKey?: InputMaybe<Scalars['String']>
+	funnelSteps?: InputMaybe<Array<FunnelStepInput>>
+	groupByKeys?: InputMaybe<Scalars['StringArray']>
 	id?: InputMaybe<Scalars['ID']>
 	limit?: InputMaybe<Scalars['Int']>
 	limitFunctionType?: InputMaybe<MetricAggregator>
@@ -850,7 +865,6 @@ export enum IntegrationType {
 	ClickUp = 'ClickUp',
 	Cloudflare = 'Cloudflare',
 	Discord = 'Discord',
-	Front = 'Front',
 	GitHub = 'GitHub',
 	GitLab = 'GitLab',
 	Height = 'Height',
@@ -1099,6 +1113,8 @@ export type MetricBucket = {
 	group: Array<Scalars['String']>
 	metric_type: MetricAggregator
 	metric_value?: Maybe<Scalars['Float']>
+	yhat_lower?: Maybe<Scalars['Float']>
+	yhat_upper?: Maybe<Scalars['Float']>
 }
 
 export enum MetricBucketBy {
@@ -1192,18 +1208,15 @@ export type Mutation = {
 	createAdmin: Admin
 	createAlert?: Maybe<Alert>
 	createCloudflareProxy: Scalars['String']
-	createErrorAlert?: Maybe<ErrorAlert>
 	createErrorComment?: Maybe<ErrorComment>
 	createErrorCommentForExistingIssue?: Maybe<ErrorComment>
 	createErrorTag: ErrorTag
 	createIssueForErrorComment?: Maybe<ErrorComment>
 	createIssueForSessionComment?: Maybe<SessionComment>
-	createLogAlert?: Maybe<LogAlert>
 	createMetricMonitor?: Maybe<MetricMonitor>
 	createOrUpdateStripeSubscription?: Maybe<Scalars['String']>
 	createProject?: Maybe<Project>
 	createSavedSegment?: Maybe<SavedSegment>
-	createSessionAlert?: Maybe<SessionAlert>
 	createSessionComment?: Maybe<SessionComment>
 	createSessionCommentWithExistingIssue?: Maybe<SessionComment>
 	createWorkspace?: Maybe<Workspace>
@@ -1310,7 +1323,7 @@ export type MutationChangeProjectMembershipArgs = {
 }
 
 export type MutationCreateAlertArgs = {
-	below_threshold?: InputMaybe<Scalars['Boolean']>
+	default?: InputMaybe<Scalars['Boolean']>
 	destinations: Array<AlertDestinationInput>
 	function_column?: InputMaybe<Scalars['String']>
 	function_type: MetricAggregator
@@ -1319,7 +1332,9 @@ export type MutationCreateAlertArgs = {
 	product_type: ProductType
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
+	threshold_condition?: InputMaybe<ThresholdCondition>
 	threshold_cooldown?: InputMaybe<Scalars['Int']>
+	threshold_type?: InputMaybe<ThresholdType>
 	threshold_value?: InputMaybe<Scalars['Float']>
 	threshold_window?: InputMaybe<Scalars['Int']>
 }
@@ -1327,22 +1342,6 @@ export type MutationCreateAlertArgs = {
 export type MutationCreateCloudflareProxyArgs = {
 	proxy_subdomain: Scalars['String']
 	workspace_id: Scalars['ID']
-}
-
-export type MutationCreateErrorAlertArgs = {
-	count_threshold: Scalars['Int']
-	default?: InputMaybe<Scalars['Boolean']>
-	discord_channels: Array<DiscordChannelInput>
-	emails: Array<InputMaybe<Scalars['String']>>
-	frequency: Scalars['Int']
-	microsoft_teams_channels: Array<MicrosoftTeamsChannelInput>
-	name: Scalars['String']
-	project_id: Scalars['ID']
-	query: Scalars['String']
-	regex_groups: Array<InputMaybe<Scalars['String']>>
-	slack_channels: Array<InputMaybe<SanitizedSlackChannelInput>>
-	threshold_window: Scalars['Int']
-	webhook_destinations: Array<WebhookDestinationInput>
 }
 
 export type MutationCreateErrorCommentArgs = {
@@ -1408,10 +1407,6 @@ export type MutationCreateIssueForSessionCommentArgs = {
 	time: Scalars['Float']
 }
 
-export type MutationCreateLogAlertArgs = {
-	input: LogAlertInput
-}
-
 export type MutationCreateMetricMonitorArgs = {
 	aggregator: MetricAggregator
 	discord_channels: Array<DiscordChannelInput>
@@ -1441,10 +1436,6 @@ export type MutationCreateSavedSegmentArgs = {
 	name: Scalars['String']
 	project_id: Scalars['ID']
 	query: Scalars['String']
-}
-
-export type MutationCreateSessionAlertArgs = {
-	input: SessionAlertInput
 }
 
 export type MutationCreateSessionCommentArgs = {
@@ -1777,7 +1768,6 @@ export type MutationUpdateAdminAndCreateWorkspaceArgs = {
 
 export type MutationUpdateAlertArgs = {
 	alert_id: Scalars['ID']
-	below_threshold?: InputMaybe<Scalars['Boolean']>
 	destinations?: InputMaybe<Array<AlertDestinationInput>>
 	function_column?: InputMaybe<Scalars['String']>
 	function_type?: InputMaybe<MetricAggregator>
@@ -1786,7 +1776,9 @@ export type MutationUpdateAlertArgs = {
 	product_type?: InputMaybe<ProductType>
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
+	threshold_condition?: InputMaybe<ThresholdCondition>
 	threshold_cooldown?: InputMaybe<Scalars['Int']>
+	threshold_type?: InputMaybe<ThresholdType>
 	threshold_value?: InputMaybe<Scalars['Float']>
 	threshold_window?: InputMaybe<Scalars['Int']>
 }
@@ -2030,6 +2022,13 @@ export enum PlanType {
 	UsageBased = 'UsageBased',
 }
 
+export type PredictionSettings = {
+	changepointPriorScale: Scalars['Float']
+	intervalSeconds: Scalars['Int']
+	intervalWidth: Scalars['Float']
+	thresholdCondition: ThresholdCondition
+}
+
 export enum ProductType {
 	Errors = 'Errors',
 	Events = 'Events',
@@ -2067,7 +2066,7 @@ export type Query = {
 	admin_role_by_project?: Maybe<WorkspaceAdminRole>
 	ai_query_suggestion: QueryOutput
 	alert: Alert
-	alert_state_changes: Array<Maybe<AlertStateChange>>
+	alerting_alert_state_changes: AlertStateChangeResults
 	alerts: Array<Maybe<Alert>>
 	api_key_to_org_id?: Maybe<Scalars['ID']>
 	averageSessionLength?: Maybe<AverageSessionLength>
@@ -2093,7 +2092,6 @@ export type Query = {
 	error_comments: Array<Maybe<ErrorComment>>
 	error_comments_for_admin: Array<Maybe<ErrorComment>>
 	error_comments_for_project: Array<Maybe<ErrorComment>>
-	error_field_suggestion?: Maybe<Array<Maybe<ErrorField>>>
 	error_group?: Maybe<ErrorGroup>
 	error_groups: ErrorResults
 	error_groups_clickhouse: ErrorResults
@@ -2112,6 +2110,7 @@ export type Query = {
 	errors_metrics: MetricsBuckets
 	event_chunk_url: Scalars['String']
 	event_chunks: Array<EventChunk>
+	event_sessions: SessionResults
 	events?: Maybe<Array<Maybe<Scalars['Any']>>>
 	events_key_values: Array<Scalars['String']>
 	events_keys: Array<QueryKey>
@@ -2124,6 +2123,7 @@ export type Query = {
 	github_repos?: Maybe<Array<GitHubRepo>>
 	gitlab_projects?: Maybe<Array<GitlabProject>>
 	graph: Graph
+	graph_templates: Array<Graph>
 	height_lists: Array<HeightList>
 	height_workspaces: Array<HeightWorkspace>
 	identifier_suggestion: Array<Scalars['String']>
@@ -2136,6 +2136,7 @@ export type Query = {
 	joinable_workspaces?: Maybe<Array<Maybe<Workspace>>>
 	key_values: Array<Scalars['String']>
 	keys: Array<QueryKey>
+	last_alert_state_changes: Array<Maybe<AlertStateChange>>
 	linear_teams?: Maybe<Array<LinearTeam>>
 	liveUsersCount?: Maybe<Scalars['Int64']>
 	log_alert: LogAlert
@@ -2177,7 +2178,6 @@ export type Query = {
 	serviceByName?: Maybe<Service>
 	services?: Maybe<ServiceConnection>
 	session?: Maybe<Session>
-	sessionLogs: Array<LogEdge>
 	session_comment_tags_for_project: Array<SessionCommentTag>
 	session_comments: Array<Maybe<SessionComment>>
 	session_comments_for_admin: Array<Maybe<SessionComment>>
@@ -2193,7 +2193,6 @@ export type Query = {
 	sessions_key_values: Array<Scalars['String']>
 	sessions_keys: Array<QueryKey>
 	sessions_metrics: MetricsBuckets
-	sessions_report: Array<SessionsReportRow>
 	slack_channel_suggestion: Array<SanitizedSlackChannel>
 	sourcemap_files: Array<S3File>
 	sourcemap_versions: Array<Scalars['String']>
@@ -2257,8 +2256,12 @@ export type QueryAlertArgs = {
 	id: Scalars['ID']
 }
 
-export type QueryAlert_State_ChangesArgs = {
+export type QueryAlerting_Alert_State_ChangesArgs = {
 	alert_id: Scalars['ID']
+	count?: InputMaybe<Scalars['Int']>
+	end_date: Scalars['Timestamp']
+	page?: InputMaybe<Scalars['Int']>
+	start_date: Scalars['Timestamp']
 }
 
 export type QueryAlertsArgs = {
@@ -2368,12 +2371,6 @@ export type QueryError_Comments_For_ProjectArgs = {
 	project_id: Scalars['ID']
 }
 
-export type QueryError_Field_SuggestionArgs = {
-	name: Scalars['String']
-	project_id: Scalars['ID']
-	query: Scalars['String']
-}
-
 export type QueryError_GroupArgs = {
 	secure_id: Scalars['String']
 	use_clickhouse?: InputMaybe<Scalars['Boolean']>
@@ -2477,6 +2474,15 @@ export type QueryEvent_ChunksArgs = {
 	secure_id: Scalars['String']
 }
 
+export type QueryEvent_SessionsArgs = {
+	count: Scalars['Int']
+	page?: InputMaybe<Scalars['Int']>
+	params: QueryInput
+	project_id: Scalars['ID']
+	sort_desc: Scalars['Boolean']
+	sort_field?: InputMaybe<Scalars['String']>
+}
+
 export type QueryEventsArgs = {
 	session_secure_id: Scalars['String']
 }
@@ -2484,6 +2490,7 @@ export type QueryEventsArgs = {
 export type QueryEvents_Key_ValuesArgs = {
 	count?: InputMaybe<Scalars['Int']>
 	date_range: DateRangeRequiredInput
+	event?: InputMaybe<Scalars['String']>
 	key_name: Scalars['String']
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
@@ -2491,6 +2498,7 @@ export type QueryEvents_Key_ValuesArgs = {
 
 export type QueryEvents_KeysArgs = {
 	date_range: DateRangeRequiredInput
+	event?: InputMaybe<Scalars['String']>
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
 	type?: InputMaybe<KeyType>
@@ -2592,18 +2600,24 @@ export type QueryJira_ProjectsArgs = {
 export type QueryKey_ValuesArgs = {
 	count?: InputMaybe<Scalars['Int']>
 	date_range: DateRangeRequiredInput
+	event?: InputMaybe<Scalars['String']>
 	key_name: Scalars['String']
-	product_type: ProductType
+	product_type?: InputMaybe<ProductType>
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
 }
 
 export type QueryKeysArgs = {
 	date_range: DateRangeRequiredInput
-	product_type: ProductType
+	event?: InputMaybe<Scalars['String']>
+	product_type?: InputMaybe<ProductType>
 	project_id: Scalars['ID']
 	query?: InputMaybe<Scalars['String']>
 	type?: InputMaybe<KeyType>
+}
+
+export type QueryLast_Alert_State_ChangesArgs = {
+	alert_id: Scalars['ID']
 }
 
 export type QueryLinear_TeamsArgs = {
@@ -2633,6 +2647,7 @@ export type QueryLogsArgs = {
 	at?: InputMaybe<Scalars['String']>
 	before?: InputMaybe<Scalars['String']>
 	direction: SortDirection
+	limit?: InputMaybe<Scalars['Int']>
 	params: QueryInput
 	project_id: Scalars['ID']
 }
@@ -2711,6 +2726,7 @@ export type QueryMetricsArgs = {
 	limit_column?: InputMaybe<Scalars['String']>
 	metric_types: Array<MetricAggregator>
 	params: QueryInput
+	prediction_settings?: InputMaybe<PredictionSettings>
 	product_type: ProductType
 	project_id: Scalars['ID']
 }
@@ -2822,11 +2838,6 @@ export type QuerySessionArgs = {
 	secure_id: Scalars['String']
 }
 
-export type QuerySessionLogsArgs = {
-	params: QueryInput
-	project_id: Scalars['ID']
-}
-
 export type QuerySession_Comment_Tags_For_ProjectArgs = {
 	project_id: Scalars['ID']
 }
@@ -2915,11 +2926,6 @@ export type QuerySessions_MetricsArgs = {
 	project_id: Scalars['ID']
 }
 
-export type QuerySessions_ReportArgs = {
-	project_id: Scalars['ID']
-	query: ClickhouseQuery
-}
-
 export type QuerySlack_Channel_SuggestionArgs = {
 	project_id: Scalars['ID']
 }
@@ -2958,6 +2964,7 @@ export type QueryTracesArgs = {
 	at?: InputMaybe<Scalars['String']>
 	before?: InputMaybe<Scalars['String']>
 	direction: SortDirection
+	limit?: InputMaybe<Scalars['Int']>
 	params: QueryInput
 	project_id: Scalars['ID']
 }
@@ -3183,6 +3190,7 @@ export enum ReservedEventKey {
 	SessionLength = 'session_length',
 	SessionPagesVisited = 'session_pages_visited',
 	State = 'state',
+	Timestamp = 'timestamp',
 }
 
 export enum ReservedLogKey {
@@ -3226,6 +3234,8 @@ export enum ReservedSessionKey {
 	SecureId = 'secure_id',
 	ServiceVersion = 'service_version',
 	State = 'state',
+	Timestamp = 'timestamp',
+	UpdatedAt = 'updated_at',
 	Viewed = 'viewed',
 	ViewedByAnyone = 'viewed_by_anyone',
 	ViewedByMe = 'viewed_by_me',
@@ -3598,12 +3608,16 @@ export type SessionQuery = {
 export type SessionResults = {
 	__typename?: 'SessionResults'
 	sessions: Array<Session>
+	totalActiveLength: Scalars['Int64']
 	totalCount: Scalars['Int64']
+	totalLength: Scalars['Int64']
 }
 
 export type SessionsHistogram = {
 	__typename?: 'SessionsHistogram'
+	active_lengths: Array<Scalars['Int64']>
 	bucket_times: Array<Scalars['Timestamp']>
+	inactive_lengths: Array<Scalars['Int64']>
 	sessions_with_errors: Array<Scalars['Int64']>
 	sessions_without_errors: Array<Scalars['Int64']>
 	total_sessions: Array<Scalars['Int64']>
@@ -3614,7 +3628,9 @@ export type SessionsReportRow = {
 	avg_active_length_mins: Scalars['Float']
 	avg_length_mins: Scalars['Float']
 	email: Scalars['String']
+	first_session: Scalars['Timestamp']
 	key: Scalars['String']
+	last_session: Scalars['Timestamp']
 	location: Scalars['String']
 	max_active_length_mins: Scalars['Float']
 	max_length_mins: Scalars['Float']
@@ -3724,10 +3740,27 @@ export enum SubscriptionInterval {
 	Monthly = 'Monthly',
 }
 
+export enum SuggestionType {
+	Key = 'Key',
+	None = 'None',
+	Value = 'Value',
+}
+
 export type SystemConfiguration = {
 	__typename?: 'SystemConfiguration'
 	maintenance_end?: Maybe<Scalars['Timestamp']>
 	maintenance_start?: Maybe<Scalars['Timestamp']>
+}
+
+export enum ThresholdCondition {
+	Above = 'Above',
+	Below = 'Below',
+	Outside = 'Outside',
+}
+
+export enum ThresholdType {
+	Anomaly = 'Anomaly',
+	Constant = 'Constant',
 }
 
 export type TimelineIndicatorEvent = {
@@ -3861,6 +3894,21 @@ export type UserPropertyInput = {
 	value: Scalars['String']
 }
 
+export type Variable = {
+	__typename?: 'Variable'
+	defaultValues: Array<Scalars['String']>
+	field?: Maybe<Scalars['String']>
+	key: Scalars['String']
+	suggestionType: SuggestionType
+}
+
+export type VariableInput = {
+	defaultValues: Array<Scalars['String']>
+	field?: InputMaybe<Scalars['String']>
+	key: Scalars['String']
+	suggestionType: SuggestionType
+}
+
 export type VercelEnv = {
 	__typename?: 'VercelEnv'
 	configurationId: Scalars['String']
@@ -3896,6 +3944,7 @@ export type Visualization = {
 	timePreset?: Maybe<Scalars['String']>
 	updatedAt: Scalars['Timestamp']
 	updatedByAdmin?: Maybe<SanitizedAdmin>
+	variables: Array<Variable>
 }
 
 export type VisualizationInput = {
@@ -3904,6 +3953,7 @@ export type VisualizationInput = {
 	name?: InputMaybe<Scalars['String']>
 	projectId: Scalars['ID']
 	timePreset?: InputMaybe<Scalars['String']>
+	variables?: InputMaybe<Array<VariableInput>>
 }
 
 export type VisualizationsResponse = {

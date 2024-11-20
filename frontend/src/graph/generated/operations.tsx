@@ -824,61 +824,6 @@ export type ReplyToErrorCommentMutation = { __typename?: 'Mutation' } & {
 	>
 }
 
-export type CreateErrorAlertMutationVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-	name: Types.Scalars['String']
-	count_threshold: Types.Scalars['Int']
-	threshold_window: Types.Scalars['Int']
-	slack_channels:
-		| Array<Types.Maybe<Types.SanitizedSlackChannelInput>>
-		| Types.Maybe<Types.SanitizedSlackChannelInput>
-	discord_channels:
-		| Array<Types.DiscordChannelInput>
-		| Types.DiscordChannelInput
-	webhook_destinations:
-		| Array<Types.WebhookDestinationInput>
-		| Types.WebhookDestinationInput
-	microsoft_teams_channels:
-		| Array<Types.MicrosoftTeamsChannelInput>
-		| Types.MicrosoftTeamsChannelInput
-	emails:
-		| Array<Types.Maybe<Types.Scalars['String']>>
-		| Types.Maybe<Types.Scalars['String']>
-	regex_groups:
-		| Array<Types.Maybe<Types.Scalars['String']>>
-		| Types.Maybe<Types.Scalars['String']>
-	frequency: Types.Scalars['Int']
-	default?: Types.Maybe<Types.Scalars['Boolean']>
-	query: Types.Scalars['String']
-}>
-
-export type CreateErrorAlertMutation = { __typename?: 'Mutation' } & {
-	createErrorAlert?: Types.Maybe<
-		{ __typename?: 'ErrorAlert' } & Pick<
-			Types.ErrorAlert,
-			| 'id'
-			| 'EmailsToNotify'
-			| 'Name'
-			| 'CountThreshold'
-			| 'ThresholdWindow'
-			| 'LastAdminToEditID'
-			| 'RegexGroups'
-			| 'Frequency'
-			| 'disabled'
-			| 'Query'
-		> & {
-				ChannelsToNotify: Array<
-					Types.Maybe<
-						{ __typename?: 'SanitizedSlackChannel' } & Pick<
-							Types.SanitizedSlackChannel,
-							'webhook_channel' | 'webhook_channel_id'
-						>
-					>
-				>
-			}
-	>
-}
-
 export type CreateMetricMonitorMutationVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
 	name: Types.Scalars['String']
@@ -1025,10 +970,12 @@ export type CreateAlertMutationVariables = Types.Exact<{
 	function_column?: Types.Maybe<Types.Scalars['String']>
 	query?: Types.Maybe<Types.Scalars['String']>
 	group_by_key?: Types.Maybe<Types.Scalars['String']>
-	below_threshold?: Types.Maybe<Types.Scalars['Boolean']>
+	default?: Types.Maybe<Types.Scalars['Boolean']>
 	threshold_value?: Types.Maybe<Types.Scalars['Float']>
 	threshold_window?: Types.Maybe<Types.Scalars['Int']>
 	threshold_cooldown?: Types.Maybe<Types.Scalars['Int']>
+	threshold_type?: Types.Maybe<Types.ThresholdType>
+	threshold_condition?: Types.Maybe<Types.ThresholdCondition>
 	destinations:
 		| Array<Types.AlertDestinationInput>
 		| Types.AlertDestinationInput
@@ -1052,10 +999,11 @@ export type UpdateAlertMutationVariables = Types.Exact<{
 	function_column?: Types.Maybe<Types.Scalars['String']>
 	query?: Types.Maybe<Types.Scalars['String']>
 	group_by_key?: Types.Maybe<Types.Scalars['String']>
-	below_threshold?: Types.Maybe<Types.Scalars['Boolean']>
 	threshold_value?: Types.Maybe<Types.Scalars['Float']>
 	threshold_window?: Types.Maybe<Types.Scalars['Int']>
 	threshold_cooldown?: Types.Maybe<Types.Scalars['Int']>
+	threshold_type?: Types.Maybe<Types.ThresholdType>
+	threshold_condition?: Types.Maybe<Types.ThresholdCondition>
 	destinations?: Types.Maybe<
 		Array<Types.AlertDestinationInput> | Types.AlertDestinationInput
 	>
@@ -1213,16 +1161,6 @@ export type UpdateLogAlertMutation = { __typename?: 'Mutation' } & {
 	>
 }
 
-export type CreateLogAlertMutationVariables = Types.Exact<{
-	input: Types.LogAlertInput
-}>
-
-export type CreateLogAlertMutation = { __typename?: 'Mutation' } & {
-	createLogAlert?: Types.Maybe<
-		{ __typename?: 'LogAlert' } & Pick<Types.LogAlert, 'id'>
-	>
-}
-
 export type DeleteLogAlertMutationVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
 	id: Types.Scalars['ID']
@@ -1283,35 +1221,6 @@ export type UpdateErrorAlertIsDisabledMutationVariables = Types.Exact<{
 export type UpdateErrorAlertIsDisabledMutation = { __typename?: 'Mutation' } & {
 	updateErrorAlertIsDisabled?: Types.Maybe<
 		{ __typename?: 'ErrorAlert' } & Pick<Types.ErrorAlert, 'id'>
-	>
-}
-
-export type CreateSessionAlertMutationVariables = Types.Exact<{
-	input: Types.SessionAlertInput
-}>
-
-export type CreateSessionAlertMutation = { __typename?: 'Mutation' } & {
-	createSessionAlert?: Types.Maybe<
-		{ __typename?: 'SessionAlert' } & Pick<
-			Types.SessionAlert,
-			| 'id'
-			| 'EmailsToNotify'
-			| 'Name'
-			| 'ExcludedEnvironments'
-			| 'CountThreshold'
-			| 'ThresholdWindow'
-			| 'LastAdminToEditID'
-			| 'disabled'
-		> & {
-				ChannelsToNotify: Array<
-					Types.Maybe<
-						{ __typename?: 'SanitizedSlackChannel' } & Pick<
-							Types.SanitizedSlackChannel,
-							'webhook_channel' | 'webhook_channel_id'
-						>
-					>
-				>
-			}
 	>
 }
 
@@ -1699,7 +1608,7 @@ export type UpsertGraphMutation = { __typename?: 'Mutation' } & {
 		| 'query'
 		| 'metric'
 		| 'functionType'
-		| 'groupByKey'
+		| 'groupByKeys'
 		| 'bucketByKey'
 		| 'bucketCount'
 		| 'limit'
@@ -1707,7 +1616,16 @@ export type UpsertGraphMutation = { __typename?: 'Mutation' } & {
 		| 'limitMetric'
 		| 'display'
 		| 'nullHandling'
-	>
+	> & {
+			funnelSteps?: Types.Maybe<
+				Array<
+					{ __typename?: 'FunnelStep' } & Pick<
+						Types.FunnelStep,
+						'title' | 'query'
+					>
+				>
+			>
+		}
 }
 
 export type DeleteGraphMutationVariables = Types.Exact<{
@@ -2478,6 +2396,71 @@ export type GetSessionsQueryVariables = Types.Exact<{
 export type GetSessionsQuery = { __typename?: 'Query' } & {
 	sessions: { __typename?: 'SessionResults' } & Pick<
 		Types.SessionResults,
+		'totalCount' | 'totalLength' | 'totalActiveLength'
+	> & {
+			sessions: Array<
+				{ __typename?: 'Session' } & Pick<
+					Types.Session,
+					| 'id'
+					| 'secure_id'
+					| 'client_id'
+					| 'fingerprint'
+					| 'identifier'
+					| 'identified'
+					| 'os_name'
+					| 'os_version'
+					| 'browser_name'
+					| 'browser_version'
+					| 'ip'
+					| 'city'
+					| 'state'
+					| 'country'
+					| 'postal'
+					| 'created_at'
+					| 'language'
+					| 'length'
+					| 'active_length'
+					| 'enable_recording_network_contents'
+					| 'viewed'
+					| 'starred'
+					| 'processed'
+					| 'has_rage_clicks'
+					| 'has_errors'
+					| 'first_time'
+					| 'user_properties'
+					| 'event_counts'
+					| 'last_user_interaction_time'
+					| 'is_public'
+					| 'excluded'
+					| 'email'
+				> & {
+						fields?: Types.Maybe<
+							Array<
+								Types.Maybe<
+									{ __typename?: 'Field' } & Pick<
+										Types.Field,
+										'name' | 'value' | 'type' | 'id'
+									>
+								>
+							>
+						>
+					}
+			>
+		}
+}
+
+export type GetEventSessionsQueryVariables = Types.Exact<{
+	project_id: Types.Scalars['ID']
+	count: Types.Scalars['Int']
+	params: Types.QueryInput
+	sort_desc: Types.Scalars['Boolean']
+	sort_field?: Types.Maybe<Types.Scalars['String']>
+	page?: Types.Maybe<Types.Scalars['Int']>
+}>
+
+export type GetEventSessionsQuery = { __typename?: 'Query' } & {
+	event_sessions: { __typename?: 'SessionResults' } & Pick<
+		Types.SessionResults,
 		'totalCount'
 	> & {
 			sessions: Array<
@@ -2544,6 +2527,8 @@ export type GetSessionsHistogramQuery = { __typename?: 'Query' } & {
 		| 'sessions_without_errors'
 		| 'sessions_with_errors'
 		| 'total_sessions'
+		| 'inactive_lengths'
+		| 'active_lengths'
 	>
 }
 
@@ -2558,6 +2543,8 @@ export type GetSessionUsersReportsQuery = { __typename?: 'Query' } & {
 			Types.SessionsReportRow,
 			| 'key'
 			| 'email'
+			| 'first_session'
+			| 'last_session'
 			| 'num_sessions'
 			| 'num_days_visited'
 			| 'num_months_visited'
@@ -3199,16 +3186,6 @@ export type GetErrorGroupQuery = { __typename?: 'Query' } & {
 						>
 					>
 				>
-				fields?: Types.Maybe<
-					Array<
-						Types.Maybe<
-							{ __typename?: 'ErrorField' } & Pick<
-								Types.ErrorField,
-								'name' | 'value'
-							>
-						>
-					>
-				>
 				error_metrics: Array<
 					{ __typename?: 'ErrorDistributionItem' } & Pick<
 						Types.ErrorDistributionItem,
@@ -3432,53 +3409,6 @@ export type GetProjectSuggestionQuery = { __typename?: 'Query' } & {
 			{ __typename?: 'Project' } & Pick<
 				Types.Project,
 				'id' | 'name' | 'workspace_id'
-			>
-		>
-	>
-}
-
-export type GetErrorFieldSuggestionQueryVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-	name: Types.Scalars['String']
-	query: Types.Scalars['String']
-}>
-
-export type GetErrorFieldSuggestionQuery = { __typename?: 'Query' } & {
-	error_field_suggestion?: Types.Maybe<
-		Array<
-			Types.Maybe<
-				{ __typename?: 'ErrorField' } & Pick<
-					Types.ErrorField,
-					'name' | 'value'
-				>
-			>
-		>
-	>
-}
-
-export type GetErrorSearchSuggestionsQueryVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-	query: Types.Scalars['String']
-}>
-
-export type GetErrorSearchSuggestionsQuery = { __typename?: 'Query' } & {
-	visitedUrls?: Types.Maybe<
-		Array<
-			Types.Maybe<
-				{ __typename?: 'ErrorField' } & Pick<
-					Types.ErrorField,
-					'name' | 'value'
-				>
-			>
-		>
-	>
-	fields?: Types.Maybe<
-		Array<
-			Types.Maybe<
-				{ __typename?: 'ErrorField' } & Pick<
-					Types.ErrorField,
-					'name' | 'value'
-				>
 			>
 		>
 	>
@@ -3871,14 +3801,6 @@ export type GetWorkspaceIsIntegratedWithZapierQueryVariables = Types.Exact<{
 export type GetWorkspaceIsIntegratedWithZapierQuery = {
 	__typename?: 'Query'
 } & { is_integrated_with_linear: Types.Query['is_integrated_with'] }
-
-export type GetWorkspaceIsIntegratedWithFrontQueryVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-}>
-
-export type GetWorkspaceIsIntegratedWithFrontQuery = {
-	__typename?: 'Query'
-} & { is_integrated_with_front: Types.Query['is_integrated_with'] }
 
 export type GetWorkspaceIsIntegratedWithDiscordQueryVariables = Types.Exact<{
 	project_id: Types.Scalars['ID']
@@ -4399,6 +4321,7 @@ export type GetAlertQuery = { __typename?: 'Query' } & {
 	alert: { __typename?: 'Alert' } & Pick<
 		Types.Alert,
 		| 'id'
+		| 'project_id'
 		| 'updated_at'
 		| 'name'
 		| 'product_type'
@@ -4408,10 +4331,11 @@ export type GetAlertQuery = { __typename?: 'Query' } & {
 		| 'group_by_key'
 		| 'disabled'
 		| 'last_admin_to_edit_id'
-		| 'below_threshold'
 		| 'threshold_value'
 		| 'threshold_window'
 		| 'threshold_cooldown'
+		| 'threshold_type'
+		| 'threshold_condition'
 	> & {
 			destinations: Array<
 				Types.Maybe<
@@ -4422,6 +4346,43 @@ export type GetAlertQuery = { __typename?: 'Query' } & {
 				>
 			>
 		}
+}
+
+export type GetAlertingAlertStateChangesQueryVariables = Types.Exact<{
+	alert_id: Types.Scalars['ID']
+	start_date: Types.Scalars['Timestamp']
+	end_date: Types.Scalars['Timestamp']
+	page?: Types.Maybe<Types.Scalars['Int']>
+}>
+
+export type GetAlertingAlertStateChangesQuery = { __typename?: 'Query' } & {
+	alerting_alert_state_changes: {
+		__typename?: 'AlertStateChangeResults'
+	} & Pick<Types.AlertStateChangeResults, 'totalCount'> & {
+			alertStateChanges: Array<
+				Types.Maybe<
+					{ __typename?: 'AlertStateChange' } & Pick<
+						Types.AlertStateChange,
+						'timestamp' | 'state' | 'groupByKey'
+					>
+				>
+			>
+		}
+}
+
+export type GetLastAlertStateChangesQueryVariables = Types.Exact<{
+	alert_id: Types.Scalars['ID']
+}>
+
+export type GetLastAlertStateChangesQuery = { __typename?: 'Query' } & {
+	last_alert_state_changes: Array<
+		Types.Maybe<
+			{ __typename?: 'AlertStateChange' } & Pick<
+				Types.AlertStateChange,
+				'timestamp' | 'state' | 'groupByKey'
+			>
+		>
+	>
 }
 
 export type GetMetricMonitorsQueryVariables = Types.Exact<{
@@ -4675,6 +4636,7 @@ export type GetLogsQueryVariables = Types.Exact<{
 	before?: Types.Maybe<Types.Scalars['String']>
 	at?: Types.Maybe<Types.Scalars['String']>
 	direction: Types.SortDirection
+	limit?: Types.Maybe<Types.Scalars['Int']>
 }>
 
 export type GetLogsQuery = { __typename?: 'Query' } & {
@@ -4703,22 +4665,6 @@ export type GetLogsQuery = { __typename?: 'Query' } & {
 			'hasNextPage' | 'hasPreviousPage' | 'startCursor' | 'endCursor'
 		>
 	}
-}
-
-export type GetSessionLogsQueryVariables = Types.Exact<{
-	project_id: Types.Scalars['ID']
-	params: Types.QueryInput
-}>
-
-export type GetSessionLogsQuery = { __typename?: 'Query' } & {
-	sessionLogs: Array<
-		{ __typename?: 'LogEdge' } & Pick<Types.LogEdge, 'cursor'> & {
-				node: { __typename?: 'Log' } & Pick<
-					Types.Log,
-					'timestamp' | 'level' | 'message'
-				>
-			}
-	>
 }
 
 export type GetLogsHistogramQueryVariables = Types.Exact<{
@@ -4852,9 +4798,11 @@ export type GetWorkspaceSettingsQuery = { __typename?: 'Query' } & {
 			| 'enable_grafana_dashboard'
 			| 'enable_ingest_filtering'
 			| 'enable_ingest_sampling'
+			| 'enable_jira_integration'
 			| 'enable_network_traces'
 			| 'enable_project_level_access'
 			| 'enable_session_export'
+			| 'enable_teams_integration'
 			| 'enable_unlisted_sharing'
 		>
 	>
@@ -5104,6 +5052,7 @@ export type GetTracesQueryVariables = Types.Exact<{
 	before?: Types.Maybe<Types.Scalars['String']>
 	at?: Types.Maybe<Types.Scalars['String']>
 	direction: Types.SortDirection
+	limit?: Types.Maybe<Types.Scalars['Int']>
 }>
 
 export type GetTracesQuery = { __typename?: 'Query' } & {
@@ -5187,11 +5136,12 @@ export type GetTracesMetricsQuery = { __typename?: 'Query' } & {
 }
 
 export type GetKeysQueryVariables = Types.Exact<{
-	product_type: Types.ProductType
+	product_type?: Types.Maybe<Types.ProductType>
 	project_id: Types.Scalars['ID']
 	date_range: Types.DateRangeRequiredInput
 	query?: Types.Maybe<Types.Scalars['String']>
 	type?: Types.Maybe<Types.KeyType>
+	event?: Types.Maybe<Types.Scalars['String']>
 }>
 
 export type GetKeysQuery = { __typename?: 'Query' } & {
@@ -5201,12 +5151,13 @@ export type GetKeysQuery = { __typename?: 'Query' } & {
 }
 
 export type GetKeyValuesQueryVariables = Types.Exact<{
-	product_type: Types.ProductType
+	product_type?: Types.Maybe<Types.ProductType>
 	project_id: Types.Scalars['ID']
 	key_name: Types.Scalars['String']
 	date_range: Types.DateRangeRequiredInput
 	query: Types.Scalars['String']
 	count: Types.Scalars['Int']
+	event?: Types.Maybe<Types.Scalars['String']>
 }>
 
 export type GetKeyValuesQuery = { __typename?: 'Query' } & Pick<
@@ -5227,6 +5178,7 @@ export type GetMetricsQueryVariables = Types.Exact<{
 	limit?: Types.Maybe<Types.Scalars['Int']>
 	limit_aggregator?: Types.Maybe<Types.MetricAggregator>
 	limit_column?: Types.Maybe<Types.Scalars['String']>
+	prediction_settings?: Types.Maybe<Types.PredictionSettings>
 }>
 
 export type GetMetricsQuery = { __typename?: 'Query' } & {
@@ -5243,9 +5195,49 @@ export type GetMetricsQuery = { __typename?: 'Query' } & {
 					| 'group'
 					| 'metric_type'
 					| 'metric_value'
+					| 'yhat_lower'
+					| 'yhat_upper'
 				>
 			>
 		}
+}
+
+export type GetGraphTemplatesQueryVariables = Types.Exact<{
+	[key: string]: never
+}>
+
+export type GetGraphTemplatesQuery = { __typename?: 'Query' } & {
+	graph_templates: Array<
+		{ __typename?: 'Graph' } & Pick<
+			Types.Graph,
+			| 'id'
+			| 'type'
+			| 'title'
+			| 'description'
+			| 'productType'
+			| 'query'
+			| 'metric'
+			| 'functionType'
+			| 'groupByKeys'
+			| 'bucketByKey'
+			| 'bucketCount'
+			| 'bucketInterval'
+			| 'limit'
+			| 'limitFunctionType'
+			| 'limitMetric'
+			| 'display'
+			| 'nullHandling'
+		> & {
+				funnelSteps?: Types.Maybe<
+					Array<
+						{ __typename?: 'FunnelStep' } & Pick<
+							Types.FunnelStep,
+							'title' | 'query'
+						>
+					>
+				>
+			}
+	>
 }
 
 export type GetVisualizationQueryVariables = Types.Exact<{
@@ -5257,17 +5249,24 @@ export type GetVisualizationQuery = { __typename?: 'Query' } & {
 		Types.Visualization,
 		'id' | 'updatedAt' | 'projectId' | 'name' | 'timePreset'
 	> & {
+			variables: Array<
+				{ __typename?: 'Variable' } & Pick<
+					Types.Variable,
+					'key' | 'defaultValues' | 'suggestionType' | 'field'
+				>
+			>
 			graphs: Array<
 				{ __typename?: 'Graph' } & Pick<
 					Types.Graph,
 					| 'id'
 					| 'type'
 					| 'title'
+					| 'description'
 					| 'productType'
 					| 'query'
 					| 'metric'
 					| 'functionType'
-					| 'groupByKey'
+					| 'groupByKeys'
 					| 'bucketByKey'
 					| 'bucketCount'
 					| 'bucketInterval'
@@ -5276,7 +5275,16 @@ export type GetVisualizationQuery = { __typename?: 'Query' } & {
 					| 'limitMetric'
 					| 'display'
 					| 'nullHandling'
-				>
+				> & {
+						funnelSteps?: Types.Maybe<
+							Array<
+								{ __typename?: 'FunnelStep' } & Pick<
+									Types.FunnelStep,
+									'title' | 'query'
+								>
+							>
+						>
+					}
 			>
 			updatedByAdmin?: Types.Maybe<
 				{ __typename?: 'SanitizedAdmin' } & Pick<
@@ -5304,6 +5312,15 @@ export type GetVisualizationsQuery = { __typename?: 'Query' } & {
 					Types.Visualization,
 					'id' | 'updatedAt' | 'projectId' | 'name' | 'timePreset'
 				> & {
+						variables: Array<
+							{ __typename?: 'Variable' } & Pick<
+								Types.Variable,
+								| 'key'
+								| 'defaultValues'
+								| 'suggestionType'
+								| 'field'
+							>
+						>
 						graphs: Array<
 							{ __typename?: 'Graph' } & Pick<
 								Types.Graph,
@@ -5314,7 +5331,7 @@ export type GetVisualizationsQuery = { __typename?: 'Query' } & {
 								| 'query'
 								| 'metric'
 								| 'functionType'
-								| 'groupByKey'
+								| 'groupByKeys'
 								| 'bucketByKey'
 								| 'bucketCount'
 								| 'bucketInterval'
@@ -5323,7 +5340,18 @@ export type GetVisualizationsQuery = { __typename?: 'Query' } & {
 								| 'limitMetric'
 								| 'display'
 								| 'nullHandling'
-							>
+							> & {
+									funnelSteps?: Types.Maybe<
+										Array<
+											{
+												__typename?: 'FunnelStep'
+											} & Pick<
+												Types.FunnelStep,
+												'title' | 'query'
+											>
+										>
+									>
+								}
 						>
 						updatedByAdmin?: Types.Maybe<
 							{ __typename?: 'SanitizedAdmin' } & Pick<
@@ -5380,6 +5408,7 @@ export const namedOperations = {
 		GetTimelineIndicatorEvents: 'GetTimelineIndicatorEvents' as const,
 		GetWebSocketEvents: 'GetWebSocketEvents' as const,
 		GetSessions: 'GetSessions' as const,
+		GetEventSessions: 'GetEventSessions' as const,
 		GetSessionsHistogram: 'GetSessionsHistogram' as const,
 		GetSessionUsersReports: 'GetSessionUsersReports' as const,
 		GetErrorGroups: 'GetErrorGroups' as const,
@@ -5409,8 +5438,6 @@ export const namedOperations = {
 		GetFieldSuggestion: 'GetFieldSuggestion' as const,
 		GetEnvironments: 'GetEnvironments' as const,
 		GetProjectSuggestion: 'GetProjectSuggestion' as const,
-		GetErrorFieldSuggestion: 'GetErrorFieldSuggestion' as const,
-		GetErrorSearchSuggestions: 'GetErrorSearchSuggestions' as const,
 		GetSessionSearchResults: 'GetSessionSearchResults' as const,
 		GetTrackSuggestion: 'GetTrackSuggestion' as const,
 		GetUserSuggestion: 'GetUserSuggestion' as const,
@@ -5443,8 +5470,6 @@ export const namedOperations = {
 			'GetWorkspaceIsIntegratedWithLinear' as const,
 		GetWorkspaceIsIntegratedWithZapier:
 			'GetWorkspaceIsIntegratedWithZapier' as const,
-		GetWorkspaceIsIntegratedWithFront:
-			'GetWorkspaceIsIntegratedWithFront' as const,
 		GetWorkspaceIsIntegratedWithDiscord:
 			'GetWorkspaceIsIntegratedWithDiscord' as const,
 		GetWorkspaceIsIntegratedWithVercel:
@@ -5465,6 +5490,8 @@ export const namedOperations = {
 		GetLogAlertsPagePayload: 'GetLogAlertsPagePayload' as const,
 		GetAlertsPagePayload: 'GetAlertsPagePayload' as const,
 		GetAlert: 'GetAlert' as const,
+		GetAlertingAlertStateChanges: 'GetAlertingAlertStateChanges' as const,
+		GetLastAlertStateChanges: 'GetLastAlertStateChanges' as const,
 		GetMetricMonitors: 'GetMetricMonitors' as const,
 		GetCommentMentionSuggestions: 'GetCommentMentionSuggestions' as const,
 		GetCustomerPortalURL: 'GetCustomerPortalURL' as const,
@@ -5480,7 +5507,6 @@ export const namedOperations = {
 		GetErrorGroupTags: 'GetErrorGroupTags' as const,
 		GetEmailOptOuts: 'GetEmailOptOuts' as const,
 		GetLogs: 'GetLogs' as const,
-		GetSessionLogs: 'GetSessionLogs' as const,
 		GetLogsHistogram: 'GetLogsHistogram' as const,
 		GetLogsRelatedResources: 'GetLogsRelatedResources' as const,
 		GetProjectSettings: 'GetProjectSettings' as const,
@@ -5500,6 +5526,7 @@ export const namedOperations = {
 		GetKeys: 'GetKeys' as const,
 		GetKeyValues: 'GetKeyValues' as const,
 		GetMetrics: 'GetMetrics' as const,
+		GetGraphTemplates: 'GetGraphTemplates' as const,
 		GetVisualization: 'GetVisualization' as const,
 		GetVisualizations: 'GetVisualizations' as const,
 		GetAIQuerySuggestion: 'GetAIQuerySuggestion' as const,
@@ -5551,7 +5578,6 @@ export const namedOperations = {
 		MuteErrorCommentThread: 'MuteErrorCommentThread' as const,
 		RemoveErrorIssue: 'RemoveErrorIssue' as const,
 		ReplyToErrorComment: 'ReplyToErrorComment' as const,
-		CreateErrorAlert: 'CreateErrorAlert' as const,
 		CreateMetricMonitor: 'CreateMetricMonitor' as const,
 		UpdateMetricMonitor: 'UpdateMetricMonitor' as const,
 		DeleteMetricMonitor: 'DeleteMetricMonitor' as const,
@@ -5565,13 +5591,11 @@ export const namedOperations = {
 		DeleteErrorAlert: 'DeleteErrorAlert' as const,
 		DeleteSessionAlert: 'DeleteSessionAlert' as const,
 		UpdateLogAlert: 'UpdateLogAlert' as const,
-		CreateLogAlert: 'CreateLogAlert' as const,
 		DeleteLogAlert: 'DeleteLogAlert' as const,
 		UpdateLogAlertIsDisabled: 'UpdateLogAlertIsDisabled' as const,
 		UpdateSessionAlertIsDisabled: 'UpdateSessionAlertIsDisabled' as const,
 		UpdateMetricMonitorIsDisabled: 'UpdateMetricMonitorIsDisabled' as const,
 		UpdateErrorAlertIsDisabled: 'UpdateErrorAlertIsDisabled' as const,
-		CreateSessionAlert: 'CreateSessionAlert' as const,
 		UpdateSessionAlert: 'UpdateSessionAlert' as const,
 		UpdateSessionIsPublic: 'UpdateSessionIsPublic' as const,
 		UpdateErrorGroupIsPublic: 'UpdateErrorGroupIsPublic' as const,

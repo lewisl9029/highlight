@@ -98,7 +98,7 @@ export const TraceFlameGraph: React.FC = () => {
 			const tickDuration = totalDuration * percent
 			const displayDuration =
 				Math.round((tickDuration / timeUnit!.divider) * 10) / 10
-			const time = `${displayDuration}${timeUnit!.unit}` ?? '0ms'
+			const time = `${displayDuration}${timeUnit!.unit}`
 
 			tcks.push({
 				time,
@@ -380,8 +380,8 @@ export const TraceFlameGraph: React.FC = () => {
 							const x = isFirstTick
 								? outsidePadding
 								: isLastTick
-									? tick.x - outsidePadding
-									: tick.x
+								? tick.x - outsidePadding
+								: tick.x
 
 							return (
 								<g
@@ -405,8 +405,8 @@ export const TraceFlameGraph: React.FC = () => {
 											isFirstTick
 												? 'start'
 												: isLastTick
-													? 'end'
-													: 'middle'
+												? 'end'
+												: 'middle'
 										}
 									>
 										{tick.time}

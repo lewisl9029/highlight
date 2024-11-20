@@ -3016,108 +3016,6 @@ export type ReplyToErrorCommentMutationOptions = Apollo.BaseMutationOptions<
 	Types.ReplyToErrorCommentMutation,
 	Types.ReplyToErrorCommentMutationVariables
 >
-export const CreateErrorAlertDocument = gql`
-	mutation CreateErrorAlert(
-		$project_id: ID!
-		$name: String!
-		$count_threshold: Int!
-		$threshold_window: Int!
-		$slack_channels: [SanitizedSlackChannelInput]!
-		$discord_channels: [DiscordChannelInput!]!
-		$webhook_destinations: [WebhookDestinationInput!]!
-		$microsoft_teams_channels: [MicrosoftTeamsChannelInput!]!
-		$emails: [String]!
-		$regex_groups: [String]!
-		$frequency: Int!
-		$default: Boolean
-		$query: String!
-	) {
-		createErrorAlert(
-			project_id: $project_id
-			count_threshold: $count_threshold
-			name: $name
-			slack_channels: $slack_channels
-			discord_channels: $discord_channels
-			microsoft_teams_channels: $microsoft_teams_channels
-			webhook_destinations: $webhook_destinations
-			emails: $emails
-			threshold_window: $threshold_window
-			regex_groups: $regex_groups
-			frequency: $frequency
-			default: $default
-			query: $query
-		) {
-			id
-			ChannelsToNotify {
-				webhook_channel
-				webhook_channel_id
-			}
-			EmailsToNotify
-			Name
-			CountThreshold
-			ThresholdWindow
-			LastAdminToEditID
-			RegexGroups
-			Frequency
-			disabled
-			Query
-		}
-	}
-`
-export type CreateErrorAlertMutationFn = Apollo.MutationFunction<
-	Types.CreateErrorAlertMutation,
-	Types.CreateErrorAlertMutationVariables
->
-
-/**
- * __useCreateErrorAlertMutation__
- *
- * To run a mutation, you first call `useCreateErrorAlertMutation` within a React component and pass it any options that fit your needs.
- * When your component renders, `useCreateErrorAlertMutation` returns a tuple that includes:
- * - A mutate function that you can call at any time to execute the mutation
- * - An object with fields that represent the current status of the mutation's execution
- *
- * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
- *
- * @example
- * const [createErrorAlertMutation, { data, loading, error }] = useCreateErrorAlertMutation({
- *   variables: {
- *      project_id: // value for 'project_id'
- *      name: // value for 'name'
- *      count_threshold: // value for 'count_threshold'
- *      threshold_window: // value for 'threshold_window'
- *      slack_channels: // value for 'slack_channels'
- *      discord_channels: // value for 'discord_channels'
- *      webhook_destinations: // value for 'webhook_destinations'
- *      microsoft_teams_channels: // value for 'microsoft_teams_channels'
- *      emails: // value for 'emails'
- *      regex_groups: // value for 'regex_groups'
- *      frequency: // value for 'frequency'
- *      default: // value for 'default'
- *      query: // value for 'query'
- *   },
- * });
- */
-export function useCreateErrorAlertMutation(
-	baseOptions?: Apollo.MutationHookOptions<
-		Types.CreateErrorAlertMutation,
-		Types.CreateErrorAlertMutationVariables
-	>,
-) {
-	return Apollo.useMutation<
-		Types.CreateErrorAlertMutation,
-		Types.CreateErrorAlertMutationVariables
-	>(CreateErrorAlertDocument, baseOptions)
-}
-export type CreateErrorAlertMutationHookResult = ReturnType<
-	typeof useCreateErrorAlertMutation
->
-export type CreateErrorAlertMutationResult =
-	Apollo.MutationResult<Types.CreateErrorAlertMutation>
-export type CreateErrorAlertMutationOptions = Apollo.BaseMutationOptions<
-	Types.CreateErrorAlertMutation,
-	Types.CreateErrorAlertMutationVariables
->
 export const CreateMetricMonitorDocument = gql`
 	mutation CreateMetricMonitor(
 		$project_id: ID!
@@ -3395,10 +3293,12 @@ export const CreateAlertDocument = gql`
 		$function_column: String
 		$query: String
 		$group_by_key: String
-		$below_threshold: Boolean
+		$default: Boolean
 		$threshold_value: Float
 		$threshold_window: Int
 		$threshold_cooldown: Int
+		$threshold_type: ThresholdType
+		$threshold_condition: ThresholdCondition
 		$destinations: [AlertDestinationInput!]!
 	) {
 		createAlert(
@@ -3409,10 +3309,12 @@ export const CreateAlertDocument = gql`
 			function_column: $function_column
 			query: $query
 			group_by_key: $group_by_key
-			below_threshold: $below_threshold
+			default: $default
 			threshold_value: $threshold_value
 			threshold_window: $threshold_window
 			threshold_cooldown: $threshold_cooldown
+			threshold_type: $threshold_type
+			threshold_condition: $threshold_condition
 			destinations: $destinations
 		) {
 			id
@@ -3446,10 +3348,12 @@ export type CreateAlertMutationFn = Apollo.MutationFunction<
  *      function_column: // value for 'function_column'
  *      query: // value for 'query'
  *      group_by_key: // value for 'group_by_key'
- *      below_threshold: // value for 'below_threshold'
+ *      default: // value for 'default'
  *      threshold_value: // value for 'threshold_value'
  *      threshold_window: // value for 'threshold_window'
  *      threshold_cooldown: // value for 'threshold_cooldown'
+ *      threshold_type: // value for 'threshold_type'
+ *      threshold_condition: // value for 'threshold_condition'
  *      destinations: // value for 'destinations'
  *   },
  * });
@@ -3484,10 +3388,11 @@ export const UpdateAlertDocument = gql`
 		$function_column: String
 		$query: String
 		$group_by_key: String
-		$below_threshold: Boolean
 		$threshold_value: Float
 		$threshold_window: Int
 		$threshold_cooldown: Int
+		$threshold_type: ThresholdType
+		$threshold_condition: ThresholdCondition
 		$destinations: [AlertDestinationInput!]
 	) {
 		updateAlert(
@@ -3499,10 +3404,11 @@ export const UpdateAlertDocument = gql`
 			function_column: $function_column
 			query: $query
 			group_by_key: $group_by_key
-			below_threshold: $below_threshold
 			threshold_value: $threshold_value
 			threshold_window: $threshold_window
 			threshold_cooldown: $threshold_cooldown
+			threshold_type: $threshold_type
+			threshold_condition: $threshold_condition
 			destinations: $destinations
 		) {
 			id
@@ -3537,10 +3443,11 @@ export type UpdateAlertMutationFn = Apollo.MutationFunction<
  *      function_column: // value for 'function_column'
  *      query: // value for 'query'
  *      group_by_key: // value for 'group_by_key'
- *      below_threshold: // value for 'below_threshold'
  *      threshold_value: // value for 'threshold_value'
  *      threshold_window: // value for 'threshold_window'
  *      threshold_cooldown: // value for 'threshold_cooldown'
+ *      threshold_type: // value for 'threshold_type'
+ *      threshold_condition: // value for 'threshold_condition'
  *      destinations: // value for 'destinations'
  *   },
  * });
@@ -4039,55 +3946,6 @@ export type UpdateLogAlertMutationOptions = Apollo.BaseMutationOptions<
 	Types.UpdateLogAlertMutation,
 	Types.UpdateLogAlertMutationVariables
 >
-export const CreateLogAlertDocument = gql`
-	mutation CreateLogAlert($input: LogAlertInput!) {
-		createLogAlert(input: $input) {
-			id
-		}
-	}
-`
-export type CreateLogAlertMutationFn = Apollo.MutationFunction<
-	Types.CreateLogAlertMutation,
-	Types.CreateLogAlertMutationVariables
->
-
-/**
- * __useCreateLogAlertMutation__
- *
- * To run a mutation, you first call `useCreateLogAlertMutation` within a React component and pass it any options that fit your needs.
- * When your component renders, `useCreateLogAlertMutation` returns a tuple that includes:
- * - A mutate function that you can call at any time to execute the mutation
- * - An object with fields that represent the current status of the mutation's execution
- *
- * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
- *
- * @example
- * const [createLogAlertMutation, { data, loading, error }] = useCreateLogAlertMutation({
- *   variables: {
- *      input: // value for 'input'
- *   },
- * });
- */
-export function useCreateLogAlertMutation(
-	baseOptions?: Apollo.MutationHookOptions<
-		Types.CreateLogAlertMutation,
-		Types.CreateLogAlertMutationVariables
-	>,
-) {
-	return Apollo.useMutation<
-		Types.CreateLogAlertMutation,
-		Types.CreateLogAlertMutationVariables
-	>(CreateLogAlertDocument, baseOptions)
-}
-export type CreateLogAlertMutationHookResult = ReturnType<
-	typeof useCreateLogAlertMutation
->
-export type CreateLogAlertMutationResult =
-	Apollo.MutationResult<Types.CreateLogAlertMutation>
-export type CreateLogAlertMutationOptions = Apollo.BaseMutationOptions<
-	Types.CreateLogAlertMutation,
-	Types.CreateLogAlertMutationVariables
->
 export const DeleteLogAlertDocument = gql`
 	mutation DeleteLogAlert($project_id: ID!, $id: ID!) {
 		deleteLogAlert(project_id: $project_id, id: $id) {
@@ -4378,66 +4236,6 @@ export type UpdateErrorAlertIsDisabledMutationOptions =
 		Types.UpdateErrorAlertIsDisabledMutation,
 		Types.UpdateErrorAlertIsDisabledMutationVariables
 	>
-export const CreateSessionAlertDocument = gql`
-	mutation CreateSessionAlert($input: SessionAlertInput!) {
-		createSessionAlert(input: $input) {
-			id
-			ChannelsToNotify {
-				webhook_channel
-				webhook_channel_id
-			}
-			EmailsToNotify
-			Name
-			ExcludedEnvironments
-			CountThreshold
-			ThresholdWindow
-			LastAdminToEditID
-			disabled
-		}
-	}
-`
-export type CreateSessionAlertMutationFn = Apollo.MutationFunction<
-	Types.CreateSessionAlertMutation,
-	Types.CreateSessionAlertMutationVariables
->
-
-/**
- * __useCreateSessionAlertMutation__
- *
- * To run a mutation, you first call `useCreateSessionAlertMutation` within a React component and pass it any options that fit your needs.
- * When your component renders, `useCreateSessionAlertMutation` returns a tuple that includes:
- * - A mutate function that you can call at any time to execute the mutation
- * - An object with fields that represent the current status of the mutation's execution
- *
- * @param baseOptions options that will be passed into the mutation, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options-2;
- *
- * @example
- * const [createSessionAlertMutation, { data, loading, error }] = useCreateSessionAlertMutation({
- *   variables: {
- *      input: // value for 'input'
- *   },
- * });
- */
-export function useCreateSessionAlertMutation(
-	baseOptions?: Apollo.MutationHookOptions<
-		Types.CreateSessionAlertMutation,
-		Types.CreateSessionAlertMutationVariables
-	>,
-) {
-	return Apollo.useMutation<
-		Types.CreateSessionAlertMutation,
-		Types.CreateSessionAlertMutationVariables
-	>(CreateSessionAlertDocument, baseOptions)
-}
-export type CreateSessionAlertMutationHookResult = ReturnType<
-	typeof useCreateSessionAlertMutation
->
-export type CreateSessionAlertMutationResult =
-	Apollo.MutationResult<Types.CreateSessionAlertMutation>
-export type CreateSessionAlertMutationOptions = Apollo.BaseMutationOptions<
-	Types.CreateSessionAlertMutation,
-	Types.CreateSessionAlertMutationVariables
->
 export const UpdateSessionAlertDocument = gql`
 	mutation UpdateSessionAlert($id: ID!, $input: SessionAlertInput!) {
 		updateSessionAlert(id: $id, input: $input) {
@@ -5956,12 +5754,16 @@ export const UpsertGraphDocument = gql`
 			query
 			metric
 			functionType
-			groupByKey
+			groupByKeys
 			bucketByKey
 			bucketCount
 			limit
 			limitFunctionType
 			limitMetric
+			funnelSteps {
+				title
+				query
+			}
 			display
 			nullHandling
 		}
@@ -7734,6 +7536,8 @@ export const GetSessionsDocument = gql`
 				email
 			}
 			totalCount
+			totalLength
+			totalActiveLength
 		}
 	}
 `
@@ -7789,6 +7593,121 @@ export type GetSessionsQueryResult = Apollo.QueryResult<
 	Types.GetSessionsQuery,
 	Types.GetSessionsQueryVariables
 >
+export const GetEventSessionsDocument = gql`
+	query GetEventSessions(
+		$project_id: ID!
+		$count: Int!
+		$params: QueryInput!
+		$sort_desc: Boolean!
+		$sort_field: String
+		$page: Int
+	) {
+		event_sessions(
+			project_id: $project_id
+			count: $count
+			params: $params
+			sort_field: $sort_field
+			sort_desc: $sort_desc
+			page: $page
+		) {
+			sessions {
+				id
+				secure_id
+				client_id
+				fingerprint
+				identifier
+				identified
+				os_name
+				os_version
+				browser_name
+				browser_version
+				ip
+				city
+				state
+				country
+				postal
+				created_at
+				language
+				length
+				active_length
+				enable_recording_network_contents
+				viewed
+				starred
+				processed
+				has_rage_clicks
+				has_errors
+				fields {
+					name
+					value
+					type
+					id
+				}
+				first_time
+				user_properties
+				event_counts
+				last_user_interaction_time
+				is_public
+				excluded
+				email
+			}
+			totalCount
+		}
+	}
+`
+
+/**
+ * __useGetEventSessionsQuery__
+ *
+ * To run a query within a React component, call `useGetEventSessionsQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetEventSessionsQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetEventSessionsQuery({
+ *   variables: {
+ *      project_id: // value for 'project_id'
+ *      count: // value for 'count'
+ *      params: // value for 'params'
+ *      sort_desc: // value for 'sort_desc'
+ *      sort_field: // value for 'sort_field'
+ *      page: // value for 'page'
+ *   },
+ * });
+ */
+export function useGetEventSessionsQuery(
+	baseOptions: Apollo.QueryHookOptions<
+		Types.GetEventSessionsQuery,
+		Types.GetEventSessionsQueryVariables
+	>,
+) {
+	return Apollo.useQuery<
+		Types.GetEventSessionsQuery,
+		Types.GetEventSessionsQueryVariables
+	>(GetEventSessionsDocument, baseOptions)
+}
+export function useGetEventSessionsLazyQuery(
+	baseOptions?: Apollo.LazyQueryHookOptions<
+		Types.GetEventSessionsQuery,
+		Types.GetEventSessionsQueryVariables
+	>,
+) {
+	return Apollo.useLazyQuery<
+		Types.GetEventSessionsQuery,
+		Types.GetEventSessionsQueryVariables
+	>(GetEventSessionsDocument, baseOptions)
+}
+export type GetEventSessionsQueryHookResult = ReturnType<
+	typeof useGetEventSessionsQuery
+>
+export type GetEventSessionsLazyQueryHookResult = ReturnType<
+	typeof useGetEventSessionsLazyQuery
+>
+export type GetEventSessionsQueryResult = Apollo.QueryResult<
+	Types.GetEventSessionsQuery,
+	Types.GetEventSessionsQueryVariables
+>
 export const GetSessionsHistogramDocument = gql`
 	query GetSessionsHistogram(
 		$project_id: ID!
@@ -7804,6 +7723,8 @@ export const GetSessionsHistogramDocument = gql`
 			sessions_without_errors
 			sessions_with_errors
 			total_sessions
+			inactive_lengths
+			active_lengths
 		}
 	}
 `
@@ -7863,6 +7784,8 @@ export const GetSessionUsersReportsDocument = gql`
 		session_users_report(project_id: $project_id, params: $params) {
 			key
 			email
+			first_session
+			last_session
 			num_sessions
 			num_days_visited
 			num_months_visited
@@ -9319,10 +9242,6 @@ export const GetErrorGroupDocument = gql`
 			}
 			mapped_stack_trace
 			stack_trace
-			fields {
-				name
-				value
-			}
 			error_frequency
 			error_metrics {
 				error_group_id
@@ -9810,143 +9729,6 @@ export type GetProjectSuggestionLazyQueryHookResult = ReturnType<
 export type GetProjectSuggestionQueryResult = Apollo.QueryResult<
 	Types.GetProjectSuggestionQuery,
 	Types.GetProjectSuggestionQueryVariables
->
-export const GetErrorFieldSuggestionDocument = gql`
-	query GetErrorFieldSuggestion(
-		$project_id: ID!
-		$name: String!
-		$query: String!
-	) {
-		error_field_suggestion(
-			project_id: $project_id
-			name: $name
-			query: $query
-		) {
-			name
-			value
-		}
-	}
-`
-
-/**
- * __useGetErrorFieldSuggestionQuery__
- *
- * To run a query within a React component, call `useGetErrorFieldSuggestionQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetErrorFieldSuggestionQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetErrorFieldSuggestionQuery({
- *   variables: {
- *      project_id: // value for 'project_id'
- *      name: // value for 'name'
- *      query: // value for 'query'
- *   },
- * });
- */
-export function useGetErrorFieldSuggestionQuery(
-	baseOptions: Apollo.QueryHookOptions<
-		Types.GetErrorFieldSuggestionQuery,
-		Types.GetErrorFieldSuggestionQueryVariables
-	>,
-) {
-	return Apollo.useQuery<
-		Types.GetErrorFieldSuggestionQuery,
-		Types.GetErrorFieldSuggestionQueryVariables
-	>(GetErrorFieldSuggestionDocument, baseOptions)
-}
-export function useGetErrorFieldSuggestionLazyQuery(
-	baseOptions?: Apollo.LazyQueryHookOptions<
-		Types.GetErrorFieldSuggestionQuery,
-		Types.GetErrorFieldSuggestionQueryVariables
-	>,
-) {
-	return Apollo.useLazyQuery<
-		Types.GetErrorFieldSuggestionQuery,
-		Types.GetErrorFieldSuggestionQueryVariables
-	>(GetErrorFieldSuggestionDocument, baseOptions)
-}
-export type GetErrorFieldSuggestionQueryHookResult = ReturnType<
-	typeof useGetErrorFieldSuggestionQuery
->
-export type GetErrorFieldSuggestionLazyQueryHookResult = ReturnType<
-	typeof useGetErrorFieldSuggestionLazyQuery
->
-export type GetErrorFieldSuggestionQueryResult = Apollo.QueryResult<
-	Types.GetErrorFieldSuggestionQuery,
-	Types.GetErrorFieldSuggestionQueryVariables
->
-export const GetErrorSearchSuggestionsDocument = gql`
-	query GetErrorSearchSuggestions($project_id: ID!, $query: String!) {
-		visitedUrls: error_field_suggestion(
-			project_id: $project_id
-			name: "visited_url"
-			query: $query
-		) {
-			name
-			value
-		}
-		fields: error_field_suggestion(
-			project_id: $project_id
-			name: "event"
-			query: $query
-		) {
-			name
-			value
-		}
-	}
-`
-
-/**
- * __useGetErrorSearchSuggestionsQuery__
- *
- * To run a query within a React component, call `useGetErrorSearchSuggestionsQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetErrorSearchSuggestionsQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetErrorSearchSuggestionsQuery({
- *   variables: {
- *      project_id: // value for 'project_id'
- *      query: // value for 'query'
- *   },
- * });
- */
-export function useGetErrorSearchSuggestionsQuery(
-	baseOptions: Apollo.QueryHookOptions<
-		Types.GetErrorSearchSuggestionsQuery,
-		Types.GetErrorSearchSuggestionsQueryVariables
-	>,
-) {
-	return Apollo.useQuery<
-		Types.GetErrorSearchSuggestionsQuery,
-		Types.GetErrorSearchSuggestionsQueryVariables
-	>(GetErrorSearchSuggestionsDocument, baseOptions)
-}
-export function useGetErrorSearchSuggestionsLazyQuery(
-	baseOptions?: Apollo.LazyQueryHookOptions<
-		Types.GetErrorSearchSuggestionsQuery,
-		Types.GetErrorSearchSuggestionsQueryVariables
-	>,
-) {
-	return Apollo.useLazyQuery<
-		Types.GetErrorSearchSuggestionsQuery,
-		Types.GetErrorSearchSuggestionsQueryVariables
-	>(GetErrorSearchSuggestionsDocument, baseOptions)
-}
-export type GetErrorSearchSuggestionsQueryHookResult = ReturnType<
-	typeof useGetErrorSearchSuggestionsQuery
->
-export type GetErrorSearchSuggestionsLazyQueryHookResult = ReturnType<
-	typeof useGetErrorSearchSuggestionsLazyQuery
->
-export type GetErrorSearchSuggestionsQueryResult = Apollo.QueryResult<
-	Types.GetErrorSearchSuggestionsQuery,
-	Types.GetErrorSearchSuggestionsQueryVariables
 >
 export const GetSessionSearchResultsDocument = gql`
 	query GetSessionSearchResults($project_id: ID!, $query: String!) {
@@ -11475,63 +11257,6 @@ export type GetWorkspaceIsIntegratedWithZapierQueryResult = Apollo.QueryResult<
 	Types.GetWorkspaceIsIntegratedWithZapierQuery,
 	Types.GetWorkspaceIsIntegratedWithZapierQueryVariables
 >
-export const GetWorkspaceIsIntegratedWithFrontDocument = gql`
-	query GetWorkspaceIsIntegratedWithFront($project_id: ID!) {
-		is_integrated_with_front: is_integrated_with(
-			integration_type: Front
-			project_id: $project_id
-		)
-	}
-`
-
-/**
- * __useGetWorkspaceIsIntegratedWithFrontQuery__
- *
- * To run a query within a React component, call `useGetWorkspaceIsIntegratedWithFrontQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetWorkspaceIsIntegratedWithFrontQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetWorkspaceIsIntegratedWithFrontQuery({
- *   variables: {
- *      project_id: // value for 'project_id'
- *   },
- * });
- */
-export function useGetWorkspaceIsIntegratedWithFrontQuery(
-	baseOptions: Apollo.QueryHookOptions<
-		Types.GetWorkspaceIsIntegratedWithFrontQuery,
-		Types.GetWorkspaceIsIntegratedWithFrontQueryVariables
-	>,
-) {
-	return Apollo.useQuery<
-		Types.GetWorkspaceIsIntegratedWithFrontQuery,
-		Types.GetWorkspaceIsIntegratedWithFrontQueryVariables
-	>(GetWorkspaceIsIntegratedWithFrontDocument, baseOptions)
-}
-export function useGetWorkspaceIsIntegratedWithFrontLazyQuery(
-	baseOptions?: Apollo.LazyQueryHookOptions<
-		Types.GetWorkspaceIsIntegratedWithFrontQuery,
-		Types.GetWorkspaceIsIntegratedWithFrontQueryVariables
-	>,
-) {
-	return Apollo.useLazyQuery<
-		Types.GetWorkspaceIsIntegratedWithFrontQuery,
-		Types.GetWorkspaceIsIntegratedWithFrontQueryVariables
-	>(GetWorkspaceIsIntegratedWithFrontDocument, baseOptions)
-}
-export type GetWorkspaceIsIntegratedWithFrontQueryHookResult = ReturnType<
-	typeof useGetWorkspaceIsIntegratedWithFrontQuery
->
-export type GetWorkspaceIsIntegratedWithFrontLazyQueryHookResult = ReturnType<
-	typeof useGetWorkspaceIsIntegratedWithFrontLazyQuery
->
-export type GetWorkspaceIsIntegratedWithFrontQueryResult = Apollo.QueryResult<
-	Types.GetWorkspaceIsIntegratedWithFrontQuery,
-	Types.GetWorkspaceIsIntegratedWithFrontQueryVariables
->
 export const GetWorkspaceIsIntegratedWithDiscordDocument = gql`
 	query GetWorkspaceIsIntegratedWithDiscord($project_id: ID!) {
 		is_integrated_with_discord: is_integrated_with(
@@ -12710,6 +12435,7 @@ export const GetAlertDocument = gql`
 	query GetAlert($id: ID!) {
 		alert(id: $id) {
 			id
+			project_id
 			updated_at
 			name
 			product_type
@@ -12719,10 +12445,11 @@ export const GetAlertDocument = gql`
 			group_by_key
 			disabled
 			last_admin_to_edit_id
-			below_threshold
 			threshold_value
 			threshold_window
 			threshold_cooldown
+			threshold_type
+			threshold_condition
 			destinations {
 				id
 				destination_type
@@ -12778,6 +12505,138 @@ export type GetAlertLazyQueryHookResult = ReturnType<
 export type GetAlertQueryResult = Apollo.QueryResult<
 	Types.GetAlertQuery,
 	Types.GetAlertQueryVariables
+>
+export const GetAlertingAlertStateChangesDocument = gql`
+	query GetAlertingAlertStateChanges(
+		$alert_id: ID!
+		$start_date: Timestamp!
+		$end_date: Timestamp!
+		$page: Int
+	) {
+		alerting_alert_state_changes(
+			alert_id: $alert_id
+			start_date: $start_date
+			end_date: $end_date
+			page: $page
+		) {
+			totalCount
+			alertStateChanges {
+				timestamp
+				state
+				groupByKey
+			}
+		}
+	}
+`
+
+/**
+ * __useGetAlertingAlertStateChangesQuery__
+ *
+ * To run a query within a React component, call `useGetAlertingAlertStateChangesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetAlertingAlertStateChangesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetAlertingAlertStateChangesQuery({
+ *   variables: {
+ *      alert_id: // value for 'alert_id'
+ *      start_date: // value for 'start_date'
+ *      end_date: // value for 'end_date'
+ *      page: // value for 'page'
+ *   },
+ * });
+ */
+export function useGetAlertingAlertStateChangesQuery(
+	baseOptions: Apollo.QueryHookOptions<
+		Types.GetAlertingAlertStateChangesQuery,
+		Types.GetAlertingAlertStateChangesQueryVariables
+	>,
+) {
+	return Apollo.useQuery<
+		Types.GetAlertingAlertStateChangesQuery,
+		Types.GetAlertingAlertStateChangesQueryVariables
+	>(GetAlertingAlertStateChangesDocument, baseOptions)
+}
+export function useGetAlertingAlertStateChangesLazyQuery(
+	baseOptions?: Apollo.LazyQueryHookOptions<
+		Types.GetAlertingAlertStateChangesQuery,
+		Types.GetAlertingAlertStateChangesQueryVariables
+	>,
+) {
+	return Apollo.useLazyQuery<
+		Types.GetAlertingAlertStateChangesQuery,
+		Types.GetAlertingAlertStateChangesQueryVariables
+	>(GetAlertingAlertStateChangesDocument, baseOptions)
+}
+export type GetAlertingAlertStateChangesQueryHookResult = ReturnType<
+	typeof useGetAlertingAlertStateChangesQuery
+>
+export type GetAlertingAlertStateChangesLazyQueryHookResult = ReturnType<
+	typeof useGetAlertingAlertStateChangesLazyQuery
+>
+export type GetAlertingAlertStateChangesQueryResult = Apollo.QueryResult<
+	Types.GetAlertingAlertStateChangesQuery,
+	Types.GetAlertingAlertStateChangesQueryVariables
+>
+export const GetLastAlertStateChangesDocument = gql`
+	query GetLastAlertStateChanges($alert_id: ID!) {
+		last_alert_state_changes(alert_id: $alert_id) {
+			timestamp
+			state
+			groupByKey
+		}
+	}
+`
+
+/**
+ * __useGetLastAlertStateChangesQuery__
+ *
+ * To run a query within a React component, call `useGetLastAlertStateChangesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetLastAlertStateChangesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetLastAlertStateChangesQuery({
+ *   variables: {
+ *      alert_id: // value for 'alert_id'
+ *   },
+ * });
+ */
+export function useGetLastAlertStateChangesQuery(
+	baseOptions: Apollo.QueryHookOptions<
+		Types.GetLastAlertStateChangesQuery,
+		Types.GetLastAlertStateChangesQueryVariables
+	>,
+) {
+	return Apollo.useQuery<
+		Types.GetLastAlertStateChangesQuery,
+		Types.GetLastAlertStateChangesQueryVariables
+	>(GetLastAlertStateChangesDocument, baseOptions)
+}
+export function useGetLastAlertStateChangesLazyQuery(
+	baseOptions?: Apollo.LazyQueryHookOptions<
+		Types.GetLastAlertStateChangesQuery,
+		Types.GetLastAlertStateChangesQueryVariables
+	>,
+) {
+	return Apollo.useLazyQuery<
+		Types.GetLastAlertStateChangesQuery,
+		Types.GetLastAlertStateChangesQueryVariables
+	>(GetLastAlertStateChangesDocument, baseOptions)
+}
+export type GetLastAlertStateChangesQueryHookResult = ReturnType<
+	typeof useGetLastAlertStateChangesQuery
+>
+export type GetLastAlertStateChangesLazyQueryHookResult = ReturnType<
+	typeof useGetLastAlertStateChangesLazyQuery
+>
+export type GetLastAlertStateChangesQueryResult = Apollo.QueryResult<
+	Types.GetLastAlertStateChangesQuery,
+	Types.GetLastAlertStateChangesQueryVariables
 >
 export const GetMetricMonitorsDocument = gql`
 	query GetMetricMonitors($project_id: ID!, $metric_name: String!) {
@@ -13718,6 +13577,7 @@ export const GetLogsDocument = gql`
 		$before: String
 		$at: String
 		$direction: SortDirection!
+		$limit: Int
 	) {
 		logs(
 			project_id: $project_id
@@ -13726,6 +13586,7 @@ export const GetLogsDocument = gql`
 			before: $before
 			at: $at
 			direction: $direction
+			limit: $limit
 		) {
 			edges {
 				cursor
@@ -13772,6 +13633,7 @@ export const GetLogsDocument = gql`
  *      before: // value for 'before'
  *      at: // value for 'at'
  *      direction: // value for 'direction'
+ *      limit: // value for 'limit'
  *   },
  * });
  */
@@ -13802,68 +13664,6 @@ export type GetLogsLazyQueryHookResult = ReturnType<typeof useGetLogsLazyQuery>
 export type GetLogsQueryResult = Apollo.QueryResult<
 	Types.GetLogsQuery,
 	Types.GetLogsQueryVariables
->
-export const GetSessionLogsDocument = gql`
-	query GetSessionLogs($project_id: ID!, $params: QueryInput!) {
-		sessionLogs(project_id: $project_id, params: $params) {
-			cursor
-			node {
-				timestamp
-				level
-				message
-			}
-		}
-	}
-`
-
-/**
- * __useGetSessionLogsQuery__
- *
- * To run a query within a React component, call `useGetSessionLogsQuery` and pass it any options that fit your needs.
- * When your component renders, `useGetSessionLogsQuery` returns an object from Apollo Client that contains loading, error, and data properties
- * you can use to render your UI.
- *
- * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
- *
- * @example
- * const { data, loading, error } = useGetSessionLogsQuery({
- *   variables: {
- *      project_id: // value for 'project_id'
- *      params: // value for 'params'
- *   },
- * });
- */
-export function useGetSessionLogsQuery(
-	baseOptions: Apollo.QueryHookOptions<
-		Types.GetSessionLogsQuery,
-		Types.GetSessionLogsQueryVariables
-	>,
-) {
-	return Apollo.useQuery<
-		Types.GetSessionLogsQuery,
-		Types.GetSessionLogsQueryVariables
-	>(GetSessionLogsDocument, baseOptions)
-}
-export function useGetSessionLogsLazyQuery(
-	baseOptions?: Apollo.LazyQueryHookOptions<
-		Types.GetSessionLogsQuery,
-		Types.GetSessionLogsQueryVariables
-	>,
-) {
-	return Apollo.useLazyQuery<
-		Types.GetSessionLogsQuery,
-		Types.GetSessionLogsQueryVariables
-	>(GetSessionLogsDocument, baseOptions)
-}
-export type GetSessionLogsQueryHookResult = ReturnType<
-	typeof useGetSessionLogsQuery
->
-export type GetSessionLogsLazyQueryHookResult = ReturnType<
-	typeof useGetSessionLogsLazyQuery
->
-export type GetSessionLogsQueryResult = Apollo.QueryResult<
-	Types.GetSessionLogsQuery,
-	Types.GetSessionLogsQueryVariables
 >
 export const GetLogsHistogramDocument = gql`
 	query GetLogsHistogram($project_id: ID!, $params: QueryInput!) {
@@ -14213,10 +14013,12 @@ export const GetWorkspaceSettingsDocument = gql`
 			enable_grafana_dashboard
 			enable_ingest_filtering
 			enable_ingest_sampling
+			enable_jira_integration
 			enable_network_traces
 			enable_project_level_access
 			enable_project_level_access
 			enable_session_export
+			enable_teams_integration
 			enable_unlisted_sharing
 		}
 	}
@@ -14869,6 +14671,7 @@ export const GetTracesDocument = gql`
 		$before: String
 		$at: String
 		$direction: SortDirection!
+		$limit: Int
 	) {
 		traces(
 			project_id: $project_id
@@ -14877,6 +14680,7 @@ export const GetTracesDocument = gql`
 			before: $before
 			at: $at
 			direction: $direction
+			limit: $limit
 		) {
 			edges {
 				cursor
@@ -14934,6 +14738,7 @@ export const GetTracesDocument = gql`
  *      before: // value for 'before'
  *      at: // value for 'at'
  *      direction: // value for 'direction'
+ *      limit: // value for 'limit'
  *   },
  * });
  */
@@ -15060,11 +14865,12 @@ export type GetTracesMetricsQueryResult = Apollo.QueryResult<
 >
 export const GetKeysDocument = gql`
 	query GetKeys(
-		$product_type: ProductType!
+		$product_type: ProductType
 		$project_id: ID!
 		$date_range: DateRangeRequiredInput!
 		$query: String
 		$type: KeyType
+		$event: String
 	) {
 		keys(
 			product_type: $product_type
@@ -15072,6 +14878,7 @@ export const GetKeysDocument = gql`
 			date_range: $date_range
 			query: $query
 			type: $type
+			event: $event
 		) {
 			name
 			type
@@ -15096,6 +14903,7 @@ export const GetKeysDocument = gql`
  *      date_range: // value for 'date_range'
  *      query: // value for 'query'
  *      type: // value for 'type'
+ *      event: // value for 'event'
  *   },
  * });
  */
@@ -15129,12 +14937,13 @@ export type GetKeysQueryResult = Apollo.QueryResult<
 >
 export const GetKeyValuesDocument = gql`
 	query GetKeyValues(
-		$product_type: ProductType!
+		$product_type: ProductType
 		$project_id: ID!
 		$key_name: String!
 		$date_range: DateRangeRequiredInput!
 		$query: String!
 		$count: Int!
+		$event: String
 	) {
 		key_values(
 			product_type: $product_type
@@ -15143,6 +14952,7 @@ export const GetKeyValuesDocument = gql`
 			date_range: $date_range
 			query: $query
 			count: $count
+			event: $event
 		)
 	}
 `
@@ -15165,6 +14975,7 @@ export const GetKeyValuesDocument = gql`
  *      date_range: // value for 'date_range'
  *      query: // value for 'query'
  *      count: // value for 'count'
+ *      event: // value for 'event'
  *   },
  * });
  */
@@ -15214,6 +15025,7 @@ export const GetMetricsDocument = gql`
 		$limit: Int
 		$limit_aggregator: MetricAggregator
 		$limit_column: String
+		$prediction_settings: PredictionSettings
 	) {
 		metrics(
 			product_type: $product_type
@@ -15228,6 +15040,7 @@ export const GetMetricsDocument = gql`
 			limit: $limit
 			limit_aggregator: $limit_aggregator
 			limit_column: $limit_column
+			prediction_settings: $prediction_settings
 		) {
 			buckets {
 				bucket_id
@@ -15236,6 +15049,8 @@ export const GetMetricsDocument = gql`
 				group
 				metric_type
 				metric_value
+				yhat_lower
+				yhat_upper
 			}
 			bucket_count
 			sample_factor
@@ -15267,6 +15082,7 @@ export const GetMetricsDocument = gql`
  *      limit: // value for 'limit'
  *      limit_aggregator: // value for 'limit_aggregator'
  *      limit_column: // value for 'limit_column'
+ *      prediction_settings: // value for 'prediction_settings'
  *   },
  * });
  */
@@ -15300,6 +15116,81 @@ export type GetMetricsQueryResult = Apollo.QueryResult<
 	Types.GetMetricsQuery,
 	Types.GetMetricsQueryVariables
 >
+export const GetGraphTemplatesDocument = gql`
+	query GetGraphTemplates {
+		graph_templates {
+			id
+			type
+			title
+			description
+			productType
+			query
+			metric
+			functionType
+			groupByKeys
+			bucketByKey
+			bucketCount
+			bucketInterval
+			limit
+			limitFunctionType
+			limitMetric
+			funnelSteps {
+				title
+				query
+			}
+			display
+			nullHandling
+		}
+	}
+`
+
+/**
+ * __useGetGraphTemplatesQuery__
+ *
+ * To run a query within a React component, call `useGetGraphTemplatesQuery` and pass it any options that fit your needs.
+ * When your component renders, `useGetGraphTemplatesQuery` returns an object from Apollo Client that contains loading, error, and data properties
+ * you can use to render your UI.
+ *
+ * @param baseOptions options that will be passed into the query, supported options are listed on: https://www.apollographql.com/docs/react/api/react-hooks/#options;
+ *
+ * @example
+ * const { data, loading, error } = useGetGraphTemplatesQuery({
+ *   variables: {
+ *   },
+ * });
+ */
+export function useGetGraphTemplatesQuery(
+	baseOptions?: Apollo.QueryHookOptions<
+		Types.GetGraphTemplatesQuery,
+		Types.GetGraphTemplatesQueryVariables
+	>,
+) {
+	return Apollo.useQuery<
+		Types.GetGraphTemplatesQuery,
+		Types.GetGraphTemplatesQueryVariables
+	>(GetGraphTemplatesDocument, baseOptions)
+}
+export function useGetGraphTemplatesLazyQuery(
+	baseOptions?: Apollo.LazyQueryHookOptions<
+		Types.GetGraphTemplatesQuery,
+		Types.GetGraphTemplatesQueryVariables
+	>,
+) {
+	return Apollo.useLazyQuery<
+		Types.GetGraphTemplatesQuery,
+		Types.GetGraphTemplatesQueryVariables
+	>(GetGraphTemplatesDocument, baseOptions)
+}
+export type GetGraphTemplatesQueryHookResult = ReturnType<
+	typeof useGetGraphTemplatesQuery
+>
+export type GetGraphTemplatesLazyQueryHookResult = ReturnType<
+	typeof useGetGraphTemplatesLazyQuery
+>
+export type GetGraphTemplatesQueryResult = Apollo.QueryResult<
+	Types.GetGraphTemplatesQuery,
+	Types.GetGraphTemplatesQueryVariables
+>
 export const GetVisualizationDocument = gql`
 	query GetVisualization($id: ID!) {
 		visualization(id: $id) {
@@ -15308,21 +15199,32 @@ export const GetVisualizationDocument = gql`
 			projectId
 			name
 			timePreset
+			variables {
+				key
+				defaultValues
+				suggestionType
+				field
+			}
 			graphs {
 				id
 				type
 				title
+				description
 				productType
 				query
 				metric
 				functionType
-				groupByKey
+				groupByKeys
 				bucketByKey
 				bucketCount
 				bucketInterval
 				limit
 				limitFunctionType
 				limitMetric
+				funnelSteps {
+					title
+					query
+				}
 				display
 				nullHandling
 			}
@@ -15404,6 +15306,12 @@ export const GetVisualizationsDocument = gql`
 				projectId
 				name
 				timePreset
+				variables {
+					key
+					defaultValues
+					suggestionType
+					field
+				}
 				graphs {
 					id
 					type
@@ -15412,13 +15320,17 @@ export const GetVisualizationsDocument = gql`
 					query
 					metric
 					functionType
-					groupByKey
+					groupByKeys
 					bucketByKey
 					bucketCount
 					bucketInterval
 					limit
 					limitFunctionType
 					limitMetric
+					funnelSteps {
+						title
+						query
+					}
 					display
 					nullHandling
 				}

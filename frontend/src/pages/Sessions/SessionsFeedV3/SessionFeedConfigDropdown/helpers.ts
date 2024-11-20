@@ -5,6 +5,7 @@ import moment from 'moment'
 import {
 	SESSION_FEED_COUNT_FORMAT,
 	SESSION_FEED_DATETIME_FORMAT,
+	SESSION_FEED_RESULT_FORMAT,
 	SESSION_FEED_SORT_ORDER,
 } from '../context/SessionFeedConfigurationContext'
 
@@ -73,4 +74,32 @@ export const getSortOrderDisplayName = (sortOrder: SESSION_FEED_SORT_ORDER) => {
 		default:
 			return 'Descending (Newest first)'
 	}
+}
+
+const durationFormatter = (dur: moment.Duration) => {
+	return dur.as('hours').toFixed(1).toLocaleString()
+}
+
+export const formatResult = (
+	count: number,
+	totalTime: moment.Duration | undefined,
+	activeTime: moment.Duration | undefined,
+	format: SESSION_FEED_RESULT_FORMAT,
+) => {
+	if (count === 0) {
+		return `${count.toLocaleString()} results`
+	} else if (
+		format === 'Count/Length/ActiveLength' &&
+		totalTime &&
+		activeTime
+	) {
+		return `${count.toLocaleString()} results, ${durationFormatter(
+			totalTime,
+		)} total hours, ${durationFormatter(activeTime)} active hours`
+	} else if (format === 'Active Length' && activeTime) {
+		return `${durationFormatter(activeTime)} active hours`
+	} else if (format === 'Length' && totalTime) {
+		return `${durationFormatter(totalTime)} total hours`
+	}
+	return `${count.toLocaleString()} results`
 }

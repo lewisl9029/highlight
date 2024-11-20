@@ -6,6 +6,8 @@ import {
 	IconSolidAdjustments,
 	IconSolidCheck,
 	IconSolidClipboardList,
+	IconSolidDocumentReport,
+	IconSolidDocumentText,
 	IconSolidFastForward,
 	IconSolidSortDescending,
 	IconSolidTrash,
@@ -23,13 +25,21 @@ import { useSearchContext } from '@/components/Search/SearchContext'
 import {
 	countFormats,
 	dateTimeFormats,
+	resultFormats,
+	sessionHistogramFormats,
 	sortOrders,
 } from '@/pages/Sessions/SessionsFeedV3/context/SessionFeedConfigurationContext'
 
 import DeleteSessionsModal from '../DeleteSessionsModal'
 import { useSessionFeedConfiguration } from '../hooks/useSessionFeedConfiguration'
-import { formatCount, formatDatetime, getSortOrderDisplayName } from './helpers'
+import {
+	formatCount,
+	formatDatetime,
+	formatResult,
+	getSortOrderDisplayName,
+} from './helpers'
 import * as styles from './styles.css'
+import moment from 'moment'
 
 const Section: React.FC<React.PropsWithChildren<{ clickable?: true }>> = ({
 	children,
@@ -109,7 +119,7 @@ export const SessionFeedConfigDropdown = function () {
 				emphasis="low"
 				iconRight={<IconSolidAdjustments size={14} />}
 			/>
-			<Menu.List style={{ minWidth: 264 }} cssClass={styles.menuContents}>
+			<Menu.List style={{ minWidth: 420 }} cssClass={styles.menuContents}>
 				<Section>
 					<Menu.Item
 						key="autoplay"
@@ -357,6 +367,171 @@ export const SessionFeedConfigDropdown = function () {
 														12321,
 														format,
 													).toString()}
+												/>
+											</SectionRow>
+										</Menu.Item>
+									))}
+								</Menu.List>
+							</Menu>
+						</SectionRow>
+					</Menu.Item>
+					<Menu.Item key="results" className={styles.menuItem}>
+						<SectionRow>
+							<IconGroup
+								icon={
+									<IconSolidDocumentText
+										size={16}
+										color={
+											vars.theme.interactive.fill
+												.secondary.content.text
+										}
+									/>
+								}
+								text="Result format"
+							/>
+							<Menu>
+								<Menu.Button
+									kind="secondary"
+									size="small"
+									emphasis="low"
+									cssClass={styles.menuButton}
+									onClick={(e: any) => e.preventDefault()}
+								>
+									{formatResult(
+										12321,
+										moment.duration(3, 'hours'),
+										moment.duration(1, 'hours'),
+										sessionFeedConfiguration.resultFormat,
+									)}
+								</Menu.Button>
+
+								<Menu.List
+									style={{ minWidth: 350 }}
+									cssClass={styles.menuContents}
+								>
+									{resultFormats.map((format) => (
+										<Menu.Item
+											key={format}
+											onClick={(e) => {
+												e.preventDefault()
+												sessionFeedConfiguration.setResultFormat(
+													format,
+												)
+											}}
+										>
+											<SectionRow>
+												<IconGroup
+													icon={
+														format ===
+														sessionFeedConfiguration.resultFormat ? (
+															<IconSolidCheck
+																size={16}
+																color={
+																	vars.theme
+																		.interactive
+																		.fill
+																		.primary
+																		.enabled
+																}
+															/>
+														) : (
+															<Box
+																style={{
+																	width: 16,
+																	height: 16,
+																}}
+															/>
+														)
+													}
+													text={formatResult(
+														12321,
+														moment.duration(
+															3,
+															'hours',
+														),
+														moment.duration(
+															1,
+															'hours',
+														),
+														format,
+													).toString()}
+												/>
+											</SectionRow>
+										</Menu.Item>
+									))}
+								</Menu.List>
+							</Menu>
+						</SectionRow>
+					</Menu.Item>
+					<Menu.Item
+						key="sessionHistogram"
+						className={styles.menuItem}
+					>
+						<SectionRow>
+							<IconGroup
+								icon={
+									<IconSolidDocumentReport
+										size={16}
+										color={
+											vars.theme.interactive.fill
+												.secondary.content.text
+										}
+									/>
+								}
+								text="Session Histogram format"
+							/>
+							<Menu>
+								<Menu.Button
+									kind="secondary"
+									size="small"
+									emphasis="low"
+									cssClass={styles.menuButton}
+									onClick={(e: any) => e.preventDefault()}
+								>
+									{
+										sessionFeedConfiguration.sessionHistogramFormat
+									}
+								</Menu.Button>
+
+								<Menu.List
+									style={{ minWidth: 350 }}
+									cssClass={styles.menuContents}
+								>
+									{sessionHistogramFormats.map((format) => (
+										<Menu.Item
+											key={format}
+											onClick={(e) => {
+												e.preventDefault()
+												sessionFeedConfiguration.setSessionHistogramFormat(
+													format,
+												)
+											}}
+										>
+											<SectionRow>
+												<IconGroup
+													icon={
+														format ===
+														sessionFeedConfiguration.sessionHistogramFormat ? (
+															<IconSolidCheck
+																size={16}
+																color={
+																	vars.theme
+																		.interactive
+																		.fill
+																		.primary
+																		.enabled
+																}
+															/>
+														) : (
+															<Box
+																style={{
+																	width: 16,
+																	height: 16,
+																}}
+															/>
+														)
+													}
+													text={format}
 												/>
 											</SectionRow>
 										</Menu.Item>

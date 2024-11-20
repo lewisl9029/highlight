@@ -46,6 +46,7 @@ import logger from '../../highlight.logger'
 import ChevronDown from '../../public/images/ChevronDownIcon'
 import Minus from '../../public/images/MinusIcon'
 import { readMarkdown, removeOrderingPrefix } from '../../shared/doc'
+import Image from 'next/image'
 
 const DOCS_CONTENT_PATH = path.join(process.cwd(), '../docs-content')
 const DOCS_GITHUB_LINK = `github.com/highlight/highlight/blob/main/docs-content`
@@ -484,14 +485,14 @@ export const getStaticProps: GetStaticProps<DocData> = async (context) => {
 								? getFilteredQuickStartContent(
 										newContent,
 										quickStartContent,
-									)
+								  )
 								: null,
 							roadmapData: roadmapData,
 						},
 						mdxOptions: {
 							remarkPlugins: [remarkGfm],
 						},
-					})
+				  })
 				: null,
 			markdownTextOG: newContent,
 			slug: currentDoc.simple_path,
@@ -882,10 +883,10 @@ export default function DocPage({
 					metadata?.metaTitle?.length
 						? metadata?.metaTitle
 						: metadata?.title?.length
-							? metadata?.title === 'Welcome to Highlight'
-								? 'Documentation'
-								: metadata?.title
-							: ''
+						? metadata?.title === 'Welcome to Highlight'
+							? 'Documentation'
+							: metadata?.title
+						: ''
 				}
 				description={description}
 				absoluteImageUrl={`https://${
@@ -1001,17 +1002,21 @@ export default function DocPage({
 									),
 								)}
 						</div>
-						<h3
-							className={classNames(styles.pageTitle, {
-								[styles.sdkPageTitle]: isSdkDoc,
-							})}
+						<h1
+							className={classNames(
+								styles.pageTitle,
+								{
+									[styles.sdkPageTitle]: isSdkDoc,
+								},
+								'docH1',
+							)}
 						>
 							{metadata?.heading
 								? metadata.heading
 								: metadata?.title
-									? metadata.title
-									: ''}
-						</h3>
+								? metadata.title
+								: ''}
+						</h1>
 						{isSdkDoc ? (
 							<DocSection content={markdownTextOG || ''} />
 						) : (
@@ -1032,7 +1037,10 @@ export default function DocPage({
 												EnterpriseSelfHostCalendlyComponent,
 												DocsCardGroup,
 												h1: (props) => (
-													<h4 {...props} />
+													<h1
+														{...props}
+														className="docH1"
+													/>
 												),
 												h2: (props) => {
 													const id =
@@ -1044,9 +1052,10 @@ export default function DocPage({
 															href={`#${id}`}
 															className="flex items-baseline gap-2 my-6 transition-all group"
 														>
-															<h5
+															<h2
 																id={id}
 																{...props}
+																className="docH2"
 															/>
 														</Link>
 													)
@@ -1061,18 +1070,19 @@ export default function DocPage({
 															href={`#${id}`}
 															className="flex items-baseline gap-2 my-6 transition-all group"
 														>
-															<h6
+															<h3
 																id={id}
 																{...props}
+																className="docH3"
 															/>
 														</Link>
 													)
 												},
 												h4: (props) => (
-													<h6 {...props} />
+													<h4 {...props} />
 												),
 												h5: (props) => (
-													<h6 {...props} />
+													<h5 {...props} />
 												),
 												code: (props) => {
 													// check if props.children is a string
@@ -1101,12 +1111,12 @@ export default function DocPage({
 															<HighlightCodeBlock
 																language={
 																	props.className
-																		? (props.className
+																		? props.className
 																				.split(
 																					'language-',
 																				)
 																				.pop() ??
-																			'js')
+																		  'js'
 																		: 'js'
 																}
 																text={
@@ -1148,9 +1158,20 @@ export default function DocPage({
 												img: (props) => {
 													return (
 														<picture>
-															<img
+															<Image
 																{...props}
-																alt={props.alt}
+																width={Number(
+																	props.width,
+																)}
+																height={Number(
+																	props.height,
+																)}
+																src={String(
+																	props.src,
+																)}
+																alt={String(
+																	props.alt,
+																)}
 																className="border rounded-lg border-divider-on-dark"
 															/>
 														</picture>

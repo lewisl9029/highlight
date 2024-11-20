@@ -235,10 +235,6 @@ export declare type HighlightOptions = {
 	 */
 	sendMode?: 'webworker' | 'local'
 	/**
-	 * Specifies whether to enable OpenTelemetry tracing on the client.
-	 */
-	enableOtelTracing?: boolean
-	/**
 	 * OTLP endpoint for OpenTelemetry tracing.
 	 */
 	otlpEndpoint?: string
@@ -411,6 +407,8 @@ export declare interface SessionDetails {
 	url: string
 	/** The URL to view the session at the time getSessionDetails was called during the session recording. */
 	urlWithTimestamp: string
+	/** The secure ID of the session. */
+	sessionSecureID: string
 }
 
 export declare type Integration = (integrationOptions?: any) => void

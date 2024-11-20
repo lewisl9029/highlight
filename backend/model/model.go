@@ -133,7 +133,6 @@ var Models = []interface{}{
 	&ErrorObject{},
 	&ErrorGroup{},
 	&ErrorGroupEmbeddings{},
-	&ErrorField{},
 	&SavedSegment{},
 	&Organization{},
 	&Admin{},
@@ -381,14 +380,11 @@ type AWSMarketplaceCustomer struct {
 
 type Project struct {
 	Model
-	Name                *string
-	ZapierAccessToken   *string
-	FrontAccessToken    *string
-	FrontRefreshToken   *string
-	FrontTokenExpiresAt *time.Time
-	BillingEmail        *string
-	Secret              *string    `json:"-"`
-	TrialEndDate        *time.Time `json:"trial_end_date"`
+	Name              *string
+	ZapierAccessToken *string
+	BillingEmail      *string
+	Secret            *string    `json:"-"`
+	TrialEndDate      *time.Time `json:"trial_end_date"`
 	// Manual monthly session limit override
 	MonthlySessionLimit *int
 	WorkspaceID         int
@@ -483,6 +479,9 @@ type AllWorkspaceSettings struct {
 	EnableDataDeletion    bool `gorm:"default:true"`
 	EnableNetworkTraces   bool `gorm:"default:true"`
 	EnableUnlistedSharing bool `gorm:"default:true"`
+
+	EnableJiraIntegration  bool `gorm:"default:false"`
+	EnableTeamsIntegration bool `gorm:"default:false"`
 }
 
 type HasSecret interface {
@@ -688,12 +687,16 @@ type SessionsHistogram struct {
 	BucketTimes           []time.Time `json:"bucket_times"`
 	SessionsWithoutErrors []int64     `json:"sessions_without_errors"`
 	SessionsWithErrors    []int64     `json:"sessions_with_errors"`
+	InactiveLengths       []int64     `json:"inactive_lengths"`
+	ActiveLengths         []int64     `json:"active_lengths"`
 	TotalSessions         []int64     `json:"total_sessions"`
 }
 
 type SessionResults struct {
-	Sessions   []Session
-	TotalCount int64
+	Sessions          []Session
+	TotalCount        int64
+	TotalLength       int64
+	TotalActiveLength int64
 }
 
 type Session struct {
@@ -841,6 +844,7 @@ type Field struct {
 	Value     string    `gorm:"uniqueIndex:idx_fields_type_name_value_project_id"`
 	ProjectID int       `json:"project_id" gorm:"uniqueIndex:idx_fields_type_name_value_project_id"`
 	Sessions  []Session `gorm:"many2many:session_fields;"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type ResourcesObject struct {
@@ -1044,7 +1048,6 @@ type ErrorGroup struct {
 	MappedStackTrace *string
 	State            modelInputs.ErrorState `json:"state" gorm:"default:OPEN"`
 	SnoozedUntil     *time.Time             `json:"snoozed_until"`
-	Fields           []*ErrorField          `gorm:"many2many:error_group_fields;" json:"fields"`
 	Fingerprints     []*ErrorFingerprint
 	FieldGroup       *string
 	Environments     string
@@ -1104,14 +1107,6 @@ type ErrorInstance struct {
 	ErrorObject ErrorObject `json:"error_object"`
 	NextID      *int        `json:"next_id"`
 	PreviousID  *int        `json:"previous_id"`
-}
-
-type ErrorField struct {
-	Model
-	ProjectID   int `json:"project_id"`
-	Name        string
-	Value       string
-	ErrorGroups []ErrorGroup `gorm:"many2many:error_group_fields;"`
 }
 
 type ErrorGroupEmbeddings struct {
@@ -1301,9 +1296,9 @@ type IntegrationWorkspaceMapping struct {
 
 type IntegrationProjectMapping struct {
 	// idx_integration_project_mapping_integration_type_external_id is used to find a project for a given integration by its external id
-	IntegrationType modelInputs.IntegrationType `gorm:"uniqueIndex:idx_integration_project_mapping_project_id_integration_type;index:idx_integration_project_mapping_integration_type_external_id"`
-	ProjectID       int                         `gorm:"uniqueIndex:idx_integration_project_mapping_project_id_integration_type"`
-	ExternalID      string                      `gorm:"index:idx_integration_project_mapping_integration_type_external_id"`
+	IntegrationType modelInputs.IntegrationType `gorm:"index:idx_integration_project_mapping_integration_type_external_id"`
+	ProjectID       int
+	ExternalID      string `gorm:"index:idx_integration_project_mapping_integration_type_external_id"`
 }
 
 type OAuthClientStore struct {
@@ -1406,17 +1401,19 @@ type Graph struct {
 	VisualizationID   int `gorm:"index"`
 	Type              string
 	Title             string
+	Description       string
 	ProductType       modelInputs.ProductType
 	Query             string
 	Metric            string
 	FunctionType      modelInputs.MetricAggregator
-	GroupByKey        *string
+	GroupByKeys       pq.StringArray `gorm:"type:text[]"`
 	BucketByKey       *string
 	BucketCount       *int
 	BucketInterval    *int
 	Limit             *int
 	LimitFunctionType *modelInputs.MetricAggregator
 	LimitMetric       *string
+	FunnelSteps       *string `gorm:"type:jsonb"`
 	Display           *string
 	NullHandling      *string
 }
@@ -1430,6 +1427,7 @@ type Visualization struct {
 	GraphIds         pq.Int32Array `gorm:"type:integer[]"`
 	Graphs           []Graph
 	TimePreset       *string
+	Variables        string
 }
 
 type VisualizationsResponse struct {
@@ -1646,13 +1644,6 @@ func MigrateDB(ctx context.Context, DB *gorm.DB) (bool, error) {
 		END $$;
 	`, DASHBOARD_METRIC_FILTERS_UNIQ, DASHBOARD_METRIC_FILTERS_UNIQ, DASHBOARD_METRIC_FILTERS_UNIQ)).Error; err != nil {
 		return false, e.Wrap(err, "Error adding unique constraint on dashboard_metric_filters")
-	}
-
-	if err := DB.Exec(`
-		CREATE INDEX CONCURRENTLY IF NOT EXISTS error_fields_md5_idx
-		ON error_fields (project_id, name, CAST(md5(value) AS uuid));
-	`).Error; err != nil {
-		return false, e.Wrap(err, "Error creating error_fields_md5_idx")
 	}
 
 	// If sessions_id_seq is not greater than 30000000, set it
@@ -1954,12 +1945,15 @@ type Alert struct {
 	Disabled          bool                `gorm:"default:false"`
 	LastAdminToEditID int                 `gorm:"last_admin_to_edit_id"`
 	Destinations      []*AlertDestination `gorm:"foreignKey:AlertID"`
+	Default           bool                `gorm:"default:false"` // alert created during setup flow
 
 	// fields for threshold alert
-	BelowThreshold    *bool
-	ThresholdValue    *float64
-	ThresholdWindow   *int
-	ThresholdCooldown *int
+	BelowThreshold     *bool
+	ThresholdValue     *float64
+	ThresholdWindow    *int
+	ThresholdCooldown  *int
+	ThresholdType      modelInputs.ThresholdType
+	ThresholdCondition modelInputs.ThresholdCondition
 }
 
 type AlertDestination struct {
