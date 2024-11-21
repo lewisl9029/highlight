@@ -756,7 +756,7 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 						? {
 								debug: this.logger.log,
 								warn: HighlightWarning,
-							}
+						  }
 						: undefined,
 			})
 
@@ -996,7 +996,7 @@ SessionSecureID: ${this.sessionData.sessionSecureID}`,
 												category:
 													MetricCategory.Performance,
 												group: window.location.href,
-											}
+										  }
 										: undefined,
 								)
 								.filter((m) => m) as {

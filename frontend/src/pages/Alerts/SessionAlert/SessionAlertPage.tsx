@@ -279,14 +279,14 @@ export const SessionAlertPage = () => {
 							exclude_rules: excludeRules
 								? formStore.getValue(
 										formStore.names.excludeRules,
-									) || []
+								  ) || []
 								: [],
 							user_properties: tracksUserProperties
 								? (
 										formStore.getValue(
 											formStore.names.userProperties,
 										) || []
-									).map((userProperty: any) => {
+								  ).map((userProperty: any) => {
 										const [id, name, value] =
 											userProperty.split(SEPARATOR, 3)
 										return {
@@ -294,14 +294,14 @@ export const SessionAlertPage = () => {
 											value,
 											name,
 										}
-									})
+								  })
 								: [],
 							track_properties: tracksSessionProperties
 								? (
 										formStore.getValue(
 											formStore.names.trackProperties,
 										) || []
-									).map((trackProperty: any) => {
+								  ).map((trackProperty: any) => {
 										const [id, name, value] =
 											trackProperty.split(SEPARATOR, 3)
 										return {
@@ -309,7 +309,7 @@ export const SessionAlertPage = () => {
 											value,
 											name,
 										}
-									}) || []
+								  }) || []
 								: [],
 							type: alertType,
 						}
@@ -547,13 +547,13 @@ const SessionAlertForm = ({
 		? []
 		: (userSuggestionsApiResponse?.property_suggestion || []).map(
 				(suggestion) => getPropertiesOption(suggestion),
-			)
+		  )
 
 	const trackPropertiesSuggestions = trackSuggestionsLoading
 		? []
 		: (trackSuggestionsApiResponse?.property_suggestion || []).map(
 				(suggestion) => getPropertiesOption(suggestion),
-			)
+		  )
 
 	const identifierSuggestions = identifierSuggestionsLoading
 		? []
@@ -568,7 +568,7 @@ const SessionAlertForm = ({
 					),
 					id: suggestion,
 				}),
-			)
+		  )
 
 	const handleUserPropertiesSearch = (query = '') => {
 		refetchUserSuggestions({ query, project_id: project_id })

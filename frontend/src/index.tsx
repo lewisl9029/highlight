@@ -385,7 +385,7 @@ const AuthenticationRoleRouter = () => {
 		<AuthContextProvider
 			value={{
 				role: authRole,
-				admin: isLoggedIn ? (adminData ?? undefined) : undefined,
+				admin: isLoggedIn ? adminData ?? undefined : undefined,
 				workspaceRole: adminRole || undefined,
 				isAuthLoading,
 				isLoggedIn,

@@ -97,7 +97,7 @@ export const AlertGraph: React.FC<Props> = ({
 									intervalWidth: thresholdValue,
 									thresholdCondition,
 									intervalSeconds: thresholdWindow,
-								}
+							  }
 							: undefined
 					}
 					thresholdSettings={{

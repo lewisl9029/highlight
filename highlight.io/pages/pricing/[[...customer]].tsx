@@ -679,7 +679,7 @@ const CalculatorRowDesktop = ({
 											'6 months',
 											'1 year',
 											'2 years',
-										]
+									  ]
 									: ['30 days']
 							}
 							title="Retention: "
@@ -717,12 +717,12 @@ const CalculatorRowDesktop = ({
 											(suffix === 'K'
 												? 1e3
 												: suffix === 'M'
-													? 1e6
-													: suffix === 'B'
-														? 1e9
-														: suffix === 'T'
-															? 1e12
-															: 1),
+												? 1e6
+												: suffix === 'B'
+												? 1e9
+												: suffix === 'T'
+												? 1e12
+												: 1),
 									)
 								}
 							}}

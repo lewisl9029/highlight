@@ -123,7 +123,7 @@ export const SessionsHistogram: React.FC<{ readonly?: boolean }> = React.memo(
 									msToHours,
 								),
 							},
-						]
+					  ]
 					: [
 							{
 								label: 'sessions',
@@ -137,7 +137,7 @@ export const SessionsHistogram: React.FC<{ readonly?: boolean }> = React.memo(
 								counts: data?.sessions_histogram
 									.sessions_with_errors,
 							},
-						]
+					  ]
 		}
 
 		return (

@@ -129,7 +129,7 @@ export const MetricTable = ({
 											? getMetricDisplay(
 													yAxisMetric,
 													yAxisFunction,
-												)
+											  )
 											: s}
 									</Text>
 									{sortColumn === i && sortIcon}

@@ -24,7 +24,7 @@ const layout = (
 	traceId: string,
 	spanId: string,
 ) => html`
-	<!doctype html>
+	<!DOCTYPE html>
 	<html>
 		<head>
 			<title>Hono API Tester</title>

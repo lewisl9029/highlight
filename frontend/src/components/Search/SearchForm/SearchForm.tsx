@@ -84,7 +84,7 @@ export const SEARCH_OPERATORS = [
 	...CONTAINS_OPERATOR,
 	...MATCHES_OPERATOR,
 ] as const
-export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
+export type SearchOperator = typeof SEARCH_OPERATORS[number]
 
 type Creatable = {
 	label: string
@@ -414,7 +414,7 @@ export const Search: React.FC<{
 		? getVisibleValues(
 				activePart,
 				(defaultValueOptions ?? []).concat(values ?? []),
-			)
+		  )
 		: getVisibleKeys(query, activePart, keys)
 
 	// Show operators when we have an exact match for a key
@@ -455,7 +455,7 @@ export const Search: React.FC<{
 				({
 					name: operator,
 					type: 'Operator',
-				}) as SearchResult,
+				} as SearchResult),
 		)
 	}
 
@@ -849,7 +849,7 @@ export const Search: React.FC<{
 											? setAiMode(true)
 											: navigate(
 													`/w/${workspaceId}/harold-ai`,
-												)
+											  )
 									}
 									store={comboboxStore}
 								>

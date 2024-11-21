@@ -91,8 +91,8 @@ export const isFeatureOn = async function (
 		(config.project
 			? projectId
 			: config.workspace
-				? workspaceId
-				: adminId) ?? 'demo',
+			? workspaceId
+			: adminId) ?? 'demo',
 		config.percent,
 	)
 }

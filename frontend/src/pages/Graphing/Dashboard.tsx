@@ -506,7 +506,7 @@ export const Dashboard = () => {
 																						)
 																					},
 																				)
-																		}
+																	  }
 															}
 															onDelete={
 																isTemp
@@ -577,7 +577,7 @@ export const Dashboard = () => {
 																							'Failed to delete metric view',
 																						),
 																				)
-																		}
+																	  }
 															}
 															onExpand={
 																isTemp
@@ -589,7 +589,7 @@ export const Dashboard = () => {
 																					search: location.search,
 																				},
 																			)
-																		}
+																	  }
 															}
 															onEdit={
 																isTemp
@@ -601,7 +601,7 @@ export const Dashboard = () => {
 																					search: location.search,
 																				},
 																			)
-																		}
+																	  }
 															}
 															onDownload={() =>
 																onDownload(g)
