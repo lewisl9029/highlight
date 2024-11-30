@@ -142,7 +142,7 @@ export const SignIn: React.FC<Props> = ({ setResolver }) => {
 						<Heading level="h4">
 							{workspaceInvite
 								? `You're invited to join ‘${workspaceInvite.workspace_name}’`
-								: 'Welcome back.'}
+								: 'Welcome back.123123231241124'}
 						</Heading>
 						{AUTH_MODE !== 'oauth' ? (
 							<Text>
