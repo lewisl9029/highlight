@@ -93,7 +93,9 @@ export const formatResult = (
 		totalTime &&
 		activeTime
 	) {
-		return `${count.toLocaleString()} results, ${durationFormatter(totalTime)} total hours, ${durationFormatter(activeTime)} active hours`
+		return `${count.toLocaleString()} results, ${durationFormatter(
+			totalTime,
+		)} total hours, ${durationFormatter(activeTime)} active hours`
 	} else if (format === 'Active Length' && activeTime) {
 		return `${durationFormatter(activeTime)} active hours`
 	} else if (format === 'Length' && totalTime) {

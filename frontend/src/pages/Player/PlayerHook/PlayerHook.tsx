@@ -101,8 +101,9 @@ export const usePlayer = (
 						key: JSON.stringify(args),
 						operation: 'FetchEventChunkURL',
 						fn: async () =>
-							(await rawFetchEventChunkURL(args)).data
-								.event_chunk_url,
+							(
+								await rawFetchEventChunkURL(args)
+							).data.event_chunk_url,
 					}).next()
 				).value || ''
 			)

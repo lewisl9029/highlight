@@ -318,12 +318,12 @@ export class Highlight {
 			...(secureSessionId
 				? {
 						['highlight.session_id']: secureSessionId,
-					}
+				  }
 				: {}),
 			...(requestId
 				? {
 						['highlight.trace_id']: requestId,
-					}
+				  }
 				: {}),
 		})
 		for (const t of tags || []) {
@@ -356,12 +356,12 @@ export class Highlight {
 				...(secureSessionId
 					? {
 							['highlight.session_id']: secureSessionId,
-						}
+					  }
 					: {}),
 				...(requestId
 					? {
 							['highlight.trace_id']: requestId,
-						}
+					  }
 					: {}),
 			},
 			date,

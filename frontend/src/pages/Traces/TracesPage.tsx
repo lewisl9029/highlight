@@ -371,8 +371,8 @@ export const TracesPage: React.FC = () => {
 											variant="outlineGray"
 											label={`
 												${sampled ? '~' : ''}${formatNumber(totalCount)} Trace${
-													totalCount !== 1 ? 's' : ''
-												}
+												totalCount !== 1 ? 's' : ''
+											}
 											`}
 											iconEnd={
 												sampled ? (

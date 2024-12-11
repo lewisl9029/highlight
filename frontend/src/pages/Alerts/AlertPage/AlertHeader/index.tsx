@@ -25,11 +25,11 @@ export const AlertHeader: React.FC<Props> = ({
 			? {
 					state: 'Paused',
 					color: 'secondary',
-				}
+			  }
 			: {
 					state: 'Enabled',
 					color: 'success',
-				}
+			  }
 	}, [disabled])
 
 	return (

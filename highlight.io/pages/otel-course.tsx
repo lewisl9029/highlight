@@ -150,7 +150,7 @@ export default function OTelCourse() {
 						videoId: video.id,
 						progress: 0,
 						started: false,
-					})),
+				  })),
 		)
 	}, [])
 

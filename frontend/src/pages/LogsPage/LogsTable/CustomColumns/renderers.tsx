@@ -58,7 +58,7 @@ const SessionColumnRenderer: React.FC<ColumnRendererProps> = ({
 		? (e: any) => {
 				e.stopPropagation()
 				navigate(`/${log.projectID}/sessions/${secureSessionID}`)
-			}
+		  }
 		: undefined
 	const paddingProps = secureSessionID
 		? { pt: '4' as const, pb: '0' as const }

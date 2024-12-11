@@ -661,7 +661,7 @@ export const GraphingEditor: React.FC = () => {
 		settings.fetchedLimitMetric =
 			graphPreview.limitFunctionType === MetricAggregator.Count
 				? ''
-				: (graphPreview.limitMetric ?? '')
+				: graphPreview.limitMetric ?? ''
 		settings.funnelSteps = (graphPreview.funnelSteps ?? []).map(
 			loadFunnelStep,
 		)
@@ -672,8 +672,8 @@ export const GraphingEditor: React.FC = () => {
 		settings.bucketBySetting = graphPreview.bucketInterval
 			? 'Interval'
 			: graphPreview.bucketCount
-				? 'Count'
-				: 'None'
+			? 'Count'
+			: 'None'
 	}
 
 	if (!completed) {

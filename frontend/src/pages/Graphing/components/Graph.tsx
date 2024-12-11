@@ -272,7 +272,7 @@ export const useGraphCallbacks = (
 				if (e.activeLabel !== undefined && !frozenTooltip) {
 					setRefAreaStart(Number(e.activeLabel))
 				}
-			}
+		  }
 		: undefined
 
 	const onMouseMove = allowDrag
@@ -281,7 +281,7 @@ export const useGraphCallbacks = (
 					setRefAreaEnd(Number(e.activeLabel))
 					setFrozenTooltip(undefined)
 				}
-			}
+		  }
 		: undefined
 
 	const onMouseUp = allowDrag
@@ -302,7 +302,7 @@ export const useGraphCallbacks = (
 				}
 				setRefAreaStart(undefined)
 				setRefAreaEnd(undefined)
-			}
+		  }
 		: undefined
 
 	const onMouseLeave = () => {
@@ -331,7 +331,7 @@ export const useGraphCallbacks = (
 							strokeDasharray: tooltipSettings?.dashed
 								? 4
 								: undefined,
-						}
+					  }
 			}
 			isAnimationActive={false}
 			wrapperStyle={{
@@ -796,7 +796,7 @@ export const useFunnelData = (
 					const group = b?.group[0]
 					const prev = buckets[idx - 1]?.value ?? 0
 					const stepValue = groups.has(group)
-						? (b?.metric_value ?? 0)
+						? b?.metric_value ?? 0
 						: 0
 					const value = (buckets[idx]?.value ?? 0) + stepValue
 					buckets[idx] = {
@@ -1070,7 +1070,7 @@ const Graph = ({
 					: [],
 			bucket_by:
 				bucketByKey !== undefined
-					? (matchParamVariables(bucketByKey, variables).at(0) ?? '')
+					? matchParamVariables(bucketByKey, variables).at(0) ?? ''
 					: TIMESTAMP_KEY,
 			bucket_window: bucketByWindow,
 			bucket_count: queriedBucketCount,
@@ -1442,7 +1442,7 @@ const Graph = ({
 																idx,
 																key,
 																strokeColors,
-															)
+														  )
 														: undefined,
 												}}
 												cssClass={style.legendDot}

@@ -703,7 +703,7 @@ export const Header: React.FC<Props> = ({ fullyIntegrated }) => {
 																			</Menu.Item>
 																		)
 																	},
-																)}
+															  )}
 														<Divider className="mb-0 mt-1" />
 														<Link
 															to="/new"

@@ -497,7 +497,7 @@ const retentionOptions = [
 	'1 year',
 	'2 years',
 ] as const
-export type Retention = (typeof retentionOptions)[number]
+export type Retention = typeof retentionOptions[number]
 
 export const RetentionMultipliers: Record<Retention, number> = {
 	'30 days': 1,
@@ -514,7 +514,7 @@ export const TierOptions = [
 	'Enterprise',
 	'SelfHostedEnterprise',
 ] as const
-export type TierName = (typeof TierOptions)[number]
+export type TierName = typeof TierOptions[number]
 
 export type PricingTier = {
 	label: string

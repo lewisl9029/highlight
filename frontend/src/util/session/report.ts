@@ -34,7 +34,9 @@ export const processRows = <
 			if (!key.length) {
 				let suffix = ''
 				if (metric && Object.hasOwn(TIME_METRICS, metric)) {
-					suffix = ` (${TIME_METRICS[metric as keyof typeof TIME_METRICS]})`
+					suffix = ` (${
+						TIME_METRICS[metric as keyof typeof TIME_METRICS]
+					})`
 				}
 				key = metric ? `${metric}${suffix}` : 'Value'
 			}
