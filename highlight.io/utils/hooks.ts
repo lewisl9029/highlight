@@ -74,14 +74,20 @@ const useInkeepSettings = (): InkeepSharedSettings => {
 		getHelpOptions: [
 			{
 				name: 'Discord',
-				url: 'https://discord.gg/yxaXEAqgwN',
+				action: {
+					type: 'open_link',
+					url: 'https://discord.gg/yxaXEAqgwN',
+				},
 				icon: {
 					builtIn: 'FaDiscord',
 				},
 			},
 			{
 				name: 'Github',
-				url: 'https://github.com/highlight/highlight',
+				action: {
+					type: 'open_link',
+					url: 'https://github.com/highlight/highlight',
+				},
 				icon: {
 					builtIn: 'FaGithub',
 				},
