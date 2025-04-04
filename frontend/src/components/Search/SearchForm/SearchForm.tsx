@@ -22,7 +22,7 @@ import {
 } from '@highlight-run/ui/components'
 import clsx from 'clsx'
 import moment from 'moment'
-import React, { ReactNode, useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import TextareaAutosize from 'react-autosize-textarea'
 import { useNavigate } from 'react-router-dom'
 import { StringParam, useQueryParam, withDefault } from 'use-query-params'

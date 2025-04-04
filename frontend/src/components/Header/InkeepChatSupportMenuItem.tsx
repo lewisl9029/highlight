@@ -15,7 +15,7 @@ function InkeepChatSupportMenuItem() {
 	const { baseSettings, aiChatSettings, searchSettings, modalSettings } =
 		useInkeepSettings()
 
-	const onOpenChange = useCallback(setIsOpen, [])
+	const onOpenChange = useCallback(setIsOpen, [setIsOpen])
 
 	const customTriggerProps: InkeepModalSearchAndChatProps = {
 		baseSettings,
